@@ -1084,14 +1084,41 @@
                         </div>
                         
                         <div class="form-group full-width">
-                            <label>Justification</label>
-                            <textarea name="justification" placeholder="Additional payment information"></textarea>
-                        </div>
-                        
-                        <div class="btn-group full-width">
-                            <button type="submit" class="btn btn-primary">Submit Payment Request</button>
-                            <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
-                        </div>
+    <label>Justification</label>
+    <textarea name="justification" placeholder="Additional payment information"></textarea>
+</div>
+
+<div class="form-group">
+    <label>Account Name <span class="required">*</span></label>
+    <input type="text" name="accountName" required placeholder="Name as it appears on bank account">
+</div>
+
+<div class="form-group">
+    <label>Account Number <span class="required">*</span></label>
+    <input type="text" name="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
+</div>
+
+<div class="form-group full-width">
+    <label>Bank Name <span class="required">*</span></label>
+    <select name="bankName" required>
+        <option value="">Select Bank</option>
+        <option value="Access Bank">Access Bank</option>
+        <option value="Fidelity Bank">Fidelity Bank</option>
+        <option value="First Bank">First Bank</option>
+        <option value="FCMB">FCMB</option>
+        <option value="GTBank">GTBank</option>
+        <option value="Keystone Bank">Keystone Bank</option>
+        <option value="Polaris Bank">Polaris Bank</option>
+        <option value="Stanbic IBTC">Stanbic IBTC</option>
+        <option value="UBA">UBA</option>
+        <option value="Union Bank">Union Bank</option>
+        <option value="Unity Bank">Unity Bank</option>
+        <option value="Wema Bank">Wema Bank</option>
+        <option value="Zenith Bank">Zenith Bank</option>
+    </select>
+</div>
+
+<div class="btn-group full-width">
                     </form>
                 `;
             },
@@ -1117,15 +1144,18 @@
                 const formData = new FormData(form);
                 
                 const payment = {
-                    refNumber: 'PAY' + Date.now(),
-                    conceptNoteId: parseInt(formData.get('conceptNoteId')),
-                    staffName: this.currentUser,
-                    amount: parseFloat(formData.get('amount')),
-                    paymentMethod: formData.get('paymentMethod'),
-                    justification: formData.get('justification'),
-                    status: 'pending',
-                    requestDate: new Date().toISOString()
-                };
+    refNumber: 'PAY' + Date.now(),
+    conceptNoteId: parseInt(formData.get('conceptNoteId')),
+    staffName: this.currentUser,
+    amount: parseFloat(formData.get('amount')),
+    paymentMethod: formData.get('paymentMethod'),
+    justification: formData.get('justification'),
+    accountName: formData.get('accountName'),
+    accountNumber: formData.get('accountNumber'),
+    bankName: formData.get('bankName'),
+    status: 'pending',
+    requestDate: new Date().toISOString()
+};
                 
                 const { data, error } = await supabaseClient
                     .from('payments')
@@ -1680,99 +1710,43 @@ async completeProcurementWithDocs(refNumber) {
     const payment = this.data.payments.find(p => p.refNumber === refNumber);
     if (!payment) return;
     
-    // Show account details collection form
-    this.showAccountDetailsForm(refNumber);
-},
-
-showAccountDetailsForm(refNumber) {
+    async processPayment(refNumber) {
     const payment = this.data.payments.find(p => p.refNumber === refNumber);
-    const cn = this.data.conceptNotes.find(c => c.refNumber === payment.conceptNoteRef);
+    if (!payment) return;
     
-    const content = document.getElementById('mainContent');
-    content.innerHTML = `
-        <div class="header">
-            <h2>Process Payment - Collect Account Details</h2>
-            <p>Enter beneficiary account information</p>
-        </div>
-        
-        <div class="form-grid two-col">
-            <div class="form-group full-width">
-                <div class="threshold-info">
-                    <strong>Payment Ref:</strong> ${payment.refNumber}<br>
-                    <strong>Staff:</strong> ${payment.staffName}<br>
-                    <strong>Activity:</strong> ${cn?.activityTitle || 'N/A'}<br>
-                    <strong>Amount:</strong> ₦${payment.amount.toLocaleString()}
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label>Account Name <span class="required">*</span></label>
-                <input type="text" id="accountName" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Account Number <span class="required">*</span></label>
-                <input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10">
-            </div>
-            
-            <div class="form-group">
-                <label>Bank Name <span class="required">*</span></label>
-                <select id="bankName" required>
-                    <option value="">Select Bank</option>
-                    <option value="Access Bank">Access Bank</option>
-                    <option value="Fidelity Bank">Fidelity Bank</option>
-                    <option value="First Bank">First Bank</option>
-                    <option value="FCMB">FCMB</option>
-                    <option value="GTBank">GTBank</option>
-                    <option value="Keystone Bank">Keystone Bank</option>
-                    <option value="Polaris Bank">Polaris Bank</option>
-                    <option value="Stanbic IBTC">Stanbic IBTC</option>
-                    <option value="UBA">UBA</option>
-                    <option value="Union Bank">Union Bank</option>
-                    <option value="Unity Bank">Unity Bank</option>
-                    <option value="Wema Bank">Wema Bank</option>
-                    <option value="Zenith Bank">Zenith Bank</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label>Payment Method <span class="required">*</span></label>
-                <select id="paymentMethod" required>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="cash">Cash</option>
-                </select>
-            </div>
-            
-            <div class="form-group full-width">
-                <label>Payment Notes</label>
-                <textarea id="paymentNotes" rows="2" placeholder="Optional notes..."></textarea>
-            </div>
-            
-            <div class="btn-group full-width">
-                <button class="btn btn-primary" onclick="app.confirmPayment('${refNumber}')">
-                    ✓ Confirm & Process Payment
-                </button>
-                <button class="btn btn-secondary" onclick="app.showView('approvals')">
-                    Cancel
-                </button>
-            </div>
-        </div>
-    `;
-},
-
-async confirmPayment(refNumber) {
-    const accountName = document.getElementById('accountName').value;
-    const accountNumber = document.getElementById('accountNumber').value;
-    const bankName = document.getElementById('bankName').value;
-    const paymentMethod = document.getElementById('paymentMethod').value;
-    const paymentNotes = document.getElementById('paymentNotes').value;
-    
-    if (!accountName || !accountNumber || !bankName || !paymentMethod) {
-        alert('Please fill all required fields');
+    // Check if account details already provided
+    if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
+        alert('Error: Account details not provided by staff member. Please contact the staff to update their payment request with bank details.');
         return;
     }
-    viewConceptNoteDetails(refNumber) {
+    
+    // Show confirmation before processing
+    if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
+        return;
+    }
+    
+    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
+    
+    const { error } = await supabaseClient
+        .from('payments')
+        .update({
+            status: 'paid',
+            paidDate: new Date().toISOString(),
+            processedBy: this.currentUser,
+            retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
+        })
+        .eq('refNumber', refNumber);
+    
+    if (error) {
+        alert('Error processing payment: ' + error.message);
+    } else {
+        alert(`Payment of ₦${payment.amount.toLocaleString()} processed successfully!`);
+        await this.loadData();
+        this.showView('approvals');
+    }
+},
+
+viewConceptNoteDetails(refNumber) {
     const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
     if (!cn) return;
     
@@ -1863,33 +1837,6 @@ async confirmPayment(refNumber) {
         </div>
     `;
 },
-    const payment = this.data.payments.find(p => p.refNumber === refNumber);
-    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
-    
-    const { error } = await supabaseClient
-        .from('payments')
-        .update({
-            status: 'paid',
-            paidDate: new Date().toISOString(),
-            processedBy: this.currentUser,
-            accountName,
-            accountNumber,
-            bankName,
-            paymentMethod,
-            paymentNotes,
-            retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
-        })
-        .eq('refNumber', refNumber);
-    
-    if (error) {
-        alert('Error processing payment: ' + error.message);
-    } else {
-        alert(`Payment of ₦${payment.amount.toLocaleString()} processed to ${accountName} - ${bankName}`);
-        await this.loadData();
-        this.showView('approvals');
-    }
-},
-            },
             
             async rejectPayment(refNumber) {
                 const reason = prompt('Please provide a reason for rejection:');
