@@ -1315,8 +1315,11 @@ if (error) {
                 this.showView('dashboard');
             },
             
-            renderApprovals(content) {
-                const userRole = this.getUserRole();
+          async renderApprovals(content) {
+
+    await this.loadData();   // 🔥 ALWAYS GET FRESH DATA
+
+    const userRole = this.getUserRole();
                 
                 if (!userRole) {
                     content.innerHTML = `
@@ -1573,33 +1576,30 @@ if (error) {
                 this.renderApprovals(document.getElementById('mainContent'));
             },
             
-            routeToProcurement(refNumber) {
-    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-    if (!cn) return;
-
+     async routeToProcurement(refNumber) {
     const comment = prompt('Add approval comment for procurement:');
     if (!comment) {
         alert('Comment is required.');
         return;
     }
 
-    cn.approvalHistory.push({
-        approver: this.currentUser,
-        role: 'Budget Owner',
-        action: 'routed_to_procurement',
-        comment: comment,
-        date: new Date().toISOString()
-    });
+    const { error } = await supabaseClient
+        .from('concept_notes')
+        .update({
+            status: 'pending_procurement'
+        })
+        .eq('refNumber', refNumber);
 
-    cn.status = 'pending_procurement';
-
-    this.saveData();
+    if (error) {
+        alert('Update failed: ' + error.message);
+        return;
+    }
 
     alert(`${refNumber} sent to Procurement successfully.`);
-    
+
+    await this.loadData();   // reload fresh from cloud
     this.renderApprovals(document.getElementById('mainContent'));
-},
-            
+}  
             approveByED(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
