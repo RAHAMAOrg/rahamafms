@@ -1633,6 +1633,20 @@ if (typeof event !== 'undefined' && event?.target) {
             },
             
             renderReports(content) {
+                renderReports(content) {
+    const role = this.getUserRole();
+    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+        content.innerHTML = `
+            <div class="empty-state">
+                <h2>Access Denied</h2>
+                <p>You are not authorized to view financial reports.</p>
+            </div>
+        `;
+        return;
+    }
+
+    const budgetData = this.calculateBudgetUtilization();
+
                 const budgetData = this.calculateBudgetUtilization();
                 
                 content.innerHTML = `
