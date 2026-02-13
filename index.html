@@ -1588,7 +1588,72 @@ if (typeof event !== 'undefined' && event?.target) {
                 this.saveData();
                 this.renderApprovals(document.getElementById('mainContent'));
             },
-            
+            showProcurementUpload(refNumber) {
+    const content = document.getElementById('mainContent');
+
+    content.innerHTML = `
+        <div class="header">
+            <h2>Procurement Documentation</h2>
+            <p>Attach GRR / invoice before sending to Finance</p>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <label>Upload Document</label>
+                <input type="file" id="procFile" required />
+            </div>
+
+            <div class="form-group full-width">
+                <label>Comment</label>
+                <textarea id="procComment" placeholder="Optional note to finance"></textarea>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="app.completeProcurementWithFile('${refNumber}')">
+                    Send to Finance
+                </button>
+                <button class="btn btn-secondary" onclick="app.showView('approvals')">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    `;
+},
+completeProcurementWithFile(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+
+    const fileInput = document.getElementById('procFile');
+    if (!fileInput.files.length) {
+        alert('Please upload a document.');
+        return;
+    }
+
+    const comment = document.getElementById('procComment').value || '';
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = () => {
+        cn.approvalHistory.push({
+            approver: this.currentUser,
+            role: 'Procurement Officer',
+            action: 'procurement_completed',
+            comment,
+            fileName: file.name,
+            fileData: reader.result,
+            date: new Date().toISOString()
+        });
+
+        cn.status = 'procurement_complete';
+
+        this.saveData();
+        alert('Sent to Finance successfully.');
+        this.showView('approvals');
+    };
+
+    reader.readAsDataURL(file);
+},
             processPayment(refNumber) {
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 if (!payment) return;
