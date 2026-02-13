@@ -686,17 +686,28 @@ async init() {
 
 this.showView('dashboard');
 },      
-           async loadData() {
-    const { data, error } = await supabaseClient
+          async loadData() {
+
+    // Load concept notes
+    const { data: cn, error: cnError } = await supabaseClient
         .from('concept_notes')
         .select('*');
 
-    if (error) {
-        console.error('Load error:', error);
-        return;
+    if (cnError) {
+        console.error('Concept note load error:', cnError);
+    } else {
+        this.data.conceptNotes = cn || [];
     }
 
-    this.data.conceptNotes = data || [];
+    // Load payments
+    const { data: pay, error: payError } = await supabaseClient
+        .from('payments')
+        .select('*');
+
+    if (payError) {
+        console.error('Payment load error:', payError);
+    } else {
+        this.data.payments = pay || [];
 },
             
             saveData() {
@@ -1168,11 +1179,18 @@ if (error) {
                     requestDate: new Date().toISOString()
                 };
                 
-                this.data.payments.push(payment);
-                this.saveData();
-                
-                alert(`Payment request ${payment.refNumber} submitted successfully!\nSent to Finance for processing.`);
-                this.showView('dashboard');
+                await supabaseClient
+  .from('payments')
+  .insert([{
+      refNumber: this.generateRefNumber('PR'),
+      conceptNoteRef: cn.refNumber,
+      staffName: cn.staffName,
+      amount: cn.estimatedCost,
+      paymentMethod: 'procurement',
+      justification: 'Procured via procurement process',
+      status: 'pending_finance',
+      requestDate: new Date().toISOString()
+  }]);
             },
             
             renderRetirementForm(content) {
@@ -1702,24 +1720,42 @@ async completeProcurementWithFile(refNumber) {
             date: new Date().toISOString()
         });
 
-        cn.status = 'procurement_complete';
+    // update concept note
+const { error: updateError } = await supabaseClient
+  .from('concept_notes')
+  .update({ status: 'procurement_complete' })
+  .eq('refNumber', refNumber);
 
-this.data.payments.push({
-    refNumber: this.generateRefNumber('PR'),
-    conceptNoteRef: cn.refNumber,
-    staffName: cn.staffName,
-    amount: cn.estimatedCost,
-    paymentMethod: 'procurement',
-    justification: 'Procured via procurement process',
-    status: 'pending_finance',
-    requestDate: new Date().toISOString()
-});
+if (updateError) {
+  alert('Error updating concept note: ' + updateError.message);
+  return;
+}
+
+// create payment
+const { error: paymentError } = await supabaseClient
+  .from('payments')
+  .insert([{
+      refNumber: this.generateRefNumber('PR'),
+      conceptNoteRef: cn.refNumber,
+      staffName: cn.staffName,
+      amount: cn.estimatedCost,
+      paymentMethod: 'procurement',
+      justification: 'Procured via procurement process',
+      status: 'pending_finance',
+      requestDate: new Date().toISOString()
+  }]);
+
+if (paymentError) {
+  alert('Error creating payment: ' + paymentError.message);
+  return;
+}
 
 alert('Sent to Finance successfully.');
 
 await this.loadData();
 this.renderApprovals(document.getElementById('mainContent'));
-  };
+
+};   // ✅ CLOSE reader.onload
     reader.readAsDataURL(file);
 },
             processPayment(refNumber) {
