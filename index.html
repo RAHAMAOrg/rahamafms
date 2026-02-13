@@ -582,9 +582,7 @@
                 <h1>Rahama FMS</h1>
                 <p>Financial Management System</p>
             </div>
-            
-            <div class="user-info">
-             <div class="user-info">
+           <div class="user-info">
     <label>Signed in as</label>
     <div id="loggedInUser" style="font-weight:600;"></div>
 </div>
@@ -675,8 +673,9 @@ init() {
             showView(viewName) {
                 // Update active nav
                 document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
-                event?.target.classList.add('active');
-                
+               if (event && event.target) {
+    event.target.classList.add('active');
+}       
                 const content = document.getElementById('mainContent');
                 
                 if (!this.currentUser) {
