@@ -380,11 +380,30 @@
             letter-spacing: 0.5px;
         }
         
-        .status-pending { background: #FFF3E0; color: var(--warning); }
-        .status-approved { background: #E8F5E9; color: var(--success); }
-        .status-paid { background: #E3F2FD; color: #1976D2; }
-        .status-retired { background: #F3E5F5; color: #7B1FA2; }
-        .status-rejected { background: #FFEBEE; color: var(--danger); }
+        .status-pending {
+            background: #FFF3E0;
+            color: var(--warning);
+        }
+        
+        .status-approved {
+            background: #E8F5E9;
+            color: var(--success);
+        }
+        
+        .status-paid {
+            background: #E3F2FD;
+            color: #1976D2;
+        }
+        
+        .status-retired {
+            background: #F3E5F5;
+            color: #7B1FA2;
+        }
+        
+        .status-rejected {
+            background: #FFEBEE;
+            color: var(--danger);
+        }
         
         /* Stats grid */
         .stats-grid {
@@ -424,9 +443,17 @@
             color: var(--text-muted);
         }
         
-        .stat-card.danger .stat-value { color: var(--danger); }
-        .stat-card.warning .stat-value { color: var(--warning); }
-        .stat-card.success .stat-value { color: var(--success); }
+        .stat-card.danger .stat-value {
+            color: var(--danger);
+        }
+        
+        .stat-card.warning .stat-value {
+            color: var(--warning);
+        }
+        
+        .stat-card.success .stat-value {
+            color: var(--success);
+        }
         
         /* Budget bars */
         .budget-bar {
@@ -443,31 +470,63 @@
             transition: width 0.3s;
         }
         
-        .budget-fill.warning { background: var(--warning); }
-        .budget-fill.danger { background: var(--danger); }
+        .budget-fill.warning {
+            background: var(--warning);
+        }
+        
+        .budget-fill.danger {
+            background: var(--danger);
+        }
         
         /* Action buttons in table */
         .action-btn {
-            padding: 8px 14px;
+            padding: 12px 18px;
             background: none;
             border: 1px solid var(--border);
             border-radius: 6px;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
-            margin-right: 4px;
+            margin-right: 8px;
+            min-width: 180px;
         }
         
-        .action-btn.approve { border-color: var(--success); color: var(--success); }
-        .action-btn.approve:hover { background: var(--success); color: white; }
-        .action-btn.reject { border-color: var(--danger); color: var(--danger); }
-        .action-btn.reject:hover { background: var(--danger); color: white; }
+        .action-btn:hover {
+            background: var(--bg);
+        }
+        
+        .action-btn.approve {
+            border-color: var(--success);
+            color: var(--success);
+        }
+        
+        .action-btn.approve:hover {
+            background: var(--success);
+            color: white;
+        }
+        
+        .action-btn.reject {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+        
+        .action-btn.reject:hover {
+            background: var(--danger);
+            color: white;
+        }
         
         .empty-state {
             text-align: center;
             padding: 64px 32px;
             color: var(--text-muted);
+        }
+        
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            opacity: 0.3;
         }
         
         .workflow-diagram {
@@ -502,9 +561,20 @@
             flex-shrink: 0;
         }
         
-        .workflow-content { flex: 1; }
-        .workflow-content strong { display: block; margin-bottom: 4px; color: var(--text); }
-        .workflow-content span { font-size: 13px; color: var(--text-muted); }
+        .workflow-content {
+            flex: 1;
+        }
+        
+        .workflow-content strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--text);
+        }
+        
+        .workflow-content span {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
@@ -514,7 +584,7 @@
                 <h1>Rahama FMS</h1>
                 <p>Financial Management System</p>
             </div>
-           <div class="user-info">
+            <div class="user-info">
                 <label>Signed in as</label>
                 <div id="loggedInUser" style="font-weight:600;"></div>
             </div>
@@ -535,7 +605,8 @@
         </div>
         
         <div class="main" id="mainContent">
-            </div>
+            <!-- Dynamic content loads here -->
+        </div>
     </div>
     
     <script>
@@ -550,6 +621,22 @@
                 conceptNotes: [],
                 payments: [],
                 retirements: [],
+
+                staff: [
+                    'Usman Musa',
+                    'Aisha Linatu Abdulrahman',
+                    'Fatima Yusuf Matsayi',
+                    'Khadijah Abdulrahman',
+                    'Sani Hamisu',
+                    'Salahuddeen Sambo',
+                    'Ahmad Abdulrahman Tijjani',
+                    'Maryam Abdulrahman Tijjani',
+                    'Sumayya Adam',
+                    'Aisha Umar',
+                    'Paulina Paul',
+                    'Fatima Tijjani'
+                ],
+
                 projects: [
                     { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
                     { code: 'CBA101', name: 'Community Health Initiative', budget: 16000000 },
@@ -558,6 +645,7 @@
                     { code: 'TES101', name: 'TES', budget: 500000 },
                     { code: 'ADM001', name: 'Admin & Operations', budget: 1000000 }
                 ],
+
                 roles: {
                     'Aisha Linatu Abdulrahman': 'budgetOwner',
                     'Fatima Tijjani': 'ed',
@@ -567,56 +655,127 @@
                     'Sani Hamisu': 'finance'
                 }
             },
-
+            
             async init() {
+                await this.loadData();
+
+                // URL takes priority
                 const params = new URLSearchParams(window.location.search);
                 const urlSession = params.get('session');
-                if (urlSession) localStorage.setItem('pms_user', decodeURIComponent(urlSession));
+
+                if (urlSession) {
+                    localStorage.setItem('pms_user', decodeURIComponent(urlSession));
+                }
 
                 const session = localStorage.getItem('pms_user');
+
                 if (session) {
                     const user = JSON.parse(session);
                     this.currentUser = user.name;
-                    document.getElementById('loggedInUser').innerText = user.name;
-                    
+
+                    const el = document.getElementById('loggedInUser');
+                    if (el) el.innerText = user.name;
+
+                    // Hide Reports if not authorized
                     const role = this.getUserRole();
                     const btn = document.getElementById('reportsBtn');
-                    if (!['budgetOwner','ed','procurement','finance'].includes(role) && btn) {
-                        btn.style.display = 'none';
+
+                    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+                        if (btn) btn.style.display = 'none';
                     }
                 }
-                await this.loadData();
+
                 this.showView('dashboard');
             },
+            
+            async loadData() {
+                // Load concept notes
+                const { data: cn, error: cnError } = await supabaseClient
+                    .from('concept_notes')
+                    .select('*');
 
+                if (cnError) {
+                    console.error('Concept note load error:', cnError);
+                } else {
+                    this.data.conceptNotes = cn || [];
+                }
+
+                // Load payments
+                const { data: pay, error: payError } = await supabaseClient
+                    .from('payments')
+                    .select('*');
+
+                if (payError) {
+                    console.error('Payment load error:', payError);
+                } else {
+                    this.data.payments = pay || [];
+                }
+
+                // Load retirements - FIX #1
+                const { data: ret, error: retError } = await supabaseClient
+                    .from('retirements')
+                    .select('*');
+
+                if (retError) {
+                    console.error('Retirement load error:', retError);
+                } else {
+                    this.data.retirements = ret || [];
+                }
+            },
+            
+            // FIX #2: Add getUserRole method
             getUserRole() {
                 return this.data.roles[this.currentUser] || 'staff';
             },
-
-            async loadData() {
-                // Optimized single-trip loading
-                const [cnRes, payRes, retRes] = await Promise.all([
-                    supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }),
-                    supabaseClient.from('payments').select('*').order('requestDate', { ascending: false }),
-                    supabaseClient.from('retirements').select('*')
-                ]);
-
-                this.data.conceptNotes = cnRes.data || [];
-                this.data.payments = payRes.data || [];
-                this.data.retirements = retRes.data || [];
-                if (document.getElementById('mainContent').innerHTML.includes('Dashboard')) {
-                    this.showView('dashboard');
+            
+            // FIX #3: Add updateProjectBudget method
+            updateProjectBudget(projectCode) {
+                const project = this.data.projects.find(p => p.code === projectCode);
+                const infoDiv = document.getElementById('budgetInfo');
+                
+                if (project && infoDiv) {
+                    const spent = this.getProjectSpent(projectCode);
+                    const remaining = project.budget - spent;
+                    const percentUsed = (spent / project.budget * 100).toFixed(1);
+                    
+                    infoDiv.innerHTML = `
+                        <strong>Budget Status:</strong> ₦${remaining.toLocaleString()} remaining 
+                        (${percentUsed}% used of ₦${project.budget.toLocaleString()})
+                    `;
+                    
+                    if (percentUsed > 80) {
+                        infoDiv.className = 'threshold-info high';
+                    } else {
+                        infoDiv.className = 'threshold-info';
+                    }
                 }
             },
-
+            
+            getProjectSpent(projectCode) {
+                return this.data.payments
+                    .filter(p => p.projectCode === projectCode && p.status === 'paid')
+                    .reduce((sum, p) => sum + (p.amount || 0), 0);
+            },
+            
             showView(viewName) {
+                // Update active nav safely
                 document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+                
+                // Find and activate the correct button by data attribute
                 const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
-                if (targetBtn) targetBtn.classList.add('active');
+                if (targetBtn) {
+                    targetBtn.classList.add('active');
+                }
                 
                 const content = document.getElementById('mainContent');
+                
                 if (!this.currentUser) {
-                    content.innerHTML = `<div class="empty-state"><h2>User session not found</h2><p>Please login from the Staff Portal.</p></div>`;
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <h2>User session not found</h2>
+                            <p>Please login from the Staff Portal.</p>
+                        </div>
+                    `;
                     return;
                 }
                 
@@ -627,189 +786,944 @@
                     case 'retirement': this.renderRetirementForm(content); break;
                     case 'approvals': this.renderApprovals(content); break;
                     case 'reports': this.renderReports(content); break;
+                    case 'settings': this.renderSettings(content); break;
                 }
             },
-
-            renderConceptNoteForm(content) {
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Create Concept Note</h2>
-                        <p>Step 1: Develop your activity justification and budget</p>
-                    </div>
-                    <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
-                        <div class="form-group">
-                            <label>Project Code <span class="required">*</span></label>
-                            <select name="projectCode" required>
-                                <option value="">Select project</option>
-                                ${this.data.projects.map(p => `<option value="${p.code}">${p.code} - ${p.name}</option>`).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Activity Title <span class="required">*</span></label>
-                            <input type="text" name="activityTitle" required placeholder="e.g., Radio Jingle Production">
-                        </div>
-                        <div class="form-group full-width">
-                            <label>Justification <span class="required">*</span></label>
-                            <textarea name="justification" required placeholder="Why is this activity necessary?"></textarea>
-                        </div>
-                        <div class="form-group full-width">
-                            <label>Description <span class="required">*</span></label>
-                            <textarea name="description" required placeholder="Detailed breakdown of the activity"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>Estimated Cost (₦) <span class="required">*</span></label>
-                            <input type="number" name="estimatedCost" required min="1">
-                        </div>
-                        <div class="form-group">
-                            <label>Implementation Date <span class="required">*</span></label>
-                            <input type="date" name="activityDate" required>
-                        </div>
-                        <div class="btn-group full-width">
-                            <button type="submit" class="btn btn-primary">Submit Concept Note</button>
-                        </div>
-                    </form>`;
-            },
-
-            async submitConceptNote(e) {
-                e.preventDefault();
-                const btn = e.target.querySelector('button');
-                btn.disabled = true;
-                btn.innerText = 'Submitting...';
-
-                const formData = new FormData(e.target);
-                const cost = parseFloat(formData.get('estimatedCost'));
-                
-                // APPROVAL LOGIC: Route based on amount
-                const status = cost > 1000000 ? 'pending_ed' : 'pending_bo';
-
-                const newCN = {
-                    refNumber: 'CN-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-                    staffName: this.currentUser,
-                    projectCode: formData.get('projectCode'),
-                    activityTitle: formData.get('activityTitle'),
-                    justification: formData.get('justification'),
-                    description: formData.get('description'),
-                    estimatedCost: cost,
-                    activityDate: formData.get('activityDate'),
-                    submittedDate: new Date().toISOString(),
-                    status: status
-                };
-
-                const { error } = await supabaseClient.from('concept_notes').insert([newCN]);
-                if (error) {
-                    alert('Error: ' + error.message);
-                    btn.disabled = false;
-                } else {
-                    await this.loadData();
-                    this.showView('dashboard');
-                }
-            },
-
-            renderApprovals(content) {
-                const role = this.getUserRole();
-                let filtered = [];
-
-                // APPROVAL LOGIC: Filtering based on roles
-                if (role === 'budgetOwner') {
-                    filtered = this.data.conceptNotes.filter(cn => cn.status === 'pending_bo');
-                } else if (role === 'ed') {
-                    filtered = this.data.conceptNotes.filter(cn => cn.status === 'pending_ed');
-                } else if (role === 'procurement') {
-                    filtered = this.data.payments.filter(p => p.status === 'pending_procurement');
-                } else if (role === 'finance') {
-                    filtered = this.data.payments.filter(p => p.status === 'approved' || p.status === 'pending_finance');
-                }
-
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>My Approvals</h2>
-                        <p>Items requiring your review and authorization</p>
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Ref</th>
-                                    <th>Staff</th>
-                                    <th>Activity/Project</th>
-                                    <th>Amount</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${filtered.map(item => `
-                                    <tr>
-                                        <td>${item.refNumber}</td>
-                                        <td>${item.staffName}</td>
-                                        <td>${item.activityTitle || item.projectCode}</td>
-                                        <td>₦${(item.estimatedCost || item.amount).toLocaleString()}</td>
-                                        <td>
-                                            <button class="action-btn approve" onclick="app.processAction('${item.id}', 'approve', '${item.estimatedCost ? 'cn' : 'pay'}')">Approve</button>
-                                            <button class="action-btn reject" onclick="app.processAction('${item.id}', 'reject', '${item.estimatedCost ? 'cn' : 'pay'}')">Reject</button>
-                                        </td>
-                                    </tr>
-                                `).join('') || '<tr><td colspan="5" style="text-align:center; padding:20px;">No pending approvals</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>`;
-            },
-
-            async processAction(id, action, type) {
-                const table = type === 'cn' ? 'concept_notes' : 'payments';
-                const newStatus = action === 'reject' ? 'rejected' : 'approved';
-                
-                const { error } = await supabaseClient.from(table).update({ status: newStatus }).eq('id', id);
-                if (error) alert(error.message);
-                else {
-                    await this.loadData();
-                    this.showView('approvals');
-                }
-            },
-
+            
             renderDashboard(content) {
-                const myCN = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser);
-                const myPay = this.data.payments.filter(p => p.staffName === this.currentUser);
+                const myConceptNotes = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser);
+                const myPayments = this.data.payments.filter(p => p.staffName === this.currentUser);
+                const myRetirements = this.data.retirements.filter(r => r.staffName === this.currentUser);
+                
+                const unretiredPayments = myPayments.filter(p => 
+                    p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)
+                );
+                
+                // FIX #4: Add null check for paidDate
+                const overdueRetirements = unretiredPayments.filter(p => {
+                    if (!p.paidDate) return false;
+                    const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
+                    return daysSince > 10;
+                });
+                
+                const isLocked = unretiredPayments.length >= 2 || overdueRetirements.length > 0;
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>Dashboard</h2>
-                        <p>Welcome, ${this.currentUser}</p>
+                        <p>Welcome back, ${this.currentUser.split(' ')[0]}</p>
                     </div>
+                    
+                    ${isLocked ? `
+                        <div class="alert-badge danger">
+                            ⚠️ Your account is locked: ${unretiredPayments.length >= 2 ? 
+                                `${unretiredPayments.length} unretired advances` : 
+                                `Retirement overdue by ${Math.floor((Date.now() - new Date(overdueRetirements[0].paidDate)) / (1000 * 60 * 60 * 24))} days`}
+                        </div>
+                    ` : ''}
+                    
                     <div class="stats-grid">
                         <div class="stat-card">
                             <h3>Concept Notes</h3>
-                            <div class="stat-value">${myCN.length}</div>
-                            <div class="stat-label">Total Submissions</div>
+                            <div class="stat-value">${myConceptNotes.length}</div>
+                            <div class="stat-label">Total submitted</div>
+                        </div>
+                        <div class="stat-card ${unretiredPayments.length > 0 ? 'warning' : 'success'}">
+                            <h3>Unretired Advances</h3>
+                            <div class="stat-value">${unretiredPayments.length}</div>
+                            <div class="stat-label">${unretiredPayments.length >= 2 ? 'Account locked!' : 'Active advances'}</div>
+                        </div>
+                        <div class="stat-card ${overdueRetirements.length > 0 ? 'danger' : ''}">
+                            <h3>Overdue Retirements</h3>
+                            <div class="stat-value">${overdueRetirements.length}</div>
+                            <div class="stat-label">${overdueRetirements.length > 0 ? 'Action required!' : 'All current'}</div>
                         </div>
                         <div class="stat-card">
-                            <h3>Payments</h3>
-                            <div class="stat-value">₦${myPay.reduce((s, p) => s + (p.status === 'paid' ? p.amount : 0), 0).toLocaleString()}</div>
-                            <div class="stat-label">Total Paid Out</div>
+                            <h3>Total Paid</h3>
+                            <div class="stat-value">₦${myPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div>
+                            <div class="stat-label">Lifetime payments</div>
                         </div>
                     </div>
-                    <h3 style="margin-bottom:15px;">Recent Activity</h3>
+                    
+                    <div class="workflow-diagram">
+                        <h3 style="margin-bottom: 20px; font-family: 'Archivo', sans-serif;">Financial Workflow</h3>
+                        <div class="workflow-step">
+                            <div class="workflow-number">1</div>
+                            <div class="workflow-content">
+                                <strong>Staff creates Concept Note/ToR</strong>
+                                <span>Submitted to Budget Owner for review</span>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <div class="workflow-number">2</div>
+                            <div class="workflow-content">
+                                <strong>Budget Owner Review</strong>
+                                <span>Approves if ≤₦1M, forwards to ED if >₦1M, routes to Procurement if items needed</span>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <div class="workflow-number">3</div>
+                            <div class="workflow-content">
+                                <strong>Procurement (if needed)</strong>
+                                <span>Procures items, attaches GRR + evidence, pushes to Finance</span>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <div class="workflow-number">4</div>
+                            <div class="workflow-content">
+                                <strong>Finance processes payment</strong>
+                                <span>Reviews documents, makes payment, shares confirmation</span>
+                            </div>
+                        </div>
+                        <div class="workflow-step">
+                            <div class="workflow-number">5</div>
+                            <div class="workflow-content">
+                                <strong>Staff submits retirement</strong>
+                                <span>Within 10 days of payment receipt</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Recent Activity</h3>
                     <div class="table-container">
                         <table>
                             <thead>
-                                <tr><th>Ref</th><th>Activity</th><th>Cost</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Reference</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
                             </thead>
                             <tbody>
-                                ${myCN.slice(0, 5).map(cn => `
+                                ${this.getRecentActivity().map(item => `
                                     <tr>
-                                        <td>${cn.refNumber}</td>
-                                        <td>${cn.activityTitle}</td>
-                                        <td>₦${cn.estimatedCost.toLocaleString()}</td>
-                                        <td><span class="status-badge status-${cn.status.split('_')[0]}">${cn.status.replace('_', ' ')}</span></td>
+                                        <td>${new Date(item.date).toLocaleDateString()}</td>
+                                        <td>${item.type}</td>
+                                        <td>${item.ref}</td>
+                                        <td>${item.amount ? '₦' + item.amount.toLocaleString() : '-'}</td>
+                                        <td><span class="status-badge status-${item.status}">${item.status}</span></td>
+                                    </tr>
+                                `).join('') || '<tr><td colspan="5" style="text-align: center; padding: 32px; color: #999;">No recent activity</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            },
+            
+            getRecentActivity() {
+                const activity = [];
+                
+                this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser).forEach(cn => {
+                    activity.push({
+                        date: cn.submittedDate,
+                        type: 'Concept Note',
+                        ref: cn.refNumber,
+                        amount: cn.estimatedCost,
+                        status: cn.status
+                    });
+                });
+                
+                this.data.payments.filter(p => p.staffName === this.currentUser).forEach(p => {
+                    activity.push({
+                        date: p.requestDate,
+                        type: 'Payment',
+                        ref: p.refNumber,
+                        amount: p.amount,
+                        status: p.status
+                    });
+                });
+                
+                this.data.retirements.filter(r => r.staffName === this.currentUser).forEach(r => {
+                    activity.push({
+                        date: r.submittedDate,
+                        type: 'Retirement',
+                        ref: r.refNumber,
+                        amount: r.actualSpent,
+                        status: r.status
+                    });
+                });
+                
+                return activity.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+            },
+            
+            renderConceptNoteForm(content) {
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Create Concept Note</h2>
+                        <p>Step 1: Develop your concept note or Terms of Reference</p>
+                    </div>
+                    
+                    <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
+                        <div class="form-group">
+                            <label>Project Code <span class="required">*</span></label>
+                            <select name="projectCode" required onchange="app.updateProjectBudget(this.value)">
+                                <option value="">Select project</option>
+                                ${this.data.projects.map(p => `
+                                    <option value="${p.code}">${p.code} - ${p.name}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Activity Title <span class="required">*</span></label>
+                            <input type="text" name="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Objective <span class="required">*</span></label>
+                            <textarea name="objective" required placeholder="What is the purpose of this activity?"></textarea>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Description <span class="required">*</span></label>
+                            <textarea name="description" required placeholder="Detailed description of the activity"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Estimated Cost (₦) <span class="required">*</span></label>
+                            <input type="number" name="estimatedCost" required min="0" step="0.01">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Timeline</label>
+                            <input type="text" name="timeline" placeholder="e.g., 2 weeks">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Are items/services to be procured? <span class="required">*</span></label>
+                            <select name="requiresProcurement" required>
+                                <option value="no">No - Direct payment</option>
+                                <option value="yes">Yes - Procurement needed</option>
+                            </select>
+                            <span class="form-hint">Select "Yes" if items need to be purchased by Procurement team</span>
+                        </div>
+                        
+                        <div class="form-group full-width" id="budgetInfo" class="threshold-info" style="display: none;">
+                            <!-- Budget info will be inserted here -->
+                        </div>
+                        
+                        <div class="btn-group full-width">
+                            <button type="submit" class="btn btn-primary">Submit Concept Note</button>
+                            <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
+                        </div>
+                    </form>
+                `;
+            },
+            
+            // FIX #5: Add submitConceptNote method
+            async submitConceptNote(event) {
+                event.preventDefault();
+                const form = event.target;
+                const formData = new FormData(form);
+                
+                const conceptNote = {
+                    refNumber: 'CN' + Date.now(),
+                    staffName: this.currentUser,
+                    projectCode: formData.get('projectCode'),
+                    activityTitle: formData.get('activityTitle'),
+                    objective: formData.get('objective'),
+                    description: formData.get('description'),
+                    estimatedCost: parseFloat(formData.get('estimatedCost')),
+                    timeline: formData.get('timeline'),
+                    requiresProcurement: formData.get('requiresProcurement'),
+                    status: 'pending',
+                    submittedDate: new Date().toISOString(),
+                    currentApprover: 'budgetOwner'
+                };
+                
+                const { data, error } = await supabaseClient
+                    .from('concept_notes')
+                    .insert([conceptNote])
+                    .select();
+                
+                if (error) {
+                    alert('Error submitting concept note: ' + error.message);
+                } else {
+                    this.data.conceptNotes.push(data[0]);
+                    alert('Concept note submitted successfully!');
+                    this.showView('dashboard');
+                }
+            },
+            
+            renderPaymentForm(content) {
+                const approvedNotes = this.data.conceptNotes.filter(cn => 
+                    cn.staffName === this.currentUser && cn.status === 'approved'
+                );
+                
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Request Payment</h2>
+                        <p>Submit a payment request for an approved concept note</p>
+                    </div>
+                    
+                    <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
+                        <div class="form-group full-width">
+                            <label>Select Approved Concept Note <span class="required">*</span></label>
+                            <select name="conceptNoteRef" required onchange="app.loadConceptNoteDetails(this.value)">
+                                <option value="">Choose a concept note</option>
+                                ${approvedNotes.map(cn => `
+                                    <option value="${cn.refNumber}">${cn.refNumber} - ${cn.activityTitle}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        
+                        <div id="conceptNoteDetails" style="display: none;" class="form-group full-width">
+                            <div class="threshold-info">
+                                <div id="cnDetailsContent"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Payment Amount (₦) <span class="required">*</span></label>
+                            <input type="number" name="amount" required min="0" step="0.01">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Payment Type <span class="required">*</span></label>
+                            <select name="paymentType" required>
+                                <option value="advance">Advance</option>
+                                <option value="full">Full Payment</option>
+                                <option value="reimbursement">Reimbursement</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Payment Details</label>
+                            <textarea name="details" placeholder="Additional payment information"></textarea>
+                        </div>
+                        
+                        <div class="btn-group full-width">
+                            <button type="submit" class="btn btn-primary">Submit Payment Request</button>
+                            <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
+                        </div>
+                    </form>
+                `;
+            },
+            
+            loadConceptNoteDetails(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                const detailsDiv = document.getElementById('conceptNoteDetails');
+                const contentDiv = document.getElementById('cnDetailsContent');
+                
+                if (cn && detailsDiv && contentDiv) {
+                    detailsDiv.style.display = 'block';
+                    contentDiv.innerHTML = `
+                        <strong>Activity:</strong> ${cn.activityTitle}<br>
+                        <strong>Estimated Cost:</strong> ₦${cn.estimatedCost.toLocaleString()}<br>
+                        <strong>Project:</strong> ${cn.projectCode}
+                    `;
+                }
+            },
+            
+            async submitPayment(event) {
+                event.preventDefault();
+                const form = event.target;
+                const formData = new FormData(form);
+                
+                const payment = {
+                    refNumber: 'PAY' + Date.now(),
+                    staffName: this.currentUser,
+                    conceptNoteRef: formData.get('conceptNoteRef'),
+                    amount: parseFloat(formData.get('amount')),
+                    paymentType: formData.get('paymentType'),
+                    details: formData.get('details'),
+                    status: 'pending',
+                    requestDate: new Date().toISOString()
+                };
+                
+                const { data, error } = await supabaseClient
+                    .from('payments')
+                    .insert([payment])
+                    .select();
+                
+                if (error) {
+                    alert('Error submitting payment: ' + error.message);
+                } else {
+                    this.data.payments.push(data[0]);
+                    alert('Payment request submitted successfully!');
+                    this.showView('dashboard');
+                }
+            },
+            
+            // FIX #6: Add renderRetirementForm method
+            renderRetirementForm(content) {
+                const paidPayments = this.data.payments.filter(p => 
+                    p.staffName === this.currentUser && 
+                    p.status === 'paid' &&
+                    !this.data.retirements.find(r => r.paymentRef === p.refNumber)
+                );
+                
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Submit Retirement</h2>
+                        <p>Retire advance payments within 10 days of receipt</p>
+                    </div>
+                    
+                    ${paidPayments.length === 0 ? `
+                        <div class="empty-state">
+                            <h3>No payments to retire</h3>
+                            <p>You don't have any paid advances that need retirement.</p>
+                        </div>
+                    ` : `
+                        <form class="form-grid two-col" onsubmit="app.submitRetirement(event)">
+                            <div class="form-group full-width">
+                                <label>Select Payment to Retire <span class="required">*</span></label>
+                                <select name="paymentRef" required onchange="app.loadPaymentDetails(this.value)">
+                                    <option value="">Choose a payment</option>
+                                    ${paidPayments.map(p => `
+                                        <option value="${p.refNumber}">${p.refNumber} - ₦${p.amount.toLocaleString()} (${new Date(p.paidDate).toLocaleDateString()})</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Actual Amount Spent (₦) <span class="required">*</span></label>
+                                <input type="number" name="actualSpent" required min="0" step="0.01">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Amount to Return (₦)</label>
+                                <input type="number" name="amountReturned" min="0" step="0.01" value="0">
+                            </div>
+                            
+                            <div class="form-group full-width">
+                                <label>Expenditure Details <span class="required">*</span></label>
+                                <textarea name="expenditureDetails" required placeholder="Describe how the funds were spent"></textarea>
+                            </div>
+                            
+                            <div class="form-group full-width">
+                                <label>Attachments/Receipts</label>
+                                <input type="text" name="attachments" placeholder="List of attached receipts">
+                                <span class="form-hint">Upload receipts separately and list them here</span>
+                            </div>
+                            
+                            <div class="btn-group full-width">
+                                <button type="submit" class="btn btn-primary">Submit Retirement</button>
+                                <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
+                            </div>
+                        </form>
+                    `}
+                `;
+            },
+            
+            loadPaymentDetails(refNumber) {
+                const payment = this.data.payments.find(p => p.refNumber === refNumber);
+                if (payment) {
+                    const form = document.querySelector('form');
+                    const actualSpentInput = form.querySelector('[name="actualSpent"]');
+                    if (actualSpentInput) {
+                        actualSpentInput.max = payment.amount;
+                    }
+                }
+            },
+            
+            async submitRetirement(event) {
+                event.preventDefault();
+                const form = event.target;
+                const formData = new FormData(form);
+                
+                const retirement = {
+                    refNumber: 'RET' + Date.now(),
+                    staffName: this.currentUser,
+                    paymentRef: formData.get('paymentRef'),
+                    actualSpent: parseFloat(formData.get('actualSpent')),
+                    amountReturned: parseFloat(formData.get('amountReturned')) || 0,
+                    expenditureDetails: formData.get('expenditureDetails'),
+                    attachments: formData.get('attachments'),
+                    status: 'pending',
+                    submittedDate: new Date().toISOString()
+                };
+                
+                const { data, error } = await supabaseClient
+                    .from('retirements')
+                    .insert([retirement])
+                    .select();
+                
+                if (error) {
+                    alert('Error submitting retirement: ' + error.message);
+                } else {
+                    this.data.retirements.push(data[0]);
+                    alert('Retirement submitted successfully!');
+                    this.showView('dashboard');
+                }
+            },
+            
+            // FIX #7: Add renderApprovals method with full approval logic
+            renderApprovals(content) {
+                const role = this.getUserRole();
+                
+                // Get items pending this user's approval
+                const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
+                    if (cn.status !== 'pending') return false;
+                    
+                    // Budget Owner sees all pending
+                    if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
+                    
+                    // ED sees only those >1M forwarded by Budget Owner
+                    if (role === 'ed' && cn.currentApprover === 'ed') return true;
+                    
+                    // Procurement sees those flagged for procurement
+                    if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
+                    
+                    return false;
+                });
+                
+                const pendingPayments = this.data.payments.filter(p => 
+                    p.status === 'pending' && role === 'finance'
+                );
+                
+                const pendingRetirements = this.data.retirements.filter(r => 
+                    r.status === 'pending' && role === 'finance'
+                );
+                
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>My Approvals</h2>
+                        <p>Items requiring your review and approval</p>
+                    </div>
+                    
+                    ${pendingConceptNotes.length === 0 && pendingPayments.length === 0 && pendingRetirements.length === 0 ? `
+                        <div class="empty-state">
+                            <h3>No pending approvals</h3>
+                            <p>You don't have any items waiting for your approval.</p>
+                        </div>
+                    ` : ''}
+                    
+                    ${pendingConceptNotes.length > 0 ? `
+                        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3>
+                        <div class="table-container" style="margin-bottom: 32px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ref</th>
+                                        <th>Staff</th>
+                                        <th>Activity</th>
+                                        <th>Project</th>
+                                        <th>Amount</th>
+                                        <th>Submitted</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pendingConceptNotes.map(cn => `
+                                        <tr>
+                                            <td>${cn.refNumber}</td>
+                                            <td>${cn.staffName}</td>
+                                            <td>${cn.activityTitle}</td>
+                                            <td>${cn.projectCode}</td>
+                                            <td>₦${cn.estimatedCost.toLocaleString()}</td>
+                                            <td>${new Date(cn.submittedDate).toLocaleDateString()}</td>
+                                            <td>
+                                                ${role === 'budgetOwner' ? `
+                                                    ${cn.estimatedCost <= 1000000 ? `
+                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approved')">
+                                                            ✓ Approve (≤₦1M)
+                                                        </button>
+                                                    ` : `
+                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">
+                                                            → Forward to ED (>₦1M)
+                                                        </button>
+                                                    `}
+                                                    ${cn.requiresProcurement === 'yes' ? `
+                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_procurement')">
+                                                            → Route to Procurement
+                                                        </button>
+                                                    ` : ''}
+                                                ` : role === 'ed' ? `
+                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approved')">
+                                                        ✓ Approve
+                                                    </button>
+                                                ` : role === 'procurement' ? `
+                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_finance')">
+                                                        → Forward to Finance (with GRR)
+                                                    </button>
+                                                ` : ''}
+                                                <button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">
+                                                    ✗ Reject
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                    
+                    ${pendingPayments.length > 0 ? `
+                        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3>
+                        <div class="table-container" style="margin-bottom: 32px;">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ref</th>
+                                        <th>Staff</th>
+                                        <th>Amount</th>
+                                        <th>Type</th>
+                                        <th>Requested</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pendingPayments.map(p => `
+                                        <tr>
+                                            <td>${p.refNumber}</td>
+                                            <td>${p.staffName}</td>
+                                            <td>₦${p.amount.toLocaleString()}</td>
+                                            <td>${p.paymentType}</td>
+                                            <td>${new Date(p.requestDate).toLocaleDateString()}</td>
+                                            <td>
+                                                <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
+                                                    ✓ Process Payment
+                                                </button>
+                                                <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
+                                                    ✗ Reject
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                    
+                    ${pendingRetirements.length > 0 ? `
+                        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Ref</th>
+                                        <th>Staff</th>
+                                        <th>Payment Ref</th>
+                                        <th>Spent</th>
+                                        <th>Returned</th>
+                                        <th>Submitted</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pendingRetirements.map(r => `
+                                        <tr>
+                                            <td>${r.refNumber}</td>
+                                            <td>${r.staffName}</td>
+                                            <td>${r.paymentRef}</td>
+                                            <td>₦${r.actualSpent.toLocaleString()}</td>
+                                            <td>₦${r.amountReturned.toLocaleString()}</td>
+                                            <td>${new Date(r.submittedDate).toLocaleDateString()}</td>
+                                            <td>
+                                                <button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">
+                                                    ✓ Approve Retirement
+                                                </button>
+                                                <button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">
+                                                    ✗ Reject
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                `;
+            },
+            
+            // APPROVAL LOGIC METHODS
+            async approveConceptNote(refNumber, action) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                
+                let updates = {};
+                
+                switch(action) {
+                    case 'approved':
+                        updates = {
+                            status: 'approved',
+                            approvedDate: new Date().toISOString(),
+                            approvedBy: this.currentUser
+                        };
+                        break;
+                    case 'forward_to_ed':
+                        updates = {
+                            currentApprover: 'ed',
+                            forwardedToED: new Date().toISOString()
+                        };
+                        break;
+                    case 'forward_to_procurement':
+                        updates = {
+                            currentApprover: 'procurement',
+                            sentToProcurement: new Date().toISOString()
+                        };
+                        break;
+                    case 'forward_to_finance':
+                        updates = {
+                            status: 'approved',
+                            approvedDate: new Date().toISOString(),
+                            approvedBy: this.currentUser,
+                            procurementComplete: new Date().toISOString()
+                        };
+                        break;
+                }
+                
+                const { error } = await supabaseClient
+                    .from('concept_notes')
+                    .update(updates)
+                    .eq('refNumber', refNumber);
+                
+                if (error) {
+                    alert('Error updating concept note: ' + error.message);
+                } else {
+                    Object.assign(cn, updates);
+                    alert('Concept note processed successfully!');
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+            
+            async rejectConceptNote(refNumber) {
+                const reason = prompt('Please provide a reason for rejection:');
+                if (!reason) return;
+                
+                const { error } = await supabaseClient
+                    .from('concept_notes')
+                    .update({
+                        status: 'rejected',
+                        rejectedDate: new Date().toISOString(),
+                        rejectedBy: this.currentUser,
+                        rejectionReason: reason
+                    })
+                    .eq('refNumber', refNumber);
+                
+                if (error) {
+                    alert('Error rejecting concept note: ' + error.message);
+                } else {
+                    alert('Concept note rejected.');
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+            
+            async processPayment(refNumber) {
+                const { error } = await supabaseClient
+                    .from('payments')
+                    .update({
+                        status: 'paid',
+                        paidDate: new Date().toISOString(),
+                        processedBy: this.currentUser
+                    })
+                    .eq('refNumber', refNumber);
+                
+                if (error) {
+                    alert('Error processing payment: ' + error.message);
+                } else {
+                    alert('Payment processed successfully!');
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+            
+            async rejectPayment(refNumber) {
+                const reason = prompt('Please provide a reason for rejection:');
+                if (!reason) return;
+                
+                const { error } = await supabaseClient
+                    .from('payments')
+                    .update({
+                        status: 'rejected',
+                        rejectedDate: new Date().toISOString(),
+                        rejectedBy: this.currentUser,
+                        rejectionReason: reason
+                    })
+                    .eq('refNumber', refNumber);
+                
+                if (error) {
+                    alert('Error rejecting payment: ' + error.message);
+                } else {
+                    alert('Payment rejected.');
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+            
+            async approveRetirement(refNumber) {
+                const { error } = await supabaseClient
+                    .from('retirements')
+                    .update({
+                        status: 'approved',
+                        approvedDate: new Date().toISOString(),
+                        approvedBy: this.currentUser
+                    })
+                    .eq('refNumber', refNumber);
+                
+                if (error) {
+                    alert('Error approving retirement: ' + error.message);
+                } else {
+                    alert('Retirement approved successfully!');
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+            
+            async rejectRetirement(refNumber) {
+                const reason = prompt('Please provide a reason for rejection:');
+                if (!reason) return;
+                
+                const { error } = await supabaseClient
+                    .from('retirements')
+                    .update({
+                        status: 'rejected',
+                        rejectedDate: new Date().toISOString(),
+                        rejectedBy: this.currentUser,
+                        rejectionReason: reason
+                    })
+                    .eq('refNumber', refNumber);
+                
+                if (error) {
+                    alert('Error rejecting retirement: ' + error.message);
+                } else {
+                    alert('Retirement rejected.');
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+            
+            // FIX #8: Add renderReports method
+            renderReports(content) {
+                const role = this.getUserRole();
+                
+                if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <h3>Access Denied</h3>
+                            <p>You don't have permission to view reports.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Calculate budget usage per project
+                const projectStats = this.data.projects.map(project => {
+                    const spent = this.getProjectSpent(project.code);
+                    const remaining = project.budget - spent;
+                    const percentUsed = (spent / project.budget * 100).toFixed(1);
+                    
+                    return {
+                        ...project,
+                        spent,
+                        remaining,
+                        percentUsed
+                    };
+                });
+                
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Reports & Budget Tracking</h2>
+                        <p>Financial overview and budget utilization</p>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total Budget</h3>
+                            <div class="stat-value">₦${this.data.projects.reduce((sum, p) => sum + p.budget, 0).toLocaleString()}</div>
+                            <div class="stat-label">Across all projects</div>
+                        </div>
+                        <div class="stat-card warning">
+                            <h3>Total Spent</h3>
+                            <div class="stat-value">₦${this.data.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div>
+                            <div class="stat-label">All paid requests</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Pending Approvals</h3>
+                            <div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending').length}</div>
+                            <div class="stat-label">Concept notes awaiting review</div>
+                        </div>
+                        <div class="stat-card danger">
+                            <h3>Unretired Advances</h3>
+                            <div class="stat-value">${this.data.payments.filter(p => p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)).length}</div>
+                            <div class="stat-label">Need retirement</div>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Project Code</th>
+                                    <th>Project Name</th>
+                                    <th>Total Budget</th>
+                                    <th>Spent</th>
+                                    <th>Remaining</th>
+                                    <th>Usage</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${projectStats.map(p => `
+                                    <tr>
+                                        <td><strong>${p.code}</strong></td>
+                                        <td>${p.name}</td>
+                                        <td>₦${p.budget.toLocaleString()}</td>
+                                        <td>₦${p.spent.toLocaleString()}</td>
+                                        <td>₦${p.remaining.toLocaleString()}</td>
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 12px;">
+                                                <div class="budget-bar" style="flex: 1; margin: 0;">
+                                                    <div class="budget-fill ${p.percentUsed > 90 ? 'danger' : p.percentUsed > 70 ? 'warning' : ''}" 
+                                                         style="width: ${p.percentUsed}%"></div>
+                                                </div>
+                                                <span style="font-weight: 600; min-width: 50px;">${p.percentUsed}%</span>
+                                            </div>
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>
                         </table>
-                    </div>`;
+                    </div>
+                `;
+            },
+            
+            // FIX #9: Add renderSettings method
+            renderSettings(content) {
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Settings</h2>
+                        <p>System configuration and user preferences</p>
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <h3 style="margin-bottom: 16px;">User Information</h3>
+                            <p><strong>Name:</strong> ${this.currentUser}</p>
+                            <p><strong>Role:</strong> ${this.getUserRole() === 'staff' ? 'Staff Member' : this.getUserRole().toUpperCase()}</p>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <h3 style="margin-bottom: 16px;">System Information</h3>
+                            <p><strong>Version:</strong> 1.0.0</p>
+                            <p><strong>Last Updated:</strong> ${new Date().toLocaleDateString()}</p>
+                        </div>
+                        
+                        <div class="btn-group full-width">
+                            <button class="btn btn-primary" onclick="app.showView('dashboard')">Back to Dashboard</button>
+                            <button class="btn btn-secondary" onclick="app.logout()">Logout</button>
+                        </div>
+                    </div>
+                `;
+            },
+            
+            logout() {
+                if (confirm('Are you sure you want to logout?')) {
+                    localStorage.removeItem('pms_user');
+                    window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
+                }
             }
         };
-
-        // Initialize App
-        window.onload = () => app.init();
+        
+        // Initialize app when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            app.init();
+        });
     </script>
 </body>
 </html>
