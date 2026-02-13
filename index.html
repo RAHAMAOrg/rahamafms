@@ -1351,15 +1351,14 @@
                                             <td>₦${cn.estimatedCost.toLocaleString()}</td>
                                             <td>${new Date(cn.submittedDate).toLocaleDateString()}</td>
                                             <td>
-                                                ${role === 'budgetOwner' ? `
-                                                    ${cn.estimatedCost <= 1000000 ? `
-                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">
-                                                            ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
-                                                        </button>
-                                                    ` : `
-                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">
-                                                            → Forward to ED (>₦1M)
-                                                        </button>
+    <button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
+        📄 View Details
+    </button><br>
+    ${role === 'budgetOwner' ? `
+        ${cn.estimatedCost <= 1000000 ? `
+            <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">
+                ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
+            </button>
                                                     `}
                                                 ` : role === 'ed' ? `
                                                     <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">
@@ -1513,15 +1512,9 @@
                         }
                         break;
                     case 'procurement_complete':
-                        // Procurement completing and forwarding to Finance
-                        updates = {
-                            status: 'approved',
-                            approvedDate: new Date().toISOString(),
-                            approvedBy: this.currentUser,
-                            procurementComplete: new Date().toISOString(),
-                            retirementresponsibility: 'procurement'
-                        };
-                        break;
+    // Show upload form instead
+    this.showProcurementUpload(refNumber);
+    return; // Exit - modal handles completion
                 }
                 
                 const { error } = await supabaseClient
@@ -1561,31 +1554,341 @@
                     this.showView('approvals');
                 }
             },
+            showProcurementUpload(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+    
+    const content = document.getElementById('mainContent');
+    content.innerHTML = `
+        <div class="header">
+            <h2>Complete Procurement & Forward to Finance</h2>
+            <p>Upload documents and create payment request</p>
+        </div>
+        
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <div class="threshold-info">
+                    <strong>Concept Note:</strong> ${cn.refNumber} - ${cn.activityTitle}<br>
+                    <strong>Amount:</strong> ₦${cn.estimatedCost.toLocaleString()}<br>
+                    <strong>Staff:</strong> ${cn.staffName}
+                </div>
+            </div>
             
-            async processPayment(refNumber) {
-                const payment = this.data.payments.find(p => p.refNumber === refNumber);
-                if (!payment) return;
-                
-                // Find the concept note to get retirement responsibility
-                const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
-                
-                const { error } = await supabaseClient
-                    .from('payments')
-                    .update({
-                        status: 'paid',
-                        paidDate: new Date().toISOString(),
-                        processedBy: this.currentUser,
-                        retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
-                    })
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error processing payment: ' + error.message);
-                } else {
-                    alert('Payment processed successfully!');
-                    await this.loadData();
-                    this.showView('approvals');
-                }
+            <div class="form-group full-width">
+                <label>Upload GRR (Goods Received Report) <span class="required">*</span></label>
+                <input type="file" id="grrFile" accept=".pdf,.jpg,.jpeg,.png" required>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Upload Purchase Order/Invoice <span class="required">*</span></label>
+                <input type="file" id="poFile" accept=".pdf,.jpg,.jpeg,.png" required>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Procurement Notes</label>
+                <textarea id="procNotes" rows="3" placeholder="Additional information for Finance..."></textarea>
+            </div>
+            
+            <div class="btn-group full-width">
+                <button class="btn btn-primary" onclick="app.completeProcurementWithDocs('${refNumber}')">
+                    Complete & Send to Finance
+                </button>
+                <button class="btn btn-secondary" onclick="app.showView('approvals')">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    `;
+},
+
+async completeProcurementWithDocs(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+    
+    const grrFile = document.getElementById('grrFile').files[0];
+    const poFile = document.getElementById('poFile').files[0];
+    const notes = document.getElementById('procNotes').value;
+    
+    if (!grrFile || !poFile) {
+        alert('Please upload both GRR and PO/Invoice documents');
+        return;
+    }
+    
+    // Convert files to base64
+    const toBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+    
+    try {
+        const grrData = await toBase64(grrFile);
+        const poData = await toBase64(poFile);
+        
+        // Update concept note
+        const { error: cnError } = await supabaseClient
+            .from('concept_notes')
+            .update({
+                status: 'approved',
+                approvedDate: new Date().toISOString(),
+                approvedBy: this.currentUser,
+                procurementComplete: new Date().toISOString(),
+                retirementresponsibility: 'procurement',
+                grrFile: grrData,
+                grrFileName: grrFile.name,
+                poFile: poData,
+                poFileName: poFile.name,
+                procurementNotes: notes
+            })
+            .eq('refNumber', refNumber);
+        
+        if (cnError) throw cnError;
+        
+        // AUTO-CREATE PAYMENT REQUEST for Finance
+        const payment = {
+            refNumber: 'PAY' + Date.now(),
+            conceptNoteId: cn.id,
+            conceptNoteRef: cn.refNumber,
+            projectCode: cn.projectCode,
+            staffName: cn.staffName,
+            amount: cn.estimatedCost,
+            paymentMethod: 'bank_transfer',
+            justification: `Procurement completed by ${this.currentUser}. ${notes}`,
+            status: 'pending',
+            requestDate: new Date().toISOString(),
+            procurementComplete: true,
+            retirementresponsibility: 'procurement'
+        };
+        
+        const { error: payError } = await supabaseClient
+            .from('payments')
+            .insert([payment])
+            .select();
+        
+        if (payError) throw payError;
+        
+        alert('Procurement completed and payment request sent to Finance!');
+        await this.loadData();
+        this.showView('approvals');
+        
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+},
+           async processPayment(refNumber) {
+    const payment = this.data.payments.find(p => p.refNumber === refNumber);
+    if (!payment) return;
+    
+    // Show account details collection form
+    this.showAccountDetailsForm(refNumber);
+},
+
+showAccountDetailsForm(refNumber) {
+    const payment = this.data.payments.find(p => p.refNumber === refNumber);
+    const cn = this.data.conceptNotes.find(c => c.refNumber === payment.conceptNoteRef);
+    
+    const content = document.getElementById('mainContent');
+    content.innerHTML = `
+        <div class="header">
+            <h2>Process Payment - Collect Account Details</h2>
+            <p>Enter beneficiary account information</p>
+        </div>
+        
+        <div class="form-grid two-col">
+            <div class="form-group full-width">
+                <div class="threshold-info">
+                    <strong>Payment Ref:</strong> ${payment.refNumber}<br>
+                    <strong>Staff:</strong> ${payment.staffName}<br>
+                    <strong>Activity:</strong> ${cn?.activityTitle || 'N/A'}<br>
+                    <strong>Amount:</strong> ₦${payment.amount.toLocaleString()}
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Account Name <span class="required">*</span></label>
+                <input type="text" id="accountName" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Account Number <span class="required">*</span></label>
+                <input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10">
+            </div>
+            
+            <div class="form-group">
+                <label>Bank Name <span class="required">*</span></label>
+                <select id="bankName" required>
+                    <option value="">Select Bank</option>
+                    <option value="Access Bank">Access Bank</option>
+                    <option value="Fidelity Bank">Fidelity Bank</option>
+                    <option value="First Bank">First Bank</option>
+                    <option value="FCMB">FCMB</option>
+                    <option value="GTBank">GTBank</option>
+                    <option value="Keystone Bank">Keystone Bank</option>
+                    <option value="Polaris Bank">Polaris Bank</option>
+                    <option value="Stanbic IBTC">Stanbic IBTC</option>
+                    <option value="UBA">UBA</option>
+                    <option value="Union Bank">Union Bank</option>
+                    <option value="Unity Bank">Unity Bank</option>
+                    <option value="Wema Bank">Wema Bank</option>
+                    <option value="Zenith Bank">Zenith Bank</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Payment Method <span class="required">*</span></label>
+                <select id="paymentMethod" required>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="cash">Cash</option>
+                </select>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Payment Notes</label>
+                <textarea id="paymentNotes" rows="2" placeholder="Optional notes..."></textarea>
+            </div>
+            
+            <div class="btn-group full-width">
+                <button class="btn btn-primary" onclick="app.confirmPayment('${refNumber}')">
+                    ✓ Confirm & Process Payment
+                </button>
+                <button class="btn btn-secondary" onclick="app.showView('approvals')">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    `;
+},
+
+async confirmPayment(refNumber) {
+    const accountName = document.getElementById('accountName').value;
+    const accountNumber = document.getElementById('accountNumber').value;
+    const bankName = document.getElementById('bankName').value;
+    const paymentMethod = document.getElementById('paymentMethod').value;
+    const paymentNotes = document.getElementById('paymentNotes').value;
+    
+    if (!accountName || !accountNumber || !bankName || !paymentMethod) {
+        alert('Please fill all required fields');
+        return;
+    }
+    viewConceptNoteDetails(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+    
+    const content = document.getElementById('mainContent');
+    content.innerHTML = `
+        <div class="header">
+            <h2>Concept Note Details</h2>
+            <p>Full information for ${cn.refNumber}</p>
+        </div>
+        
+        <div class="form-grid two-col">
+            <div class="form-group">
+                <label>Reference Number</label>
+                <input type="text" value="${cn.refNumber}" readonly>
+            </div>
+            
+            <div class="form-group">
+                <label>Status</label>
+                <span class="status-badge status-${cn.status}">${cn.status}</span>
+            </div>
+            
+            <div class="form-group">
+                <label>Staff Name</label>
+                <input type="text" value="${cn.staffName}" readonly>
+            </div>
+            
+            <div class="form-group">
+                <label>Submitted Date</label>
+                <input type="text" value="${new Date(cn.submittedDate).toLocaleString()}" readonly>
+            </div>
+            
+            <div class="form-group">
+                <label>Project Code</label>
+                <input type="text" value="${cn.projectCode}" readonly>
+            </div>
+            
+            <div class="form-group">
+                <label>Estimated Cost</label>
+                <input type="text" value="₦${cn.estimatedCost.toLocaleString()}" readonly>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Activity Title</label>
+                <input type="text" value="${cn.activityTitle}" readonly>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Objective</label>
+                <textarea rows="3" readonly>${cn.objective}</textarea>
+            </div>
+            
+            <div class="form-group full-width">
+                <label>Description</label>
+                <textarea rows="4" readonly>${cn.description}</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Requires Procurement?</label>
+                <input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly>
+            </div>
+            
+            ${cn.procurementNotes ? `
+                <div class="form-group full-width">
+                    <label>Procurement Notes</label>
+                    <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
+                </div>
+            ` : ''}
+            
+            ${cn.grrFileName ? `
+                <div class="form-group">
+                    <label>GRR Document</label>
+                    <input type="text" value="${cn.grrFileName}" readonly>
+                </div>
+            ` : ''}
+            
+            ${cn.poFileName ? `
+                <div class="form-group">
+                    <label>PO/Invoice Document</label>
+                    <input type="text" value="${cn.poFileName}" readonly>
+                </div>
+            ` : ''}
+            
+            <div class="btn-group full-width">
+                <button class="btn btn-primary" onclick="app.showView('approvals')">
+                    ← Back to Approvals
+                </button>
+            </div>
+        </div>
+    `;
+},
+    const payment = this.data.payments.find(p => p.refNumber === refNumber);
+    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
+    
+    const { error } = await supabaseClient
+        .from('payments')
+        .update({
+            status: 'paid',
+            paidDate: new Date().toISOString(),
+            processedBy: this.currentUser,
+            accountName,
+            accountNumber,
+            bankName,
+            paymentMethod,
+            paymentNotes,
+            retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
+        })
+        .eq('refNumber', refNumber);
+    
+    if (error) {
+        alert('Error processing payment: ' + error.message);
+    } else {
+        alert(`Payment of ₦${payment.amount.toLocaleString()} processed to ${accountName} - ${bankName}`);
+        await this.loadData();
+        this.showView('approvals');
+    }
+},
             },
             
             async rejectPayment(refNumber) {
