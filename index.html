@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rahama Financial Management System</title>
     <style>
@@ -608,6 +609,10 @@
     </div>
     
     <script>
+        const SUPABASE_URL = "https://sqygmoxpegbfxddglhbx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8";
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const app = {
     currentUser: '',
     data: {
