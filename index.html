@@ -608,43 +608,46 @@
     </div>
     
     <script>
-        const app = {
-            currentUser: '',
-            data: {
-                conceptNotes: [],
-                payments: [],
-                retirements: [],
-                staff: [
-    'Usman Musa',
-    'Aisha Linatu Abdulrahman',
-    'Fatima Yusuf Matsayi',
-    'Khadijah Abdulrahman',
-    'Sani Hamisu',
-    'Salahuddeen Sambo',
-    'Ahmad Abdulrahman Tijjani',
-    'Maryam Abdulrahman Tijjani',
-    'Sumayya Adam',
-    'Aisha Umar',
-    'Paulina Paul',
-    'Fatima Tijjani'
-],
-                projects: [
-                    { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
-                    { code: 'CBA101', name: 'Community Health Initiative', budget: 16000000 },
-                    { code: 'GEPP101', name: 'Girls Education & Protection Program GEPP', budget: 75000000 },
-                    { code: 'AYP101', name: 'Adolescents and Young People Project', budget: 8000000 },
-                    { code: 'TES101', name: 'TES', budget: 500000 },
-                    { code: 'ADM001', name: 'Admin & Operations', budget: 1000000 }
-                ],
-                roles: {
-                    'Aisha Linatu Abdulrahman': 'budgetOwner',
-                    'Fatima Tijjani': 'ed',
-                    'Fatima Yusuf Matsayi': 'procurement',
-                    'Musa Usman': 'procurement',
-                    'Salahuddeen Ahmad': 'finance',
-                    'Sani Hamisu': 'finance'
-                }
-            },
+    const app = {
+    currentUser: '',
+    data: {
+        conceptNotes: [],
+        payments: [],
+        retirements: [],
+
+        staff: [
+            'Usman Musa',
+            'Aisha Linatu Abdulrahman',
+            'Fatima Yusuf Matsayi',
+            'Khadijah Abdulrahman',
+            'Sani Hamisu',
+            'Salahuddeen Sambo',
+            'Ahmad Abdulrahman Tijjani',
+            'Maryam Abdulrahman Tijjani',
+            'Sumayya Adam',
+            'Aisha Umar',
+            'Paulina Paul',
+            'Fatima Tijjani'
+        ],
+
+        projects: [
+            { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
+            { code: 'CBA101', name: 'Community Health Initiative', budget: 16000000 },
+            { code: 'GEPP101', name: 'Girls Education & Protection Program GEPP', budget: 75000000 },
+            { code: 'AYP101', name: 'Adolescents and Young People Project', budget: 8000000 },
+            { code: 'TES101', name: 'TES', budget: 500000 },
+            { code: 'ADM001', name: 'Admin & Operations', budget: 1000000 }
+        ],
+
+        roles: {
+            'Aisha Linatu Abdulrahman': 'budgetOwner',
+            'Fatima Tijjani': 'ed',
+            'Fatima Yusuf Matsayi': 'procurement',
+            'Musa Usman': 'procurement',
+            'Salahuddeen Ahmad': 'finance',
+            'Sani Hamisu': 'finance'
+        }
+    },
 init() {
     this.loadData();
 
