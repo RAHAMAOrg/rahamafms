@@ -1633,7 +1633,7 @@ if (typeof event !== 'undefined' && event?.target) {
                 this.renderApprovals(document.getElementById('mainContent'));
             },
             
-      renderReports(content) {
+ renderReports(content) {
 
     const role = this.getUserRole();
     if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
@@ -1654,86 +1654,6 @@ if (typeof event !== 'undefined' && event?.target) {
         </div>
     `;
 },
-    const budgetData = this.calculateBudgetUtilization();
-
-    content.innerHTML = `
-        <div class="header">
-            <h2>Reports & Budget Tracking</h2>
-            <p>Financial overview and budget utilization</p>
-        </div>
-    `;
-},
-
-    const budgetData = this.calculateBudgetUtilization();
-
-                const budgetData = this.calculateBudgetUtilization();
-                
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Reports & Budget Tracking</h2>
-                        <p>Financial overview and budget utilization</p>
-                    </div>
-                    
-                    <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Budget Utilization by Project</h3>
-                    <div class="table-container" style="margin-bottom: 32px;">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Project Code</th>
-                                    <th>Project Name</th>
-                                    <th>Budget</th>
-                                    <th>Utilized</th>
-                                    <th>Remaining</th>
-                                    <th>Utilization %</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${budgetData.map(proj => `
-                                    <tr>
-                                        <td>${proj.code}</td>
-                                        <td>${proj.name}</td>
-                                        <td>₦${proj.budget.toLocaleString()}</td>
-                                        <td>₦${proj.utilized.toLocaleString()}</td>
-                                        <td>₦${proj.remaining.toLocaleString()}</td>
-                                        <td>
-                                            <div style="display: flex; align-items: center; gap: 12px;">
-                                                <span>${proj.percentage}%</span>
-                                                <div class="budget-bar" style="flex: 1; max-width: 200px;">
-                                                    <div class="budget-fill ${proj.percentage > 80 ? 'danger' : proj.percentage > 60 ? 'warning' : ''}" 
-                                                         style="width: ${Math.min(proj.percentage, 100)}%"></div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>Total Concept Notes</h3>
-                            <div class="stat-value">${this.data.conceptNotes.length}</div>
-                            <div class="stat-label">${this.data.conceptNotes.filter(cn => cn.status === 'approved').length} approved</div>
-                        </div>
-                        <div class="stat-card">
-                            <h3>Total Payments</h3>
-                            <div class="stat-value">${this.data.payments.length}</div>
-                            <div class="stat-label">${this.data.payments.filter(p => p.status === 'paid').length} paid</div>
-                        </div>
-                        <div class="stat-card ${this.getRetirementRate() < 50 ? 'danger' : this.getRetirementRate() < 80 ? 'warning' : 'success'}">
-                            <h3>Retirement Rate</h3>
-                            <div class="stat-value">${this.getRetirementRate()}%</div>
-                            <div class="stat-label">${this.data.retirements.length} of ${this.data.payments.filter(p => p.status === 'paid').length} paid</div>
-                        </div>
-                        <div class="stat-card">
-                            <h3>Total Disbursed</h3>
-                            <div class="stat-value">₦${this.data.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div>
-                            <div class="stat-label">Across all projects</div>
-                        </div>
-                    </div>
-                `;
-            },
             
             calculateBudgetUtilization() {
                 return this.data.projects.map(proj => {
