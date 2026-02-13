@@ -1775,8 +1775,17 @@ init() {
         
         // Initialize on page load
         window.addEventListener('DOMContentLoaded', () => {
-            app.init();
-        });
+
+    // Receive session from appraisal portal
+    const params = new URLSearchParams(window.location.search);
+    const urlSession = params.get('session');
+
+    if (urlSession) {
+        localStorage.setItem('pms_user', urlSession);
+    }
+
+    app.init();
+});
     </script>
 </body>
 </html>
