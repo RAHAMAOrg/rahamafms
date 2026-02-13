@@ -708,6 +708,7 @@ this.showView('dashboard');
         console.error('Payment load error:', payError);
     } else {
         this.data.payments = pay || [];
+    }
 },
             
             saveData() {
@@ -1169,14 +1170,17 @@ if (error) {
                 const data = new FormData(form);
                 
                 const payment = {
-                    refNumber: this.generateRefNumber('PR'),
-                    conceptNoteRef: data.get('conceptNoteRef'),
-                    staffName: this.currentUser,
-                    amount: parseFloat(data.get('amount')),
-                    paymentMethod: data.get('paymentMethod'),
-                    justification: data.get('justification'),
-                    status: 'pending_finance',
-                    requestDate: new Date().toISOString()
+                   const { error } = await supabaseClient
+  .from('payments')
+  .insert([payment]);
+
+if (error) {
+    alert('Error saving payment: ' + error.message);
+    return;
+}
+
+alert(`Payment request ${payment.refNumber} submitted.`);
+this.showView('dashboard');
                 };
                 
                 await supabaseClient
