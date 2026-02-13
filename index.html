@@ -642,7 +642,8 @@
                     'Musa Usman': 'procurement',
                     'Salahuddeen Ahmad': 'finance',
                     'Sani Hamisu': 'finance'
-                }
+                ]
+                    
             },
 init() {
     this.loadData();
@@ -1472,13 +1473,12 @@ if (typeof event !== 'undefined' && event?.target) {
 
     // ===== PROCUREMENT =====
     if (userRole === 'procurement' && item.itemType === 'procurement') {
-        return `
-            <button class="action-btn approve" onclick="app.completeProcurement('${item.ref}')">
-                ✓ Complete & Send to Finance
-            </button>
-        `;
-    }
-
+    return `
+        <button class="action-btn approve" onclick="app.showProcurementUpload('${item.ref}')">
+            Upload Docs & Send to Finance
+        </button>
+    `;
+}
     // ===== FINANCE =====
     if (userRole === 'finance' && item.itemType === 'payment') {
         return `
