@@ -654,16 +654,19 @@
                 }
             },
             
-            init() {
-                this.loadData();
-                this.showView('dashboard');
-                
-                // Set default user if none selected
-                const savedUser = localStorage.getItem('fms_currentUser');
-                if (savedUser) {
-                    document.getElementById('currentUser').value = savedUser;
-                    this.currentUser = savedUser;
-                }
+init() {
+    this.loadData();
+
+    const session = localStorage.getItem('pms_user'); // from appraisal
+    if(session){
+        const user = JSON.parse(session);
+        this.currentUser = user.name;
+
+        document.getElementById('loggedInUser').innerText = user.name;
+    }
+
+    this.showView('dashboard');
+}
             },
             
             loadData() {
