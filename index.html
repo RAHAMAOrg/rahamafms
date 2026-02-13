@@ -597,7 +597,7 @@
                 <li><button onclick="app.showView('settings')">Settings</button></li>
             </ul>
             
-            <a href="https://rahama-staff-portal.com" class="portal-link" target="_blank">
+            <a href="https://rahamaorg.github.io/appraisal-system/" class="portal-link" target="_blank">
                 ← Back to Staff Portal
             </a>
         </div>
@@ -1415,17 +1415,24 @@ init() {
                 return items;
             },
             
-            getApprovalButtons(item, userRole) {
-                if (userRole === 'budgetOwner' && item.itemType === 'conceptNote') {
-                    const needsED = item.amount > 1000000;
-                    return `
-                        ${item.item.requiresProcurement === 'yes' ? 
-                            '<button class="action-btn" onclick="app.routeToProcurement(\'${item.ref}\')">→ Route to Procurement</button>' : 
-                            `<button class="action-btn approve" onclick="app.approveConceptNote('${item.ref}', ${needsED})">✓ Approve${needsED ? ' & Forward to ED' : ''}</button>`
-                        }
-                        <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'conceptNote')">✗ Reject</button>
-                    `;
-                }
+           getApprovalButtons(item, userRole) {
+    if (userRole === 'budgetOwner' && item.itemType === 'conceptNote') {
+        const needsED = item.amount > 1000000;
+        return `
+            ${item.item.requiresProcurement === 'yes' ? 
+                `<button class="action-btn" onclick="app.routeToProcurement('${item.ref}')">
+                    → Route to Procurement
+                </button>` : 
+                `<button class="action-btn approve" onclick="app.approveConceptNote('${item.ref}', ${needsED})">
+                    ✓ Approve${needsED ? ' & Forward to ED' : ''}
+                </button>`
+            }
+            <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'conceptNote')">
+                ✗ Reject
+            </button>
+        `;
+    }
+}
                 
                 if (userRole === 'ed' && item.itemType === 'conceptNote') {
                     return `
@@ -1474,22 +1481,31 @@ init() {
             },
             
             routeToProcurement(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
-                
-                cn.approvalHistory.push({
-                    approver: this.currentUser,
-                    role: 'Budget Owner',
-                    action: 'routed_to_procurement',
-                    date: new Date().toISOString()
-                });
-                
-                cn.status = 'pending_procurement';
-                alert(`${refNumber} routed to Procurement for processing`);
-                
-                this.saveData();
-                this.renderApprovals(document.getElementById('mainContent'));
-            },
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+
+    const comment = prompt('Add approval comment for procurement:');
+    if (!comment) {
+        alert('Comment is required.');
+        return;
+    }
+
+    cn.approvalHistory.push({
+        approver: this.currentUser,
+        role: 'Budget Owner',
+        action: 'routed_to_procurement',
+        comment: comment,
+        date: new Date().toISOString()
+    });
+
+    cn.status = 'pending_procurement';
+
+    this.saveData();
+
+    alert(`${refNumber} sent to Procurement successfully.`);
+    
+    this.renderApprovals(document.getElementById('mainContent'));
+}
             
             approveByED(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
