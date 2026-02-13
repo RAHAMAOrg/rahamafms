@@ -647,8 +647,8 @@ init() {
     const urlSession = params.get('session');
 
     if (urlSession) {
-        localStorage.setItem('pms_user', urlSession);
-    }
+    localStorage.setItem('pms_user', decodeURIComponent(urlSession));
+}
 
     const session = localStorage.getItem('pms_user');
 
