@@ -1691,7 +1691,7 @@ async completeProcurementWithFile(refNumber) {
     const file = fileInput.files[0];
     const reader = new FileReader();
 
-    reader.onload = () => {
+    reader.onload = async () => {
         cn.approvalHistory.push({
             approver: this.currentUser,
             role: 'Procurement Officer',
