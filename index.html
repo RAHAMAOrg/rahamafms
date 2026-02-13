@@ -1155,12 +1155,12 @@
                     const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
                     
                     // Staff can retire after 5 days if they're responsible
-                    if (userRole === 'staff' && p.retirementResponsibility === 'staff' && p.staffName === this.currentUser) {
+                    if (userRole === 'staff' && p.retirementresponsibility === 'staff' && p.staffName === this.currentUser) {
                         return daysSincePaid >= 5;
                     }
                     
                     // Procurement can retire immediately if they're responsible
-                    if (userRole === 'procurement' && p.retirementResponsibility === 'procurement') {
+                    if (userRole === 'procurement' && p.retirementresponsibility === 'procurement') {
                         return true;
                     }
                     
@@ -1176,7 +1176,7 @@
                     const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
                     
                     return userRole === 'staff' && 
-                           p.retirementResponsibility === 'staff' && 
+                           p.retirementresponsibility === 'staff' && 
                            p.staffName === this.currentUser && 
                            daysSincePaid < 5;
                 });
@@ -1474,7 +1474,7 @@
                             updates = {
                                 currentApprover: 'procurement',
                                 sentToProcurement: new Date().toISOString(),
-                                retirementResponsibility: 'procurement'
+                                retirementresponsibility: 'procurement'
                             };
                         } else {
                             // Direct to finance - staff will retire
@@ -1482,7 +1482,7 @@
                                 status: 'approved',
                                 approvedDate: new Date().toISOString(),
                                 approvedBy: this.currentUser,
-                                retirementResponsibility: 'staff'
+                                retirementresponsibility: 'staff'
                             };
                         }
                         break;
@@ -1500,7 +1500,7 @@
                             updates = {
                                 currentApprover: 'procurement',
                                 sentToProcurement: new Date().toISOString(),
-                                retirementResponsibility: 'procurement'
+                                retirementresponsibility: 'procurement'
                             };
                         } else {
                             // Direct to finance - staff will retire
@@ -1508,7 +1508,7 @@
                                 status: 'approved',
                                 approvedDate: new Date().toISOString(),
                                 approvedBy: this.currentUser,
-                                retirementResponsibility: 'staff'
+                                retirementresponsibility: 'staff'
                             };
                         }
                         break;
@@ -1519,7 +1519,7 @@
                             approvedDate: new Date().toISOString(),
                             approvedBy: this.currentUser,
                             procurementComplete: new Date().toISOString(),
-                            retirementResponsibility: 'procurement'
+                            retirementresponsibility: 'procurement'
                         };
                         break;
                 }
@@ -1575,7 +1575,7 @@
                         status: 'paid',
                         paidDate: new Date().toISOString(),
                         processedBy: this.currentUser,
-                        retirementResponsibility: conceptNote?.retirementResponsibility || 'staff'
+                        retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
                     })
                     .eq('refNumber', refNumber);
                 
