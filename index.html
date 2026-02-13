@@ -480,15 +480,16 @@
         
         /* Action buttons in table */
         .action-btn {
-            padding: 6px 12px;
+            padding: 12px 18px;
             background: none;
             border: 1px solid var(--border);
             border-radius: 6px;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             margin-right: 8px;
+            min-width: 180px;
         }
         
         .action-btn:hover {
@@ -1675,7 +1676,7 @@ if (error) {
         </div>
     `;
 },
-completeProcurementWithFile(refNumber) {
+async completeProcurementWithFile(refNumber) {
     const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
     if (!cn) return;
 
@@ -1703,10 +1704,21 @@ completeProcurementWithFile(refNumber) {
 
         cn.status = 'procurement_complete';
 
-        this.saveData();
-        alert('Sent to Finance successfully.');
-        this.showView('approvals');
-    };
+this.data.payments.push({
+    refNumber: this.generateRefNumber('PR'),
+    conceptNoteRef: cn.refNumber,
+    staffName: cn.staffName,
+    amount: cn.estimatedCost,
+    paymentMethod: 'procurement',
+    justification: 'Procured via procurement process',
+    status: 'pending_finance',
+    requestDate: new Date().toISOString()
+});
+
+alert('Sent to Finance successfully.');
+
+await this.loadData();
+this.renderApprovals(document.getElementById('mainContent'));
 
     reader.readAsDataURL(file);
 },
