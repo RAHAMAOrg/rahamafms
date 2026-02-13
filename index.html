@@ -657,13 +657,17 @@
 init() {
     this.loadData();
 
-    const session = localStorage.getItem('pms_user'); // from appraisal
-    if(session){
+    const session = localStorage.getItem('pms_user');
+    if (session) {
         const user = JSON.parse(session);
         this.currentUser = user.name;
 
-        document.getElementById('loggedInUser').innerText = user.name;
+        const el = document.getElementById('loggedInUser');
+        if (el) el.innerText = user.name;
     }
+
+    this.showView('dashboard');
+},
 
     this.showView('dashboard');
 }
@@ -695,14 +699,14 @@ init() {
                 const content = document.getElementById('mainContent');
                 
                 if (!this.currentUser) {
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <h2>Welcome to Rahama FMS</h2>
-                            <p>Please select your name from the sidebar to continue</p>
-                        </div>
-                    `;
-                    return;
-                }
+    content.innerHTML = `
+        <div class="empty-state">
+            <h2>User session not found</h2>
+            <p>Please login from the Staff Portal.</p>
+        </div>
+    `;
+    return;
+}
                 
                 switch(viewName) {
                     case 'dashboard': this.renderDashboard(content); break;
