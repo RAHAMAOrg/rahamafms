@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAHAMA Financial Management System</title>
+
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+<style>
+body{font-family:Plus Jakarta Sans, sans-serif;}
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#065f46,#10b981);}
+.login-card{background:white;padding:30px;border-radius:16px;width:100%;max-width:380px;}
+.error{color:red;font-size:12px;margin-top:10px;}
+</style>
+</head>
+
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginView" class="login-screen">
+  <div class="login-card">
+    <h2 class="text-2xl font-bold mb-6 text-center">RAHAMA FMS</h2>
+
+    <input id="email" type="email" placeholder="email@rgcweinigeria.org"
+      class="w-full mb-3 px-4 py-3 border rounded-xl">
+
+    <input id="password" type="password" placeholder="Password"
+      class="w-full mb-3 px-4 py-3 border rounded-xl">
+
+    <button onclick="login()" class="w-full bg-green-700 text-white py-3 rounded-xl font-bold">
+      Sign In
+    </button>
+
+    <p id="loginError" class="error text-center"></p>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="appView" style="display:none;">
+
+  <!-- Top Bar -->
+  <div class="bg-white shadow p-4 flex justify-between items-center">
+      <h1 class="font-extrabold text-lg">Financial Management System</h1>
+
+      <div class="flex items-center gap-4">
+          <span class="text-sm text-gray-600">
+              <i class="fas fa-user mr-1 text-green-600"></i>
+              <b id="loggedUserName"></b>
+          </span>
+
+          <button onclick="logout()" class="text-sm px-3 py-1 bg-gray-100 rounded-lg">
+              Logout
+          </button>
+      </div>
+  </div>
+
+  <!-- ================= YOUR FINANCE SYSTEM STARTS HERE ================= -->
+  <div class="p-6">
+      <p class="text-gray-600">
+          Your finance dashboards, approvals, budgets, payments etc stay here.
+      </p>
+  </div>
+
+</div>
+
+<!-- ================= SCRIPT ================= -->
+<script>
+const SB = 'https://wdondphcmnhdslcypeya.supabase.co';
+const SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indkb25kcGhjbW5oZHNsY3lwZXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MDA3MDcsImV4cCI6MjA4NDQ3NjcwN30.wIisWHb3w4cSGZIB4f3q0Z6lboidH6SzL7oGToGdnsw';
+
+const H = {
+  'apikey': SK,
+  'Authorization': `Bearer ${SK}`
+};
+
+async function login(){
+    const email = document.getElementById('email').value;
+    const pw = document.getElementById('password').value;
+    const err = document.getElementById('loginError');
+
+    err.innerText='';
+
+    if(!email || !pw){
+        err.innerText = "Enter email and password";
+        return;
+    }
+
+    try{
+        const r = await fetch(`${SB}/rest/v1/users?email=eq.${encodeURIComponent(email)}`,{headers:H});
+        const u = await r.json();
+
+        if(u.length>0 && u[0].password === pw){
+            localStorage.setItem('fms_user', JSON.stringify(u[0]));
+            startApp(u[0]);
+        }else{
+            err.innerText = "Invalid credentials";
+        }
+    }catch(e){
+        err.innerText = "Login failed";
+    }
+}
+
+function startApp(user){
+    window.currentUser = user;
+
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('appView').style.display = 'block';
+
+    document.getElementById('loggedUserName').innerText = user.name;
+}
+
+function logout(){
+   localStorage.removeItem('fms_user');
+   location.reload();
+}
+
+window.onload = function(){
+   const s = localStorage.getItem('fms_user');
+   if(s){
+       startApp(JSON.parse(s));
+   }
+}
+</script>
+
+</body>
+</html>
