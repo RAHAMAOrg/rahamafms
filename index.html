@@ -1706,9 +1706,6 @@ async completeProcurementWithDocs(refNumber) {
         alert('Error: ' + error.message);
     }
 },
-           async processPayment(refNumber) {
-    const payment = this.data.payments.find(p => p.refNumber === refNumber);
-    if (!payment) return;
     
     async processPayment(refNumber) {
     const payment = this.data.payments.find(p => p.refNumber === refNumber);
