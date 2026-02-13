@@ -1418,9 +1418,12 @@ init() {
                 return items;
             },
             
-           getApprovalButtons(item, userRole) {
+          getApprovalButtons(item, userRole) {
+
+    // ===== BUDGET OWNER =====
     if (userRole === 'budgetOwner' && item.itemType === 'conceptNote') {
         const needsED = item.amount > 1000000;
+
         return `
             ${item.item.requiresProcurement === 'yes' ? 
                 `<button class="action-btn" onclick="app.routeToProcurement('${item.ref}')">
@@ -1435,30 +1438,38 @@ init() {
             </button>
         `;
     }
+
+    // ===== ED =====
+    if (userRole === 'ed' && item.itemType === 'conceptNote') {
+        return `
+            <button class="action-btn approve" onclick="app.approveByED('${item.ref}')">✓ Approve</button>
+            <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'conceptNote')">✗ Reject</button>
+        `;
+    }
+
+    // ===== PROCUREMENT =====
+    if (userRole === 'procurement' && item.itemType === 'procurement') {
+        return `
+            <button class="action-btn approve" onclick="app.completeProcurement('${item.ref}')">
+                ✓ Complete & Send to Finance
+            </button>
+        `;
+    }
+
+    // ===== FINANCE =====
+    if (userRole === 'finance' && item.itemType === 'payment') {
+        return `
+            <button class="action-btn approve" onclick="app.processPayment('${item.ref}')">
+                ✓ Process Payment
+            </button>
+            <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'payment')">
+                ✗ Reject
+            </button>
+        `;
+    }
+
+    return '';
 }
-                
-                if (userRole === 'ed' && item.itemType === 'conceptNote') {
-                    return `
-                        <button class="action-btn approve" onclick="app.approveByED('${item.ref}')">✓ Approve</button>
-                        <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'conceptNote')">✗ Reject</button>
-                    `;
-                }
-                
-                if (userRole === 'procurement' && item.itemType === 'procurement') {
-                    return `
-                        <button class="action-btn approve" onclick="app.completeProcurement('${item.ref}')">✓ Complete & Send to Finance</button>
-                    `;
-                }
-                
-                if (userRole === 'finance' && item.itemType === 'payment') {
-                    return `
-                        <button class="action-btn approve" onclick="app.processPayment('${item.ref}')">✓ Process Payment</button>
-                        <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'payment')">✗ Reject</button>
-                    `;
-                }
-                
-                return '';
-            },
             
             approveConceptNote(refNumber, needsED) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
