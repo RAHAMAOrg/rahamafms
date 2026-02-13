@@ -1164,38 +1164,36 @@ if (error) {
                 document.getElementById('paymentAmount').value = cn.estimatedCost;
             },
             
-            submitPayment(e) {
-                e.preventDefault();
-                const form = e.target;
-                const data = new FormData(form);
-                
-                const payment = {
-                   const { error } = await supabaseClient
-  .from('payments')
-  .insert([payment]);
+           async submitPayment(e) {
+    e.preventDefault();
 
-if (error) {
-    alert('Error saving payment: ' + error.message);
-    return;
-}
+    const form = e.target;
+    const data = new FormData(form);
 
-alert(`Payment request ${payment.refNumber} submitted.`);
-this.showView('dashboard');
-                };
-                
-                await supabaseClient
-  .from('payments')
-  .insert([{
-      refNumber: this.generateRefNumber('PR'),
-      conceptNoteRef: cn.refNumber,
-      staffName: cn.staffName,
-      amount: cn.estimatedCost,
-      paymentMethod: 'procurement',
-      justification: 'Procured via procurement process',
-      status: 'pending_finance',
-      requestDate: new Date().toISOString()
-  }]);
-            },
+    const payment = {
+        refNumber: this.generateRefNumber('PR'),
+        conceptNoteRef: data.get('conceptNoteRef'),
+        staffName: this.currentUser,
+        amount: parseFloat(data.get('amount')),
+        paymentMethod: data.get('paymentMethod'),
+        justification: data.get('justification'),
+        status: 'pending_finance',
+        requestDate: new Date().toISOString()
+    };
+
+    const { error } = await supabaseClient
+        .from('payments')
+        .insert([payment]);
+
+    if (error) {
+        alert('Error saving payment: ' + error.message);
+        return;
+    }
+
+    alert(`Payment request ${payment.refNumber} submitted.`);
+    await this.loadData();
+    this.showView('dashboard');
+},
             
             renderRetirementForm(content) {
                 const paidPayments = this.data.payments.filter(p => 
