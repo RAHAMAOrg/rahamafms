@@ -682,11 +682,12 @@ init() {
             },
             
             showView(viewName) {
-                // Update active nav
-                document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
-               if (event && event.target) {
+             // Update active nav safely
+document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+
+if (typeof event !== 'undefined' && event?.target) {
     event.target.classList.add('active');
-}       
+}
                 const content = document.getElementById('mainContent');
                 
                 if (!this.currentUser) {
