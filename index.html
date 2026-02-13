@@ -593,7 +593,7 @@
                 <li><button onclick="app.showView('payment')">Request Payment</button></li>
                 <li><button onclick="app.showView('retirement')">Submit Retirement</button></li>
                 <li><button onclick="app.showView('approvals')">My Approvals</button></li>
-                <li><button onclick="app.showView('reports')">Reports & Budget</button></li>
+                <li><button id="reportsBtn" onclick="app.showView('reports')">Reports & Budget</button></li>
                 <li><button onclick="app.showView('settings')">Settings</button></li>
             </ul>
             
@@ -615,12 +615,17 @@
                 payments: [],
                 retirements: [],
                 staff: [
-                    'Abdullahi Usman',
+                    'Usman Musa',
                     'Aisha Linatu Abdulrahman',
-                    'Fatima Yusuf',
-                    'Khadijah Ibrahim',
-                    'Muhammad Sani',
-                    'Salahuddeen Ahmad'
+                    'Fatima Yusuf Matsayi',
+                    'Khadijah Abdulrahman',
+                    'Sani Hamisu',
+                    'Salahuddeen Sambo'
+                    'Ahmad Abdulrahman Tijjani'
+                    'Maryam Abdulrahman Tijjani'
+                    'Sumayya Adam'
+                    'Aisha Umar'
+                    'Paulina Paul'
                 ],
                 projects: [
                     { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
@@ -633,7 +638,7 @@
                 roles: {
                     'Aisha Linatu Abdulrahman': 'budgetOwner',
                     'Fatima Tijjani': 'ed',
-                    'Fatima Yusuf': 'procurement',
+                    'Fatima Yusuf Matsayi': 'procurement',
                     'Musa Usman': 'procurement',
                     'Salahuddeen Ahmad': 'finance',
                     'Sani Hamisu': 'finance'
@@ -653,15 +658,23 @@ init() {
     const session = localStorage.getItem('pms_user');
 
     if (session) {
-        const user = JSON.parse(session);
-        this.currentUser = user.name;
+    const user = JSON.parse(session);
+    this.currentUser = user.name;
 
-        const el = document.getElementById('loggedInUser');
-        if (el) el.innerText = user.name;
+    const el = document.getElementById('loggedInUser');
+    if (el) el.innerText = user.name;
+
+    /* ===== HIDE REPORTS IF NOT AUTHORIZED ===== */
+    const role = this.getUserRole();
+    const btn = document.getElementById('reportsBtn');
+
+    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+        if (btn) btn.style.display = 'none';
     }
+    /* ========================================== */
+}
 
-    this.showView('dashboard');
-},
+this.showView('dashboard');
             
             loadData() {
                 const saved = localStorage.getItem('fms_data');
