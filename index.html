@@ -653,8 +653,8 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             'Sani Hamisu': 'finance'
         }
     },
-init() {
-    this.loadData();
+async init() {
+    await this.loadData();
 
     // ALWAYS try URL first
     const params = new URLSearchParams(window.location.search);
@@ -684,17 +684,19 @@ init() {
 }
 
 this.showView('dashboard');
-},
-            
-            loadData() {
-                const saved = localStorage.getItem('fms_data');
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    this.data.conceptNotes = parsed.conceptNotes || [];
-                    this.data.payments = parsed.payments || [];
-                    this.data.retirements = parsed.retirements || [];
-                }
-            },
+},      
+           async loadData() {
+    const { data, error } = await supabaseClient
+        .from('concept_notes')
+        .select('*');
+
+    if (error) {
+        console.error('Load error:', error);
+        return;
+    }
+
+    this.data.conceptNotes = data || [];
+}
             
             saveData() {
                 localStorage.setItem('fms_data', JSON.stringify({
@@ -973,7 +975,7 @@ this.showView('dashboard');
                 }
             },
             
-            submitConceptNote(e) {
+            async submitConceptNote(e) {
                 e.preventDefault();
                 const form = e.target;
                 const data = new FormData(form);
@@ -992,9 +994,14 @@ this.showView('dashboard');
                     approvalHistory: []
                 };
                 
-                this.data.conceptNotes.push(cn);
-                this.saveData();
-                
+                const { error } = await supabaseClient
+    .from('concept_notes')
+    .insert([cn]);
+
+if (error) {
+    alert('Error saving: ' + error.message);
+    return;
+}       
                 alert(`Concept Note ${cn.refNumber} submitted successfully!\nSent to Budget Owner for review.`);
                 this.showView('dashboard');
             },
