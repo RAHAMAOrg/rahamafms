@@ -651,6 +651,7 @@
                     'Fatima Tijjani': 'ed',
                     'Khadijah Abdulrahman': 'procurement',
                     'Fatima Yusuf Matsayi': 'procurement',
+                    'Usman Musa': 'procurement',
                     'Salahuddeen Sambo': 'finance',
                     'Sani Hamisu': 'finance'
                 }
@@ -986,11 +987,6 @@
                             <input type="number" name="estimatedCost" required min="0" step="0.01">
                         </div>
                         
-                        <div class="form-group">
-                            <label>Timeline</label>
-                            <input type="text" name="timeline" placeholder="e.g., 2 weeks">
-                        </div>
-                        
                         <div class="form-group full-width">
                             <label>Are items/services to be procured? <span class="required">*</span></label>
                             <select name="requiresProcurement" required>
@@ -1026,11 +1022,9 @@
                     objective: formData.get('objective'),
                     description: formData.get('description'),
                     estimatedCost: parseFloat(formData.get('estimatedCost')),
-                    timeline: formData.get('timeline'),
                     requiresProcurement: formData.get('requiresProcurement'),
                     status: 'pending',
-                    submittedDate: new Date().toISOString(),
-                    currentApprover: 'budgetOwner'
+                    submittedDate: new Date().toISOString()
                 };
                 
                 const { data, error } = await supabaseClient
@@ -1061,10 +1055,10 @@
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
                         <div class="form-group full-width">
                             <label>Select Approved Concept Note <span class="required">*</span></label>
-                            <select name="conceptNoteRef" required onchange="app.loadConceptNoteDetails(this.value)">
+                            <select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)">
                                 <option value="">Choose a concept note</option>
                                 ${approvedNotes.map(cn => `
-                                    <option value="${cn.refNumber}">${cn.refNumber} - ${cn.activityTitle}</option>
+                                    <option value="${cn.id}">${cn.refNumber} - ${cn.activityTitle}</option>
                                 `).join('')}
                             </select>
                         </div>
@@ -1081,17 +1075,17 @@
                         </div>
                         
                         <div class="form-group">
-                            <label>Payment Type <span class="required">*</span></label>
-                            <select name="paymentType" required>
-                                <option value="advance">Advance</option>
-                                <option value="full">Full Payment</option>
-                                <option value="reimbursement">Reimbursement</option>
+                            <label>Payment Method <span class="required">*</span></label>
+                            <select name="paymentMethod" required>
+                                <option value="bank_transfer">Bank Transfer</option>
+                                <option value="cash">Cash</option>
+                                <option value="cheque">Cheque</option>
                             </select>
                         </div>
                         
                         <div class="form-group full-width">
-                            <label>Payment Details</label>
-                            <textarea name="details" placeholder="Additional payment information"></textarea>
+                            <label>Justification</label>
+                            <textarea name="justification" placeholder="Additional payment information"></textarea>
                         </div>
                         
                         <div class="btn-group full-width">
@@ -1102,8 +1096,8 @@
                 `;
             },
             
-            loadConceptNoteDetails(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+            loadConceptNoteDetails(id) {
+                const cn = this.data.conceptNotes.find(c => c.id == id);
                 const detailsDiv = document.getElementById('conceptNoteDetails');
                 const contentDiv = document.getElementById('cnDetailsContent');
                 
@@ -1124,11 +1118,11 @@
                 
                 const payment = {
                     refNumber: 'PAY' + Date.now(),
+                    conceptNoteId: parseInt(formData.get('conceptNoteId')),
                     staffName: this.currentUser,
-                    conceptNoteRef: formData.get('conceptNoteRef'),
                     amount: parseFloat(formData.get('amount')),
-                    paymentType: formData.get('paymentType'),
-                    details: formData.get('details'),
+                    paymentMethod: formData.get('paymentMethod'),
+                    justification: formData.get('justification'),
                     status: 'pending',
                     requestDate: new Date().toISOString()
                 };
@@ -1149,22 +1143,62 @@
             
             // FIX #6: Add renderRetirementForm method
             renderRetirementForm(content) {
-                const paidPayments = this.data.payments.filter(p => 
-                    p.staffName === this.currentUser && 
-                    p.status === 'paid' &&
-                    !this.data.retirements.find(r => r.paymentRef === p.refNumber)
-                );
+                const userRole = this.getUserRole();
+                
+                // Get payments that this user should retire
+                const paidPayments = this.data.payments.filter(p => {
+                    if (p.status !== 'paid') return false;
+                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
+                    
+                    // Check if payment has paidDate and calculate days
+                    if (!p.paidDate) return false;
+                    const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
+                    
+                    // Staff can retire after 5 days if they're responsible
+                    if (userRole === 'staff' && p.retirementResponsibility === 'staff' && p.staffName === this.currentUser) {
+                        return daysSincePaid >= 5;
+                    }
+                    
+                    // Procurement can retire immediately if they're responsible
+                    if (userRole === 'procurement' && p.retirementResponsibility === 'procurement') {
+                        return true;
+                    }
+                    
+                    return false;
+                });
+                
+                // Get payments waiting for 5 days (for staff)
+                const waitingPayments = this.data.payments.filter(p => {
+                    if (p.status !== 'paid') return false;
+                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
+                    if (!p.paidDate) return false;
+                    
+                    const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
+                    
+                    return userRole === 'staff' && 
+                           p.retirementResponsibility === 'staff' && 
+                           p.staffName === this.currentUser && 
+                           daysSincePaid < 5;
+                });
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>Submit Retirement</h2>
-                        <p>Retire advance payments within 10 days of receipt</p>
+                        <p>${userRole === 'procurement' ? 'Retire procured activities' : 'Retire advance payments (available 5 days after payment)'}</p>
                     </div>
+                    
+                    ${waitingPayments.length > 0 && userRole === 'staff' ? `
+                        <div class="alert-badge warning" style="display: block; margin-bottom: 24px;">
+                            ⏳ You have ${waitingPayments.length} payment(s) waiting for the 5-day period before retirement can be submitted
+                        </div>
+                    ` : ''}
                     
                     ${paidPayments.length === 0 ? `
                         <div class="empty-state">
                             <h3>No payments to retire</h3>
-                            <p>You don't have any paid advances that need retirement.</p>
+                            <p>${userRole === 'procurement' ? 
+                                "You don't have any procured activities that need retirement." : 
+                                "You don't have any paid advances ready for retirement."}</p>
                         </div>
                     ` : `
                         <form class="form-grid two-col" onsubmit="app.submitRetirement(event)">
@@ -1172,9 +1206,10 @@
                                 <label>Select Payment to Retire <span class="required">*</span></label>
                                 <select name="paymentRef" required onchange="app.loadPaymentDetails(this.value)">
                                     <option value="">Choose a payment</option>
-                                    ${paidPayments.map(p => `
-                                        <option value="${p.refNumber}">${p.refNumber} - ₦${p.amount.toLocaleString()} (${new Date(p.paidDate).toLocaleDateString()})</option>
-                                    `).join('')}
+                                    ${paidPayments.map(p => {
+                                        const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
+                                        return `<option value="${p.refNumber}">${p.refNumber} - ₦${p.amount.toLocaleString()} (Paid ${daysSince} days ago)</option>`;
+                                    }).join('')}
                                 </select>
                             </div>
                             
@@ -1318,26 +1353,21 @@
                                             <td>
                                                 ${role === 'budgetOwner' ? `
                                                     ${cn.estimatedCost <= 1000000 ? `
-                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approved')">
-                                                            ✓ Approve (≤₦1M)
+                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">
+                                                            ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
                                                         </button>
                                                     ` : `
                                                         <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">
                                                             → Forward to ED (>₦1M)
                                                         </button>
                                                     `}
-                                                    ${cn.requiresProcurement === 'yes' ? `
-                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_procurement')">
-                                                            → Route to Procurement
-                                                        </button>
-                                                    ` : ''}
                                                 ` : role === 'ed' ? `
-                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approved')">
-                                                        ✓ Approve
+                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">
+                                                        ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
                                                     </button>
                                                 ` : role === 'procurement' ? `
-                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_finance')">
-                                                        → Forward to Finance (with GRR)
+                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'procurement_complete')">
+                                                        ✓ Complete & Forward to Finance
                                                     </button>
                                                 ` : ''}
                                                 <button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">
@@ -1437,31 +1467,61 @@
                 let updates = {};
                 
                 switch(action) {
-                    case 'approved':
-                        updates = {
-                            status: 'approved',
-                            approvedDate: new Date().toISOString(),
-                            approvedBy: this.currentUser
-                        };
+                    case 'approve_under_1m':
+                        // Budget Owner approving ≤₦1M
+                        if (cn.requiresProcurement === 'yes') {
+                            // Route to procurement first
+                            updates = {
+                                currentApprover: 'procurement',
+                                sentToProcurement: new Date().toISOString(),
+                                budgetOwnerApproved: new Date().toISOString(),
+                                retirementResponsibility: 'procurement'
+                            };
+                        } else {
+                            // Direct to finance - staff will retire
+                            updates = {
+                                status: 'approved',
+                                approvedDate: new Date().toISOString(),
+                                approvedBy: this.currentUser,
+                                retirementResponsibility: 'staff'
+                            };
+                        }
                         break;
                     case 'forward_to_ed':
+                        // Budget Owner forwarding >₦1M to ED
                         updates = {
                             currentApprover: 'ed',
                             forwardedToED: new Date().toISOString()
                         };
                         break;
-                    case 'forward_to_procurement':
-                        updates = {
-                            currentApprover: 'procurement',
-                            sentToProcurement: new Date().toISOString()
-                        };
+                    case 'ed_approve':
+                        // ED approving >₦1M
+                        if (cn.requiresProcurement === 'yes') {
+                            // Route to procurement
+                            updates = {
+                                currentApprover: 'procurement',
+                                sentToProcurement: new Date().toISOString(),
+                                edApproved: new Date().toISOString(),
+                                retirementResponsibility: 'procurement'
+                            };
+                        } else {
+                            // Direct to finance - staff will retire
+                            updates = {
+                                status: 'approved',
+                                approvedDate: new Date().toISOString(),
+                                approvedBy: this.currentUser,
+                                retirementResponsibility: 'staff'
+                            };
+                        }
                         break;
-                    case 'forward_to_finance':
+                    case 'procurement_complete':
+                        // Procurement completing and forwarding to Finance
                         updates = {
                             status: 'approved',
                             approvedDate: new Date().toISOString(),
                             approvedBy: this.currentUser,
-                            procurementComplete: new Date().toISOString()
+                            procurementComplete: new Date().toISOString(),
+                            retirementResponsibility: 'procurement'
                         };
                         break;
                 }
@@ -1505,12 +1565,19 @@
             },
             
             async processPayment(refNumber) {
+                const payment = this.data.payments.find(p => p.refNumber === refNumber);
+                if (!payment) return;
+                
+                // Find the concept note to get retirement responsibility
+                const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
+                
                 const { error } = await supabaseClient
                     .from('payments')
                     .update({
                         status: 'paid',
                         paidDate: new Date().toISOString(),
-                        processedBy: this.currentUser
+                        processedBy: this.currentUser,
+                        retirementResponsibility: conceptNote?.retirementResponsibility || 'staff'
                     })
                     .eq('refNumber', refNumber);
                 
