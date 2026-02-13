@@ -639,11 +639,19 @@
                     'Sani Hamisu': 'finance'
                 }
             },
-            
 init() {
     this.loadData();
 
+    // ALWAYS try URL first
+    const params = new URLSearchParams(window.location.search);
+    const urlSession = params.get('session');
+
+    if (urlSession) {
+        localStorage.setItem('pms_user', urlSession);
+    }
+
     const session = localStorage.getItem('pms_user');
+
     if (session) {
         const user = JSON.parse(session);
         this.currentUser = user.name;
