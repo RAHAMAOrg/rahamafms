@@ -1527,7 +1527,7 @@ init() {
     alert(`${refNumber} sent to Procurement successfully.`);
     
     this.renderApprovals(document.getElementById('mainContent'));
-}
+},
             
             approveByED(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
