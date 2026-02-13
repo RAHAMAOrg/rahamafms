@@ -1811,16 +1811,7 @@ init() {
         };
         
         // Initialize on page load
-        window.addEventListener('DOMContentLoaded', () => {
-
-    // Receive session from appraisal portal
-    const params = new URLSearchParams(window.location.search);
-    const urlSession = params.get('session');
-
-    if (urlSession) {
-        localStorage.setItem('pms_user', urlSession);
-    }
-
+       window.addEventListener('DOMContentLoaded', () => {
     app.init();
 });
     </script>
