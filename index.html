@@ -380,30 +380,11 @@
             letter-spacing: 0.5px;
         }
         
-        .status-pending {
-            background: #FFF3E0;
-            color: var(--warning);
-        }
-        
-        .status-approved {
-            background: #E8F5E9;
-            color: var(--success);
-        }
-        
-        .status-paid {
-            background: #E3F2FD;
-            color: #1976D2;
-        }
-        
-        .status-retired {
-            background: #F3E5F5;
-            color: #7B1FA2;
-        }
-        
-        .status-rejected {
-            background: #FFEBEE;
-            color: var(--danger);
-        }
+        .status-pending { background: #FFF3E0; color: var(--warning); }
+        .status-approved { background: #E8F5E9; color: var(--success); }
+        .status-paid { background: #E3F2FD; color: #1976D2; }
+        .status-retired { background: #F3E5F5; color: #7B1FA2; }
+        .status-rejected { background: #FFEBEE; color: var(--danger); }
         
         /* Stats grid */
         .stats-grid {
@@ -443,17 +424,9 @@
             color: var(--text-muted);
         }
         
-        .stat-card.danger .stat-value {
-            color: var(--danger);
-        }
-        
-        .stat-card.warning .stat-value {
-            color: var(--warning);
-        }
-        
-        .stat-card.success .stat-value {
-            color: var(--success);
-        }
+        .stat-card.danger .stat-value { color: var(--danger); }
+        .stat-card.warning .stat-value { color: var(--warning); }
+        .stat-card.success .stat-value { color: var(--success); }
         
         /* Budget bars */
         .budget-bar {
@@ -470,63 +443,31 @@
             transition: width 0.3s;
         }
         
-        .budget-fill.warning {
-            background: var(--warning);
-        }
-        
-        .budget-fill.danger {
-            background: var(--danger);
-        }
+        .budget-fill.warning { background: var(--warning); }
+        .budget-fill.danger { background: var(--danger); }
         
         /* Action buttons in table */
         .action-btn {
-            padding: 12px 18px;
+            padding: 8px 14px;
             background: none;
             border: 1px solid var(--border);
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
-            margin-right: 8px;
-            min-width: 180px;
+            margin-right: 4px;
         }
         
-        .action-btn:hover {
-            background: var(--bg);
-        }
-        
-        .action-btn.approve {
-            border-color: var(--success);
-            color: var(--success);
-        }
-        
-        .action-btn.approve:hover {
-            background: var(--success);
-            color: white;
-        }
-        
-        .action-btn.reject {
-            border-color: var(--danger);
-            color: var(--danger);
-        }
-        
-        .action-btn.reject:hover {
-            background: var(--danger);
-            color: white;
-        }
+        .action-btn.approve { border-color: var(--success); color: var(--success); }
+        .action-btn.approve:hover { background: var(--success); color: white; }
+        .action-btn.reject { border-color: var(--danger); color: var(--danger); }
+        .action-btn.reject:hover { background: var(--danger); color: white; }
         
         .empty-state {
             text-align: center;
             padding: 64px 32px;
             color: var(--text-muted);
-        }
-        
-        .empty-state svg {
-            width: 64px;
-            height: 64px;
-            margin-bottom: 16px;
-            opacity: 0.3;
         }
         
         .workflow-diagram {
@@ -561,20 +502,9 @@
             flex-shrink: 0;
         }
         
-        .workflow-content {
-            flex: 1;
-        }
-        
-        .workflow-content strong {
-            display: block;
-            margin-bottom: 4px;
-            color: var(--text);
-        }
-        
-        .workflow-content span {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+        .workflow-content { flex: 1; }
+        .workflow-content strong { display: block; margin-bottom: 4px; color: var(--text); }
+        .workflow-content span { font-size: 13px; color: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -585,9 +515,9 @@
                 <p>Financial Management System</p>
             </div>
            <div class="user-info">
-    <label>Signed in as</label>
-    <div id="loggedInUser" style="font-weight:600;"></div>
-</div>
+                <label>Signed in as</label>
+                <div id="loggedInUser" style="font-weight:600;"></div>
+            </div>
             
             <ul class="nav">
                 <li><button onclick="app.showView('dashboard')" class="active" data-view="dashboard">Dashboard</button></li>
@@ -620,12 +550,6 @@
                 conceptNotes: [],
                 payments: [],
                 retirements: [],
-                staff: [
-                    'Usman Musa', 'Aisha Linatu Abdulrahman', 'Fatima Yusuf Matsayi',
-                    'Khadijah Abdulrahman', 'Sani Hamisu', 'Salahuddeen Sambo',
-                    'Ahmad Abdulrahman Tijjani', 'Maryam Abdulrahman Tijjani',
-                    'Sumayya Adam', 'Aisha Umar', 'Paulina Paul', 'Fatima Tijjani'
-                ],
                 projects: [
                     { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
                     { code: 'CBA101', name: 'Community Health Initiative', budget: 16000000 },
@@ -645,7 +569,6 @@
             },
 
             async init() {
-                await this.loadData();
                 const params = new URLSearchParams(window.location.search);
                 const urlSession = params.get('session');
                 if (urlSession) localStorage.setItem('pms_user', decodeURIComponent(urlSession));
@@ -654,104 +577,35 @@
                 if (session) {
                     const user = JSON.parse(session);
                     this.currentUser = user.name;
-                    const el = document.getElementById('loggedInUser');
-                    if (el) el.innerText = user.name;
+                    document.getElementById('loggedInUser').innerText = user.name;
                     
                     const role = this.getUserRole();
                     const btn = document.getElementById('reportsBtn');
-                    if (!['budgetOwner','ed','procurement','finance'].includes(role) && btn) btn.style.display = 'none';
+                    if (!['budgetOwner','ed','procurement','finance'].includes(role) && btn) {
+                        btn.style.display = 'none';
+                    }
                 }
+                await this.loadData();
                 this.showView('dashboard');
-            },
-
-            async loadData() {
-                const [cnRes, payRes, retRes] = await Promise.all([
-                    supabaseClient.from('concept_notes').select('*'),
-                    supabaseClient.from('payments').select('*'),
-                    supabaseClient.from('retirements').select('*')
-                ]);
-                this.data.conceptNotes = cnRes.data || [];
-                this.data.payments = payRes.data || [];
-                this.data.retirements = retRes.data || [];
             },
 
             getUserRole() {
                 return this.data.roles[this.currentUser] || 'staff';
             },
 
-            async submitConceptNote(event) {
-                event.preventDefault();
-                const formData = new FormData(event.target);
-                const cost = parseFloat(formData.get('estimatedCost'));
-                
-                const note = {
-                    refNumber: 'CN-' + Date.now().toString().slice(-6),
-                    staffName: this.currentUser,
-                    submittedDate: new Date().toISOString(),
-                    projectCode: formData.get('projectCode'),
-                    activityTitle: formData.get('activityTitle'),
-                    estimatedCost: cost,
-                    status: 'pending_budget_owner',
-                    currentHolder: 'Aisha Linatu Abdulrahman' // Budget Owner
-                };
+            async loadData() {
+                // Optimized single-trip loading
+                const [cnRes, payRes, retRes] = await Promise.all([
+                    supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }),
+                    supabaseClient.from('payments').select('*').order('requestDate', { ascending: false }),
+                    supabaseClient.from('retirements').select('*')
+                ]);
 
-                const { error } = await supabaseClient.from('concept_notes').insert([note]);
-                if (!error) {
-                    alert('Concept Note submitted for approval!');
-                    await this.loadData();
+                this.data.conceptNotes = cnRes.data || [];
+                this.data.payments = payRes.data || [];
+                this.data.retirements = retRes.data || [];
+                if (document.getElementById('mainContent').innerHTML.includes('Dashboard')) {
                     this.showView('dashboard');
-                }
-            },
-
-            async submitPayment(event) {
-                event.preventDefault();
-                const formData = new FormData(event.target);
-                const amount = parseFloat(formData.get('amount'));
-                
-                const payment = {
-                    refNumber: 'PAY-' + Date.now().toString().slice(-6),
-                    staffName: this.currentUser,
-                    requestDate: new Date().toISOString(),
-                    amount: amount,
-                    status: 'pending_finance',
-                    currentHolder: 'Salahuddeen Sambo' // Default Finance
-                };
-
-                const { error } = await supabaseClient.from('payments').insert([payment]);
-                if (!error) {
-                    alert('Payment request submitted!');
-                    await this.loadData();
-                    this.showView('dashboard');
-                }
-            },
-
-            async handleApproval(id, type, action) {
-                const table = type === 'concept' ? 'concept_notes' : 'payments';
-                const item = type === 'concept' ? 
-                    this.data.conceptNotes.find(n => n.id === id) : 
-                    this.data.payments.find(p => p.id === id);
-
-                let nextStatus = action === 'approve' ? 'approved' : 'rejected';
-                let nextHolder = 'none';
-
-                // Logic for Concept Notes
-                if (type === 'concept' && action === 'approve') {
-                    if (item.estimatedCost > 1000000 && item.status === 'pending_budget_owner') {
-                        nextStatus = 'pending_ed';
-                        nextHolder = 'Fatima Tijjani';
-                    } else {
-                        nextStatus = 'approved';
-                    }
-                }
-
-                const { error } = await supabaseClient.from(table)
-                    .update({ status: nextStatus, currentHolder: nextHolder })
-                    .eq('id', id);
-
-                if (!error) {
-                    alert(`Request ${action}d successfully`);
-                    await this.loadData();
-                    this.showView('approvals');
                 }
             },
 
@@ -773,108 +627,188 @@
                     case 'retirement': this.renderRetirementForm(content); break;
                     case 'approvals': this.renderApprovals(content); break;
                     case 'reports': this.renderReports(content); break;
-                    case 'settings': this.renderSettings(content); break;
                 }
-            },
-
-            renderDashboard(content) {
-                const myConceptNotes = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser);
-                const myPayments = this.data.payments.filter(p => p.staffName === this.currentUser);
-                const unretiredPayments = myPayments.filter(p => p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber));
-                
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Dashboard</h2>
-                        <p>Welcome back, ${this.currentUser.split(' ')[0]}</p>
-                    </div>
-                    <div class="stats-grid">
-                        <div class="stat-card"><h3>Concept Notes</h3><div class="stat-value">${myConceptNotes.length}</div></div>
-                        <div class="stat-card"><h3>Unretired Advances</h3><div class="stat-value">${unretiredPayments.length}</div></div>
-                    </div>
-                    <h3 style="margin-bottom: 16px;">Recent Activity</h3>
-                    <div class="table-container">
-                        <table>
-                            <thead><tr><th>Date</th><th>Type</th><th>Ref</th><th>Amount</th><th>Status</th></tr></thead>
-                            <tbody>
-                                ${this.getRecentActivity().map(item => `
-                                    <tr>
-                                        <td>${new Date(item.date).toLocaleDateString()}</td>
-                                        <td>${item.type}</td>
-                                        <td>${item.ref}</td>
-                                        <td>₦${item.amount?.toLocaleString() || 0}</td>
-                                        <td><span class="status-badge status-${item.status}">${item.status}</span></td>
-                                    </tr>
-                                `).join('') || '<tr><td colspan="5">No activity</td></tr>'}
-                            </tbody>
-                        </table>
-                    </div>`;
-            },
-
-            getRecentActivity() {
-                const activity = [
-                    ...this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser).map(cn => ({date: cn.submittedDate, type: 'Concept', ref: cn.refNumber, amount: cn.estimatedCost, status: cn.status})),
-                    ...this.data.payments.filter(p => p.staffName === this.currentUser).map(p => ({date: p.requestDate, type: 'Payment', ref: p.refNumber, amount: p.amount, status: p.status}))
-                ];
-                return activity.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
-            },
-
-            renderApprovals(content) {
-                const pendingCN = this.data.conceptNotes.filter(cn => cn.currentHolder === this.currentUser);
-                const pendingPay = this.data.payments.filter(p => p.currentHolder === this.currentUser);
-
-                content.innerHTML = `
-                    <div class="header"><h2>Pending Approvals</h2></div>
-                    <div class="table-container">
-                        <table>
-                            <thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Actions</th></tr></thead>
-                            <tbody>
-                                ${pendingCN.map(item => `
-                                    <tr>
-                                        <td>${item.refNumber}</td>
-                                        <td>${item.staffName}</td>
-                                        <td>₦${item.estimatedCost.toLocaleString()}</td>
-                                        <td>
-                                            <button class="btn btn-primary" onclick="app.handleApproval(${item.id}, 'concept', 'approve')">Approve</button>
-                                            <button class="btn btn-secondary" onclick="app.handleApproval(${item.id}, 'concept', 'reject')">Reject</button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                                ${pendingPay.map(item => `
-                                    <tr>
-                                        <td>${item.refNumber}</td>
-                                        <td>${item.staffName}</td>
-                                        <td>₦${item.amount.toLocaleString()}</td>
-                                        <td>
-                                            <button class="btn btn-primary" onclick="app.handleApproval(${item.id}, 'payment', 'approve')">Approve</button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>`;
             },
 
             renderConceptNoteForm(content) {
                 content.innerHTML = `
-                    <div class="header"><h2>Create Concept Note</h2></div>
-                    <form class="form-grid" onsubmit="app.submitConceptNote(event)">
-                        <div class="form-group"><label>Project</label><select name="projectCode">${this.data.projects.map(p => `<option value="${p.code}">${p.name}</option>`).join('')}</select></div>
-                        <div class="form-group"><label>Activity Title</label><input type="text" name="activityTitle" required></div>
-                        <div class="form-group"><label>Estimated Cost</label><input type="number" name="estimatedCost" required></div>
-                        <button type="submit" class="btn btn-primary">Submit for Approval</button>
+                    <div class="header">
+                        <h2>Create Concept Note</h2>
+                        <p>Step 1: Develop your activity justification and budget</p>
+                    </div>
+                    <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
+                        <div class="form-group">
+                            <label>Project Code <span class="required">*</span></label>
+                            <select name="projectCode" required>
+                                <option value="">Select project</option>
+                                ${this.data.projects.map(p => `<option value="${p.code}">${p.code} - ${p.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Activity Title <span class="required">*</span></label>
+                            <input type="text" name="activityTitle" required placeholder="e.g., Radio Jingle Production">
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Justification <span class="required">*</span></label>
+                            <textarea name="justification" required placeholder="Why is this activity necessary?"></textarea>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Description <span class="required">*</span></label>
+                            <textarea name="description" required placeholder="Detailed breakdown of the activity"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Estimated Cost (₦) <span class="required">*</span></label>
+                            <input type="number" name="estimatedCost" required min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Implementation Date <span class="required">*</span></label>
+                            <input type="date" name="activityDate" required>
+                        </div>
+                        <div class="btn-group full-width">
+                            <button type="submit" class="btn btn-primary">Submit Concept Note</button>
+                        </div>
                     </form>`;
             },
 
-            renderPaymentForm(content) {
+            async submitConceptNote(e) {
+                e.preventDefault();
+                const btn = e.target.querySelector('button');
+                btn.disabled = true;
+                btn.innerText = 'Submitting...';
+
+                const formData = new FormData(e.target);
+                const cost = parseFloat(formData.get('estimatedCost'));
+                
+                // APPROVAL LOGIC: Route based on amount
+                const status = cost > 1000000 ? 'pending_ed' : 'pending_bo';
+
+                const newCN = {
+                    refNumber: 'CN-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
+                    staffName: this.currentUser,
+                    projectCode: formData.get('projectCode'),
+                    activityTitle: formData.get('activityTitle'),
+                    justification: formData.get('justification'),
+                    description: formData.get('description'),
+                    estimatedCost: cost,
+                    activityDate: formData.get('activityDate'),
+                    submittedDate: new Date().toISOString(),
+                    status: status
+                };
+
+                const { error } = await supabaseClient.from('concept_notes').insert([newCN]);
+                if (error) {
+                    alert('Error: ' + error.message);
+                    btn.disabled = false;
+                } else {
+                    await this.loadData();
+                    this.showView('dashboard');
+                }
+            },
+
+            renderApprovals(content) {
+                const role = this.getUserRole();
+                let filtered = [];
+
+                // APPROVAL LOGIC: Filtering based on roles
+                if (role === 'budgetOwner') {
+                    filtered = this.data.conceptNotes.filter(cn => cn.status === 'pending_bo');
+                } else if (role === 'ed') {
+                    filtered = this.data.conceptNotes.filter(cn => cn.status === 'pending_ed');
+                } else if (role === 'procurement') {
+                    filtered = this.data.payments.filter(p => p.status === 'pending_procurement');
+                } else if (role === 'finance') {
+                    filtered = this.data.payments.filter(p => p.status === 'approved' || p.status === 'pending_finance');
+                }
+
                 content.innerHTML = `
-                    <div class="header"><h2>Request Payment</h2></div>
-                    <form class="form-grid" onsubmit="app.submitPayment(event)">
-                        <div class="form-group"><label>Amount</label><input type="number" name="amount" required></div>
-                        <button type="submit" class="btn btn-primary">Submit Request</button>
-                    </form>`;
+                    <div class="header">
+                        <h2>My Approvals</h2>
+                        <p>Items requiring your review and authorization</p>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Ref</th>
+                                    <th>Staff</th>
+                                    <th>Activity/Project</th>
+                                    <th>Amount</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${filtered.map(item => `
+                                    <tr>
+                                        <td>${item.refNumber}</td>
+                                        <td>${item.staffName}</td>
+                                        <td>${item.activityTitle || item.projectCode}</td>
+                                        <td>₦${(item.estimatedCost || item.amount).toLocaleString()}</td>
+                                        <td>
+                                            <button class="action-btn approve" onclick="app.processAction('${item.id}', 'approve', '${item.estimatedCost ? 'cn' : 'pay'}')">Approve</button>
+                                            <button class="action-btn reject" onclick="app.processAction('${item.id}', 'reject', '${item.estimatedCost ? 'cn' : 'pay'}')">Reject</button>
+                                        </td>
+                                    </tr>
+                                `).join('') || '<tr><td colspan="5" style="text-align:center; padding:20px;">No pending approvals</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>`;
+            },
+
+            async processAction(id, action, type) {
+                const table = type === 'cn' ? 'concept_notes' : 'payments';
+                const newStatus = action === 'reject' ? 'rejected' : 'approved';
+                
+                const { error } = await supabaseClient.from(table).update({ status: newStatus }).eq('id', id);
+                if (error) alert(error.message);
+                else {
+                    await this.loadData();
+                    this.showView('approvals');
+                }
+            },
+
+            renderDashboard(content) {
+                const myCN = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser);
+                const myPay = this.data.payments.filter(p => p.staffName === this.currentUser);
+                
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Dashboard</h2>
+                        <p>Welcome, ${this.currentUser}</p>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Concept Notes</h3>
+                            <div class="stat-value">${myCN.length}</div>
+                            <div class="stat-label">Total Submissions</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Payments</h3>
+                            <div class="stat-value">₦${myPay.reduce((s, p) => s + (p.status === 'paid' ? p.amount : 0), 0).toLocaleString()}</div>
+                            <div class="stat-label">Total Paid Out</div>
+                        </div>
+                    </div>
+                    <h3 style="margin-bottom:15px;">Recent Activity</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr><th>Ref</th><th>Activity</th><th>Cost</th><th>Status</th></tr>
+                            </thead>
+                            <tbody>
+                                ${myCN.slice(0, 5).map(cn => `
+                                    <tr>
+                                        <td>${cn.refNumber}</td>
+                                        <td>${cn.activityTitle}</td>
+                                        <td>₦${cn.estimatedCost.toLocaleString()}</td>
+                                        <td><span class="status-badge status-${cn.status.split('_')[0]}">${cn.status.replace('_', ' ')}</span></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
             }
         };
 
+        // Initialize App
         window.onload = () => app.init();
     </script>
 </body>
