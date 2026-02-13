@@ -584,25 +584,10 @@
             </div>
             
             <div class="user-info">
-                <label>Signed in as</label>
-              <div id="loggedInUser" style="font-weight:600;"></div>
-                    <option value="">Select User</option>
-                    <optgroup label="Staff">
-                        <option value="Abdullahi Usman">Abdullahi Usman</option>
-                        <option value="Aisha Linatu Abdulrahman">Aisha Linatu Abdulrahman</option>
-                        <option value="Fatima Yusuf">Fatima Yusuf</option>
-                        <option value="Khadijah Ibrahim">Khadijah Ibrahim</option>
-                        <option value="Muhammad Sani">Muhammad Sani</option>
-                        <option value="Salahuddeen Ahmad">Salahuddeen Ahmad</option>
-                    </optgroup>
-                    <optgroup label="Approvers">
-                        <option value="Aisha (Budget Owner)">Aisha Linatu - Budget Owner</option>
-                        <option value="Fatima Tijjani (ED)">Fatima Tijjani - Executive Director</option>
-                        <option value="Khadijah (Procurement)">Khadijah - Procurement Officer</option>
-                        <option value="Salahuddeen (Finance)">Salahuddeen - Finance Officer</option>
-                    </optgroup>
-                </select>
-            </div>
+             <div class="user-info">
+    <label>Signed in as</label>
+    <div id="loggedInUser" style="font-weight:600;"></div>
+</div>
             
             <ul class="nav">
                 <li><button onclick="app.showView('dashboard')" class="active">Dashboard</button></li>
@@ -668,10 +653,6 @@ init() {
 
     this.showView('dashboard');
 },
-
-    this.showView('dashboard');
-}
-            },
             
             loadData() {
                 const saved = localStorage.getItem('fms_data');
