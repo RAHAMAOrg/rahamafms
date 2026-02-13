@@ -620,12 +620,12 @@
                     'Fatima Yusuf Matsayi',
                     'Khadijah Abdulrahman',
                     'Sani Hamisu',
-                    'Salahuddeen Sambo'
-                    'Ahmad Abdulrahman Tijjani'
-                    'Maryam Abdulrahman Tijjani'
-                    'Sumayya Adam'
-                    'Aisha Umar'
-                    'Paulina Paul'
+                    'Salahuddeen Sambo',
+                    'Ahmad Abdulrahman Tijjani',
+                    'Maryam Abdulrahman Tijjani',
+                    'Sumayya Adam',
+                    'Aisha Umar',
+                    'Paulina Paul',
                 ],
                 projects: [
                     { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
@@ -675,6 +675,7 @@ init() {
 }
 
 this.showView('dashboard');
+},
             
             loadData() {
                 const saved = localStorage.getItem('fms_data');
@@ -1632,18 +1633,27 @@ if (typeof event !== 'undefined' && event?.target) {
                 this.renderApprovals(document.getElementById('mainContent'));
             },
             
-            renderReports(content) {
-                renderReports(content) {
+        renderReports(content) {
+
     const role = this.getUserRole();
     if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
-        content.innerHTML = `
-            <div class="empty-state">
-                <h2>Access Denied</h2>
-                <p>You are not authorized to view financial reports.</p>
-            </div>
-        `;
+        content.innerHTML =
+            '<div class="empty-state">' +
+            '<h2>Access Denied</h2>' +
+            '<p>You are not authorized to view financial reports.</p>' +
+            '</div>';
         return;
     }
+
+    const budgetData = this.calculateBudgetUtilization();
+
+    content.innerHTML = `
+        <div class="header">
+            <h2>Reports & Budget Tracking</h2>
+            <p>Financial overview and budget utilization</p>
+        </div>
+    `;
+},
 
     const budgetData = this.calculateBudgetUtilization();
 
