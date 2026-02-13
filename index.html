@@ -1599,7 +1599,7 @@ if (error) {
 
     await this.loadData();   // reload fresh from cloud
     this.renderApprovals(document.getElementById('mainContent'));
-}  
+},
             approveByED(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
