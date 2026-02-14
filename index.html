@@ -1460,9 +1460,7 @@ const toBase64 = file => new Promise((resolve, reject) => {
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                   <td>
-   <tbody>
+                               <tbody>
 ${pendingPayments.map(p => `
 <tr>
     <td>${p.refNumber}</td>
@@ -1472,7 +1470,7 @@ ${pendingPayments.map(p => `
     <td>${new Date(p.requestDate).toLocaleDateString()}</td>
     <td>
         ${p.beneficiaryFile ? `
-            <button class="action-btn" onclick="window.open('${p.beneficiaryFile}')">
+            <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFile}', '${p.beneficiaryFileName}')">
                 📎 Beneficiaries
             </button>
         ` : ''}
@@ -2120,9 +2118,19 @@ ${pendingPayments.map(p => `
                 if (confirm('Are you sure you want to logout?')) {
                     localStorage.removeItem('pms_user');
                     window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
-                }
-            }
+                } 
+            },
+            downloadFile(base64, fileName) {
+    const a = document.createElement("a");
+    a.href = base64;
+    a.download = fileName || "beneficiaries";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
         };
+        
         
         // Initialize app when page loads
         window.addEventListener('DOMContentLoaded', () => {
