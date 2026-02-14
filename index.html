@@ -1927,13 +1927,12 @@
                     this.showError('amount', 'Please enter a valid amount');
                     return;
                 }
-                
                 const accountNumber = formData.get('accountNumber');
-                if (!this.validateAccountNumber(accountNumber)) {
-                    this.showError('accountNumber', 'Account number must be exactly 10 digits');
-                    return;
-                }
-                
+const hasBeneficiaryFile = document.getElementById('beneficiaryFile').files.length > 0;
+if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
+    this.showError('accountNumber', 'Account number must be exactly 10 digits');
+    return;
+}
                 try {
                     submitBtn.disabled = true;
                     submitBtn.textContent = 'Uploading...';
