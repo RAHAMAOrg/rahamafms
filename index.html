@@ -1627,6 +1627,41 @@
                             <textarea id="procNotes" rows="3" placeholder="Additional information for Finance..."></textarea>
                         </div>
                         
+                        <div class="form-group full-width">
+                            <h3 style="margin: 24px 0 16px; font-family: 'Archivo', sans-serif;">Staff Bank Account Details</h3>
+                            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Required for Finance to process payment</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Account Name <span class="required">*</span></label>
+                            <input type="text" id="accountName" required placeholder="Name as it appears on bank account">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Account Number <span class="required">*</span></label>
+                            <input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Bank Name <span class="required">*</span></label>
+                            <select id="bankName" required>
+                                <option value="">Select Bank</option>
+                                <option value="Access Bank">Access Bank</option>
+                                <option value="Fidelity Bank">Fidelity Bank</option>
+                                <option value="First Bank">First Bank</option>
+                                <option value="FCMB">FCMB</option>
+                                <option value="GTBank">GTBank</option>
+                                <option value="Keystone Bank">Keystone Bank</option>
+                                <option value="Polaris Bank">Polaris Bank</option>
+                                <option value="Stanbic IBTC">Stanbic IBTC</option>
+                                <option value="UBA">UBA</option>
+                                <option value="Union Bank">Union Bank</option>
+                                <option value="Unity Bank">Unity Bank</option>
+                                <option value="Wema Bank">Wema Bank</option>
+                                <option value="Zenith Bank">Zenith Bank</option>
+                            </select>
+                        </div>
+                        
                         <div class="btn-group full-width">
                             <button class="btn btn-primary" onclick="app.completeProcurementWithDocs('${refNumber}')">
                                 Complete & Send to Finance
@@ -1646,9 +1681,17 @@
                 const grrFile = document.getElementById('grrFile').files[0];
                 const poFile = document.getElementById('poFile').files[0];
                 const notes = document.getElementById('procNotes').value;
+                const accountName = document.getElementById('accountName').value;
+                const accountNumber = document.getElementById('accountNumber').value;
+                const bankName = document.getElementById('bankName').value;
                 
                 if (!grrFile || !poFile) {
                     alert('Please upload both GRR and PO/Invoice documents');
+                    return;
+                }
+                
+                if (!accountName || !accountNumber || !bankName) {
+                    alert('Please provide all bank account details');
                     return;
                 }
                 
@@ -1693,6 +1736,9 @@
                         amount: cn.estimatedCost,
                         paymentMethod: 'bank_transfer',
                         justification: `Procurement completed by ${this.currentUser}. ${notes}`,
+                        accountName: accountName,
+                        accountNumber: accountNumber,
+                        bankName: bankName,
                         status: 'pending',
                         requestDate: new Date().toISOString(),
                         procurementComplete: true,
