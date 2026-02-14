@@ -1669,7 +1669,7 @@
                     <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
                         <div class="form-group">
                             <label>Project Code <span class="required">*</span></label>
-                            <select name="projectCode" id="projectCode" required onchange="app.updateProjectBudget(this.value)">
+                            <select name="projectCode" id="projectCode" required>
                                 <option value="">Select project</option>
                                 ${this.data.projects.map(p => `
                                     <option value="${p.code}">${p.code} - ${p.name}</option>
@@ -1708,10 +1708,6 @@
                                 <option value="yes">Yes - Procurement needed</option>
                             </select>
                             <span class="form-hint">Select "Yes" if items need to be purchased by Procurement team</span>
-                        </div>
-                        
-                        <div class="form-group full-width" id="budgetInfo" class="threshold-info" style="display: none;">
-                            <!-- Budget info will be inserted here -->
                         </div>
                         
                         <div class="btn-group full-width">
@@ -1825,7 +1821,7 @@
                             </div>
                             <input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)">
                         </div>
-                        
+                        <div id="bankDetailsSection">
                         <div class="form-group">
                             <label>Account Name <span class="required">*</span></label>
                             <input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account">
@@ -1855,6 +1851,7 @@
                                 <option value="Zenith Bank">Zenith Bank</option>
                             </select>
                         </div>
+                        </div>
 
                         <div class="btn-group full-width">
                             <button type="submit" class="btn btn-primary" id="submitPaymentBtn">Submit Payment Request</button>
@@ -1864,25 +1861,42 @@
                 `;
             },
             
-            handleBeneficiaryUpload(input) {
-                const area = document.getElementById('beneficiaryUploadArea');
-                const file = input.files[0];
-                
-                if (file) {
-                    // Validate size
-                    if (file.size > MAX_FILE_SIZE) {
-                        alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-                        input.value = '';
-                        return;
-                    }
-                    
-                    area.classList.add('has-file');
-                    area.innerHTML = `
-                        <p>✓ ${file.name}</p>
-                        <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
-                    `;
-                }
-            },
+          handleBeneficiaryUpload(input) {
+    const area = document.getElementById('beneficiaryUploadArea');
+    const file = input.files[0];
+    const bankSection = document.getElementById('bankDetailsSection');
+    
+    if (file) {
+        if (file.size > MAX_FILE_SIZE) {
+            alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+            input.value = '';
+            return;
+        }
+        
+        area.classList.add('has-file');
+        area.innerHTML = `
+            <p>✓ ${file.name}</p>
+            <span class="form-hint">${(file.size / 1024).toFixed(1)} KB — Bank details not needed for batch payments</span>
+        `;
+        
+        // Hide bank details and remove required
+        if (bankSection) {
+            bankSection.style.display = 'none';
+            bankSection.querySelectorAll('[required]').forEach(el => {
+                el.removeAttribute('required');
+                el.value = '';
+            });
+        }
+    } else {
+        // Show bank details again if file removed
+        if (bankSection) {
+            bankSection.style.display = '';
+            document.getElementById('accountName').setAttribute('required', '');
+            document.getElementById('accountNumber').setAttribute('required', '');
+            document.getElementById('bankName').setAttribute('required', '');
+        }
+    }
+},
             
             loadConceptNoteDetails(id) {
                 const cn = this.data.conceptNotes.find(c => c.id == id);
