@@ -90,16 +90,6 @@
             margin-bottom: 8px;
         }
         
-        .user-info select {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 14px;
-            font-family: inherit;
-            background: var(--surface);
-        }
-        
         .nav {
             list-style: none;
         }
@@ -182,6 +172,23 @@
             font-size: 14px;
         }
         
+        /* Loading spinner */
+        .loading-spinner {
+            text-align: center;
+            padding: 64px;
+        }
+        
+        .loading-spinner i {
+            font-size: 32px;
+            color: var(--primary);
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
         /* Alert badges */
         .alert-badge {
             display: inline-flex;
@@ -261,6 +268,18 @@
             box-shadow: 0 0 0 3px rgba(0,121,107,0.1);
         }
         
+        .form-group input.error,
+        .form-group select.error,
+        .form-group textarea.error {
+            border-color: var(--danger);
+        }
+        
+        .form-error {
+            color: var(--danger);
+            font-size: 12px;
+            margin-top: -4px;
+        }
+        
         .form-group textarea {
             resize: vertical;
             min-height: 100px;
@@ -286,6 +305,26 @@
             background: #FFF3E0;
             border-color: #FFE0B2;
             color: var(--warning);
+        }
+        
+        /* File upload */
+        .file-upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .file-upload-area:hover {
+            border-color: var(--primary);
+            background: rgba(0,121,107,0.05);
+        }
+        
+        .file-upload-area.has-file {
+            border-color: var(--success);
+            background: #E8F5E9;
         }
         
         /* Buttons */
@@ -522,13 +561,6 @@
             color: var(--text-muted);
         }
         
-        .empty-state svg {
-            width: 64px;
-            height: 64px;
-            margin-bottom: 16px;
-            opacity: 0.3;
-        }
-        
         .workflow-diagram {
             background: var(--surface);
             padding: 32px;
@@ -575,6 +607,171 @@
             font-size: 13px;
             color: var(--text-muted);
         }
+        
+        /* Progress Tracker */
+        .progress-tracker {
+            background: var(--surface);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+        
+        .progress-timeline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            margin: 32px 0;
+        }
+        
+        .progress-timeline::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 40px;
+            right: 40px;
+            height: 4px;
+            background: var(--border);
+            z-index: 0;
+        }
+        
+        .progress-line {
+            position: absolute;
+            top: 20px;
+            left: 40px;
+            height: 4px;
+            background: var(--primary);
+            z-index: 1;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 2;
+            flex: 1;
+        }
+        
+        .progress-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 3px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-muted);
+            transition: all 0.3s;
+        }
+        
+        .progress-step.completed .progress-icon {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        
+        .progress-step.active .progress-icon {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary-dark);
+            animation: pulse 2s infinite;
+        }
+        
+        .progress-step.rejected .progress-icon {
+            background: var(--danger);
+            border-color: var(--danger);
+            color: white;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(0,121,107,0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(0,121,107,0);
+            }
+        }
+        
+        .progress-label {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            max-width: 100px;
+        }
+        
+        .progress-step.completed .progress-label,
+        .progress-step.active .progress-label {
+            color: var(--text);
+        }
+        
+        .progress-step.rejected .progress-label {
+            color: var(--danger);
+        }
+        
+        .progress-date {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        
+        .progress-note {
+            background: var(--bg);
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+            margin-top: 16px;
+        }
+        
+        .progress-note.warning {
+            border-left-color: var(--warning);
+            background: #FFF3E0;
+        }
+        
+        .progress-note.danger {
+            border-left-color: var(--danger);
+            background: #FFEBEE;
+        }
+        
+        .tracking-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .tracking-card:hover {
+            box-shadow: var(--shadow);
+            transform: translateY(-2px);
+        }
+        
+        .tracking-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .tracking-ref {
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .tracking-amount {
+            font-weight: 700;
+            color: var(--text);
+        }
     </style>
 </head>
 <body>
@@ -612,11 +809,18 @@
     <script>
         const SUPABASE_URL = "https://sqygmoxpegbfxddglhbx.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8";
+        const STORAGE_BUCKET = 'fms-documents';  // Supabase Storage bucket name
+        const MAX_FILE_SIZE = 5 * 1024 * 1024;  // 5MB limit
 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
         const app = {
             currentUser: '',
+            cache: {
+                myConceptNotes: null,
+                myPayments: null,
+                myRetirements: null
+            },
             data: {
                 conceptNotes: [],
                 payments: [],
@@ -658,6 +862,10 @@
             },
             
             async init() {
+                // Show loading
+                this.showLoading();
+                
+                // Load data
                 await this.loadData();
 
                 // URL takes priority
@@ -689,47 +897,84 @@
                 this.showView('dashboard');
             },
             
+            showLoading() {
+                const content = document.getElementById('mainContent');
+                content.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
+            },
+            
+            clearCache() {
+                this.cache = {
+                    myConceptNotes: null,
+                    myPayments: null,
+                    myRetirements: null
+                };
+            },
+            
             async loadData() {
-                // Load concept notes
-                const { data: cn, error: cnError } = await supabaseClient
-                    .from('concept_notes')
-                    .select('*');
+                try {
+                    // Load with limits and proper ordering
+                    const [cnResult, payResult, retResult] = await Promise.all([
+                        supabaseClient
+                            .from('concept_notes')
+                            .select('*')
+                            .order('submittedDate', { ascending: false })
+                            .limit(200),
+                        supabaseClient
+                            .from('payments')
+                            .select('*')
+                            .order('requestDate', { ascending: false })
+                            .limit(200),
+                        supabaseClient
+                            .from('retirements')
+                            .select('*')
+                            .order('submittedDate', { ascending: false })
+                            .limit(200)
+                    ]);
 
-                if (cnError) {
-                    console.error('Concept note load error:', cnError);
-                } else {
-                    this.data.conceptNotes = cn || [];
-                }
+                    this.data.conceptNotes = cnResult.data || [];
+                    this.data.payments = payResult.data || [];
+                    this.data.retirements = retResult.data || [];
+                    
+                    // Clear cache when data is reloaded
+                    this.clearCache();
 
-                // Load payments
-                const { data: pay, error: payError } = await supabaseClient
-                    .from('payments')
-                    .select('*');
-
-                if (payError) {
-                    console.error('Payment load error:', payError);
-                } else {
-                    this.data.payments = pay || [];
-                }
-
-                // Load retirements - FIX #1
-                const { data: ret, error: retError } = await supabaseClient
-                    .from('retirements')
-                    .select('*');
-
-                if (retError) {
-                    console.error('Retirement load error:', retError);
-                } else {
-                    this.data.retirements = ret || [];
+                } catch (error) {
+                    console.error('Data load error:', error);
+                    alert('Error loading data. Please refresh the page.');
                 }
             },
             
-            // FIX #2: Add getUserRole method
             getUserRole() {
                 return this.data.roles[this.currentUser] || 'staff';
             },
             
-            // FIX #3: Add updateProjectBudget method
+            getMyConceptNotes() {
+                if (!this.cache.myConceptNotes) {
+                    this.cache.myConceptNotes = this.data.conceptNotes.filter(
+                        cn => cn.staffName === this.currentUser
+                    );
+                }
+                return this.cache.myConceptNotes;
+            },
+            
+            getMyPayments() {
+                if (!this.cache.myPayments) {
+                    this.cache.myPayments = this.data.payments.filter(
+                        p => p.staffName === this.currentUser
+                    );
+                }
+                return this.cache.myPayments;
+            },
+            
+            getMyRetirements() {
+                if (!this.cache.myRetirements) {
+                    this.cache.myRetirements = this.data.retirements.filter(
+                        r => r.staffName === this.currentUser
+                    );
+                }
+                return this.cache.myRetirements;
+            },
+            
             updateProjectBudget(projectCode) {
                 const project = this.data.projects.find(p => p.code === projectCode);
                 const infoDiv = document.getElementById('budgetInfo');
@@ -749,6 +994,8 @@
                     } else {
                         infoDiv.className = 'threshold-info';
                     }
+                    
+                    infoDiv.style.display = 'block';
                 }
             },
             
@@ -758,15 +1005,94 @@
                     .reduce((sum, p) => sum + (p.amount || 0), 0);
             },
             
-            showView(viewName) {
-                // Update active nav safely
-                document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+            // FILE UPLOAD HELPERS with Supabase Storage
+            async uploadFile(file, type = 'general') {
+                if (!file) return null;
                 
-                // Find and activate the correct button by data attribute
-                const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
-                if (targetBtn) {
-                    targetBtn.classList.add('active');
+                // Validate file size
+                if (file.size > MAX_FILE_SIZE) {
+                    throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
                 }
+                
+                // Create unique filename
+                const timestamp = Date.now();
+                const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                const fileName = `${type}/${timestamp}_${sanitizedName}`;
+                
+                try {
+                    // Upload to Supabase Storage
+                    const { data, error } = await supabaseClient.storage
+                        .from(STORAGE_BUCKET)
+                        .upload(fileName, file);
+                    
+                    if (error) throw error;
+                    
+                    // Get public URL
+                    const { data: urlData } = supabaseClient.storage
+                        .from(STORAGE_BUCKET)
+                        .getPublicUrl(fileName);
+                    
+                    return {
+                        url: urlData.publicUrl,
+                        fileName: file.name,
+                        size: file.size,
+                        type: file.type
+                    };
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    throw new Error('Failed to upload file: ' + error.message);
+                }
+            },
+            
+            async downloadFile(fileUrl, fileName) {
+                try {
+                    const response = await fetch(fileUrl);
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName || 'download';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                } catch (error) {
+                    console.error('Download error:', error);
+                    alert('Failed to download file');
+                }
+            },
+            
+            // INPUT VALIDATION
+            validateAccountNumber(accountNumber) {
+                return /^\d{10}$/.test(accountNumber);
+            },
+            
+            validateAmount(amount) {
+                return !isNaN(amount) && amount > 0;
+            },
+            
+            showError(elementId, message) {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.classList.add('error');
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'form-error';
+                    errorDiv.textContent = message;
+                    element.parentNode.appendChild(errorDiv);
+                }
+            },
+            
+            clearErrors() {
+                document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
+                document.querySelectorAll('.form-error').forEach(el => el.remove());
+            },
+            
+            showView(viewName) {
+                // Update active nav
+                document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+                const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
+                if (targetBtn) targetBtn.classList.add('active');
                 
                 const content = document.getElementById('mainContent');
                 
@@ -780,27 +1106,32 @@
                     return;
                 }
                 
-                switch(viewName) {
-                    case 'dashboard': this.renderDashboard(content); break;
-                    case 'conceptNote': this.renderConceptNoteForm(content); break;
-                    case 'payment': this.renderPaymentForm(content); break;
-                    case 'retirement': this.renderRetirementForm(content); break;
-                    case 'approvals': this.renderApprovals(content); break;
-                    case 'reports': this.renderReports(content); break;
-                    case 'settings': this.renderSettings(content); break;
-                }
+                // Show loading first
+                this.showLoading();
+                
+                // Render after short delay to show loading
+                setTimeout(() => {
+                    switch(viewName) {
+                        case 'dashboard': this.renderDashboard(content); break;
+                        case 'conceptNote': this.renderConceptNoteForm(content); break;
+                        case 'payment': this.renderPaymentForm(content); break;
+                        case 'retirement': this.renderRetirementForm(content); break;
+                        case 'approvals': this.renderApprovals(content); break;
+                        case 'reports': this.renderReports(content); break;
+                        case 'settings': this.renderSettings(content); break;
+                    }
+                }, 100);
             },
             
             renderDashboard(content) {
-                const myConceptNotes = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser);
-                const myPayments = this.data.payments.filter(p => p.staffName === this.currentUser);
-                const myRetirements = this.data.retirements.filter(r => r.staffName === this.currentUser);
+                const myConceptNotes = this.getMyConceptNotes();
+                const myPayments = this.getMyPayments();
+                const myRetirements = this.getMyRetirements();
                 
                 const unretiredPayments = myPayments.filter(p => 
-                    p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)
+                    p.status === 'paid' && !myRetirements.find(r => r.paymentRef === p.refNumber)
                 );
                 
-                // FIX #4: Add null check for paidDate
                 const overdueRetirements = unretiredPayments.filter(p => {
                     if (!p.paidDate) return false;
                     const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
@@ -885,6 +1216,41 @@
                         </div>
                     </div>
                     
+                    <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">My Concept Notes</h3>
+                    ${myConceptNotes.length === 0 ? `
+                        <div class="empty-state" style="padding: 32px;">
+                            <p>No concept notes yet. Create one to get started!</p>
+                        </div>
+                    ` : `
+                        <div style="margin-bottom: 32px;">
+                            ${myConceptNotes.slice(0, 5).map(cn => {
+                                const progress = this.getConceptNoteProgress(cn);
+                                return `
+                                    <div class="tracking-card" onclick="app.showConceptNoteTracking('${cn.refNumber}')">
+                                        <div class="tracking-header">
+                                            <div>
+                                                <span class="tracking-ref">${cn.refNumber}</span>
+                                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 12px;">${cn.activityTitle}</span>
+                                            </div>
+                                            <span class="tracking-amount">₦${cn.estimatedCost.toLocaleString()}</span>
+                                        </div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div style="flex: 1; margin-right: 16px;">
+                                                <div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+                                                    <div style="height: 100%; background: ${cn.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'}; width: ${progress.percentComplete}%; transition: width 0.3s;"></div>
+                                                </div>
+                                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                                                    ${progress.currentStep}
+                                                </div>
+                                            </div>
+                                            <span class="status-badge status-${cn.status}">${cn.status}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    `}
+                    
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Recent Activity</h3>
                     <div class="table-container">
                         <table>
@@ -915,8 +1281,11 @@
             
             getRecentActivity() {
                 const activity = [];
+                const myConceptNotes = this.getMyConceptNotes();
+                const myPayments = this.getMyPayments();
+                const myRetirements = this.getMyRetirements();
                 
-                this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser).forEach(cn => {
+                myConceptNotes.forEach(cn => {
                     activity.push({
                         date: cn.submittedDate,
                         type: 'Concept Note',
@@ -926,7 +1295,7 @@
                     });
                 });
                 
-                this.data.payments.filter(p => p.staffName === this.currentUser).forEach(p => {
+                myPayments.forEach(p => {
                     activity.push({
                         date: p.requestDate,
                         type: 'Payment',
@@ -936,7 +1305,7 @@
                     });
                 });
                 
-                this.data.retirements.filter(r => r.staffName === this.currentUser).forEach(r => {
+                myRetirements.forEach(r => {
                     activity.push({
                         date: r.submittedDate,
                         type: 'Retirement',
@@ -949,6 +1318,183 @@
                 return activity.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
             },
             
+            getConceptNoteProgress(cn) {
+                const steps = [
+                    { id: 'submitted', label: 'Submitted', icon: '📝', date: cn.submittedDate },
+                    { id: 'budgetOwner', label: 'Budget Owner', icon: '👤', date: null },
+                    { id: 'ed', label: 'Executive Director', icon: '👔', date: cn.forwardedToED },
+                    { id: 'procurement', label: 'Procurement', icon: '🛒', date: cn.sentToProcurement },
+                    { id: 'approved', label: 'Approved', icon: '✓', date: cn.approvedDate }
+                ];
+                
+                let progress = {
+                    steps: [],
+                    currentStep: '',
+                    percentComplete: 0,
+                    message: ''
+                };
+                
+                // Filter out skipped steps
+                let activeSteps = [steps[0]]; // Always include submitted
+                
+                // Check if it went through budget owner
+                if (cn.status === 'pending' && cn.currentApprover === 'budgetOwner') {
+                    activeSteps.push({ ...steps[1], status: 'active' });
+                    progress.currentStep = 'Budget Owner Review';
+                    progress.message = 'Awaiting Budget Owner approval';
+                }
+                
+                // Check if forwarded to ED
+                if (cn.forwardedToED || (cn.status === 'pending' && cn.currentApprover === 'ed')) {
+                    activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
+                    activeSteps.push({ 
+                        ...steps[2], 
+                        status: cn.currentApprover === 'ed' ? 'active' : 'completed' 
+                    });
+                    if (cn.currentApprover === 'ed') {
+                        progress.currentStep = 'Executive Director Review';
+                        progress.message = 'Awaiting ED approval';
+                    }
+                }
+                
+                // Check if sent to procurement
+                if (cn.sentToProcurement || (cn.status === 'pending' && cn.currentApprover === 'procurement')) {
+                    if (!cn.forwardedToED) {
+                        activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
+                    }
+                    activeSteps.push({ 
+                        ...steps[3], 
+                        status: cn.currentApprover === 'procurement' ? 'active' : 'completed' 
+                    });
+                    if (cn.currentApprover === 'procurement') {
+                        progress.currentStep = 'Procurement Processing';
+                        progress.message = 'Items being procured';
+                    }
+                }
+                
+                // Check if approved
+                if (cn.status === 'approved') {
+                    if (!cn.sentToProcurement && !cn.forwardedToED) {
+                        activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
+                    }
+                    activeSteps.push({ ...steps[4], status: 'completed' });
+                    progress.currentStep = 'Approved';
+                    progress.message = '✓ Concept note approved! Payment can be requested.';
+                }
+                
+                // Check if rejected
+                if (cn.status === 'rejected') {
+                    const lastStep = activeSteps[activeSteps.length - 1];
+                    lastStep.status = 'rejected';
+                    progress.currentStep = 'Rejected';
+                    progress.message = `❌ Rejected: ${cn.rejectionReason || 'See comments'}`;
+                }
+                
+                progress.steps = activeSteps;
+                progress.percentComplete = ((activeSteps.filter(s => s.status === 'completed').length) / activeSteps.length) * 100;
+                
+                return progress;
+            },
+            
+            showConceptNoteTracking(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                
+                const progress = this.getConceptNoteProgress(cn);
+                const content = document.getElementById('mainContent');
+                
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Track Concept Note</h2>
+                        <p>Follow your concept note through the approval process</p>
+                    </div>
+                    
+                    <div class="progress-tracker">
+                        <div class="tracking-header">
+                            <div>
+                                <h3 style="font-family: 'Archivo', sans-serif; margin-bottom: 8px;">${cn.activityTitle}</h3>
+                                <p style="color: var(--text-muted); font-size: 14px;">
+                                    ${cn.refNumber} • ₦${cn.estimatedCost.toLocaleString()}
+                                </p>
+                            </div>
+                            <span class="status-badge status-${cn.status}">${cn.status}</span>
+                        </div>
+                        
+                        <div class="progress-timeline">
+                            <div class="progress-line" style="width: ${progress.percentComplete}%"></div>
+                            ${progress.steps.map((step, index) => `
+                                <div class="progress-step ${step.status || ''}">
+                                    <div class="progress-icon">
+                                        ${step.status === 'completed' ? '✓' : 
+                                          step.status === 'rejected' ? '✗' : 
+                                          step.icon || (index + 1)}
+                                    </div>
+                                    <div class="progress-label">
+                                        ${step.label}
+                                        ${step.date ? `<div class="progress-date">${new Date(step.date).toLocaleDateString()}</div>` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="progress-note ${cn.status === 'rejected' ? 'danger' : cn.status === 'approved' ? '' : 'warning'}">
+                            <strong>${progress.currentStep}</strong><br>
+                            <span style="font-size: 13px;">${progress.message}</span>
+                        </div>
+                        
+                        ${cn.status === 'approved' ? `
+                            <div style="margin-top: 16px;">
+                                <button class="btn btn-primary" onclick="app.showView('payment')">
+                                    Request Payment →
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="form-grid two-col">
+                        <div class="form-group">
+                            <label>Project Code</label>
+                            <input type="text" value="${cn.projectCode}" readonly>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Requires Procurement</label>
+                            <input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Objective</label>
+                            <textarea rows="3" readonly>${cn.objective}</textarea>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Description</label>
+                            <textarea rows="4" readonly>${cn.description}</textarea>
+                        </div>
+                        
+                        ${cn.procurementNotes ? `
+                            <div class="form-group full-width">
+                                <label>Procurement Notes</label>
+                                <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
+                            </div>
+                        ` : ''}
+                        
+                        ${cn.rejectionReason ? `
+                            <div class="form-group full-width">
+                                <label style="color: var(--danger);">Rejection Reason</label>
+                                <textarea rows="2" readonly style="border-color: var(--danger);">${cn.rejectionReason}</textarea>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="btn-group full-width">
+                            <button class="btn btn-primary" onclick="app.showView('dashboard')">
+                                ← Back to Dashboard
+                            </button>
+                        </div>
+                    </div>
+                `;
+            },
+            
             renderConceptNoteForm(content) {
                 content.innerHTML = `
                     <div class="header">
@@ -959,7 +1505,7 @@
                     <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
                         <div class="form-group">
                             <label>Project Code <span class="required">*</span></label>
-                            <select name="projectCode" required onchange="app.updateProjectBudget(this.value)">
+                            <select name="projectCode" id="projectCode" required onchange="app.updateProjectBudget(this.value)">
                                 <option value="">Select project</option>
                                 ${this.data.projects.map(p => `
                                     <option value="${p.code}">${p.code} - ${p.name}</option>
@@ -969,22 +1515,22 @@
                         
                         <div class="form-group">
                             <label>Activity Title <span class="required">*</span></label>
-                            <input type="text" name="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano">
+                            <input type="text" name="activityTitle" id="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano">
                         </div>
                         
                         <div class="form-group full-width">
                             <label>Objective <span class="required">*</span></label>
-                            <textarea name="objective" required placeholder="What is the purpose of this activity?"></textarea>
+                            <textarea name="objective" id="objective" required placeholder="What is the purpose of this activity?"></textarea>
                         </div>
                         
                         <div class="form-group full-width">
                             <label>Description <span class="required">*</span></label>
-                            <textarea name="description" required placeholder="Detailed description of the activity"></textarea>
+                            <textarea name="description" id="description" required placeholder="Detailed description of the activity"></textarea>
                         </div>
                         
                         <div class="form-group">
                             <label>Estimated Cost (₦) <span class="required">*</span></label>
-                            <input type="number" name="estimatedCost" required min="0" step="0.01">
+                            <input type="number" name="estimatedCost" id="estimatedCost" required min="0" step="0.01">
                         </div>
                         
                         <div class="form-group full-width">
@@ -1008,36 +1554,51 @@
                 `;
             },
             
-            // FIX #5: Add submitConceptNote method
             async submitConceptNote(event) {
                 event.preventDefault();
+                this.clearErrors();
+                
                 const form = event.target;
                 const formData = new FormData(form);
                 
-                const conceptNote = {
-                    refNumber: 'CN' + Date.now(),
-                    staffName: this.currentUser,
-                    projectCode: formData.get('projectCode'),
-                    activityTitle: formData.get('activityTitle'),
-                    objective: formData.get('objective'),
-                    description: formData.get('description'),
-                    estimatedCost: parseFloat(formData.get('estimatedCost')),
-                    requiresProcurement: formData.get('requiresProcurement'),
-                    status: 'pending',
-                    submittedDate: new Date().toISOString()
-                };
+                // Validate
+                const amount = parseFloat(formData.get('estimatedCost'));
+                if (!this.validateAmount(amount)) {
+                    this.showError('estimatedCost', 'Please enter a valid amount');
+                    return;
+                }
                 
-                const { data, error } = await supabaseClient
-                    .from('concept_notes')
-                    .insert([conceptNote])
-                    .select();
-                
-                if (error) {
-                    alert('Error submitting concept note: ' + error.message);
-                } else {
-                    this.data.conceptNotes.push(data[0]);
+                try {
+                    const conceptNote = {
+                        refNumber: 'CN' + Date.now(),
+                        staffName: this.currentUser,
+                        projectCode: formData.get('projectCode'),
+                        activityTitle: formData.get('activityTitle'),
+                        objective: formData.get('objective'),
+                        description: formData.get('description'),
+                        estimatedCost: amount,
+                        requiresProcurement: formData.get('requiresProcurement'),
+                        status: 'pending',
+                        currentApprover: 'budgetOwner',
+                        submittedDate: new Date().toISOString()
+                    };
+                    
+                    const { data, error } = await supabaseClient
+                        .from('concept_notes')
+                        .insert([conceptNote])
+                        .select();
+                    
+                    if (error) throw error;
+                    
+                    // Update local data without full reload
+                    this.data.conceptNotes.unshift(data[0]);
+                    this.clearCache();
+                    
                     alert('Concept note submitted successfully!');
                     this.showView('dashboard');
+                } catch (error) {
+                    console.error('Submit error:', error);
+                    alert('Error submitting concept note: ' + error.message);
                 }
             },
             
@@ -1071,7 +1632,7 @@
                         
                         <div class="form-group">
                             <label>Payment Amount (₦) <span class="required">*</span></label>
-                            <input type="number" name="amount" required min="0" step="0.01">
+                            <input type="number" name="amount" id="amount" required min="0" step="0.01">
                         </div>
                         
                         <div class="form-group">
@@ -1087,24 +1648,29 @@
                             <label>Justification</label>
                             <textarea name="justification" placeholder="Additional payment information"></textarea>
                         </div>
+                        
                         <div class="form-group full-width">
-    <label>Beneficiary List (Optional)</label>
-    <input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png">
-    <span class="form-hint">Upload attendance or payment list if paying multiple people</span>
-</div>
+                            <label>Beneficiary List (Optional)</label>
+                            <div class="file-upload-area" id="beneficiaryUploadArea" onclick="document.getElementById('beneficiaryFile').click()">
+                                <p>📎 Click to upload attendance or payment list</p>
+                                <span class="form-hint">Maximum 5MB - Excel, CSV, PDF, or Image</span>
+                            </div>
+                            <input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)">
+                        </div>
+                        
                         <div class="form-group">
                             <label>Account Name <span class="required">*</span></label>
-                            <input type="text" name="accountName" required placeholder="Name as it appears on bank account">
+                            <input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account">
                         </div>
 
                         <div class="form-group">
                             <label>Account Number <span class="required">*</span></label>
-                            <input type="text" name="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
+                            <input type="text" name="accountNumber" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
                         </div>
 
                         <div class="form-group full-width">
                             <label>Bank Name <span class="required">*</span></label>
-                            <select name="bankName" required>
+                            <select name="bankName" id="bankName" required>
                                 <option value="">Select Bank</option>
                                 <option value="Access Bank">Access Bank</option>
                                 <option value="Fidelity Bank">Fidelity Bank</option>
@@ -1123,11 +1689,31 @@
                         </div>
 
                         <div class="btn-group full-width">
-                            <button type="submit" class="btn btn-primary">Submit Payment Request</button>
+                            <button type="submit" class="btn btn-primary" id="submitPaymentBtn">Submit Payment Request</button>
                             <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
                         </div>
                     </form>
                 `;
+            },
+            
+            handleBeneficiaryUpload(input) {
+                const area = document.getElementById('beneficiaryUploadArea');
+                const file = input.files[0];
+                
+                if (file) {
+                    // Validate size
+                    if (file.size > MAX_FILE_SIZE) {
+                        alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+                        input.value = '';
+                        return;
+                    }
+                    
+                    area.classList.add('has-file');
+                    area.innerHTML = `
+                        <p>✓ ${file.name}</p>
+                        <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
+                    `;
+                }
             },
             
             loadConceptNoteDetails(id) {
@@ -1147,81 +1733,90 @@
             
             async submitPayment(event) {
                 event.preventDefault();
+                this.clearErrors();
+                
                 const form = event.target;
                 const formData = new FormData(form);
-                // Check if beneficiary file was uploaded
-const file = document.getElementById('beneficiaryFile')?.files[0];
-
-let beneficiaryData = null;
-let beneficiaryName = null;
-
-if (file) {
-    const reader = new FileReader();
-    beneficiaryData = await new Promise((resolve, reject) => {
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-    beneficiaryName = file.name;
-}
-
-const toBase64 = file => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = error => reject(error);
-});
-
-                const payment = {
-                    refNumber: 'PAY' + Date.now(),
-                    conceptNoteId: parseInt(formData.get('conceptNoteId')),
-                    staffName: this.currentUser,
-                    amount: parseFloat(formData.get('amount')),
-                    paymentMethod: formData.get('paymentMethod'),
-                    justification: formData.get('justification'),
-                    accountName: formData.get('accountName'),
-                    accountNumber: formData.get('accountNumber'),
-                    bankName: formData.get('bankName'),
-                    status: 'pending',
-                    requestDate: new Date().toISOString(),
-                    beneficiaryFile: beneficiaryData,
-                    beneficiaryFileName: beneficiaryName,
-
-                };
+                const submitBtn = document.getElementById('submitPaymentBtn');
                 
-                const { data, error } = await supabaseClient
-                    .from('payments')
-                    .insert([payment])
-                    .select();
+                // Validate
+                const amount = parseFloat(formData.get('amount'));
+                if (!this.validateAmount(amount)) {
+                    this.showError('amount', 'Please enter a valid amount');
+                    return;
+                }
                 
-                if (error) {
-                    alert('Error submitting payment: ' + error.message);
-                } else {
-                    this.data.payments.push(data[0]);
+                const accountNumber = formData.get('accountNumber');
+                if (!this.validateAccountNumber(accountNumber)) {
+                    this.showError('accountNumber', 'Account number must be exactly 10 digits');
+                    return;
+                }
+                
+                try {
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Uploading...';
+                    
+                    // Upload beneficiary file if provided
+                    const file = document.getElementById('beneficiaryFile').files[0];
+                    let beneficiaryFileData = null;
+                    
+                    if (file) {
+                        beneficiaryFileData = await this.uploadFile(file, 'beneficiaries');
+                    }
+                    
+                    const payment = {
+                        refNumber: 'PAY' + Date.now(),
+                        conceptNoteId: parseInt(formData.get('conceptNoteId')),
+                        staffName: this.currentUser,
+                        amount: amount,
+                        paymentMethod: formData.get('paymentMethod'),
+                        justification: formData.get('justification'),
+                        accountName: formData.get('accountName'),
+                        accountNumber: accountNumber,
+                        bankName: formData.get('bankName'),
+                        beneficiaryFileUrl: beneficiaryFileData?.url,
+                        beneficiaryFileName: beneficiaryFileData?.fileName,
+                        status: 'pending',
+                        requestDate: new Date().toISOString()
+                    };
+                    
+                    const { data, error } = await supabaseClient
+                        .from('payments')
+                        .insert([payment])
+                        .select();
+                    
+                    if (error) throw error;
+                    
+                    // Update local data
+                    this.data.payments.unshift(data[0]);
+                    this.clearCache();
+                    
                     alert('Payment request submitted successfully!');
                     this.showView('dashboard');
+                } catch (error) {
+                    console.error('Submit error:', error);
+                    alert('Error submitting payment: ' + error.message);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Payment Request';
                 }
             },
             
-            // FIX #6: Add renderRetirementForm method
             renderRetirementForm(content) {
                 const userRole = this.getUserRole();
+                const myPayments = this.getMyPayments();
                 
-                // Get payments that this user should retire
                 const paidPayments = this.data.payments.filter(p => {
                     if (p.status !== 'paid') return false;
                     if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-                    
-                    // Check if payment has paidDate and calculate days
                     if (!p.paidDate) return false;
+                    
                     const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
                     
-                    // Staff can retire after 5 days if they're responsible
                     if (userRole === 'staff' && p.retirementresponsibility === 'staff' && p.staffName === this.currentUser) {
                         return daysSincePaid >= 5;
                     }
                     
-                    // Procurement can retire immediately if they're responsible
                     if (userRole === 'procurement' && p.retirementresponsibility === 'procurement') {
                         return true;
                     }
@@ -1229,7 +1824,6 @@ const toBase64 = file => new Promise((resolve, reject) => {
                     return false;
                 });
                 
-                // Get payments waiting for 5 days (for staff)
                 const waitingPayments = this.data.payments.filter(p => {
                     if (p.status !== 'paid') return false;
                     if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
@@ -1277,7 +1871,7 @@ const toBase64 = file => new Promise((resolve, reject) => {
                             
                             <div class="form-group">
                                 <label>Actual Amount Spent (₦) <span class="required">*</span></label>
-                                <input type="number" name="actualSpent" required min="0" step="0.01">
+                                <input type="number" name="actualSpent" id="actualSpent" required min="0" step="0.01">
                             </div>
                             
                             <div class="form-group">
@@ -1318,50 +1912,58 @@ const toBase64 = file => new Promise((resolve, reject) => {
             
             async submitRetirement(event) {
                 event.preventDefault();
+                this.clearErrors();
+                
                 const form = event.target;
                 const formData = new FormData(form);
                 
-                const retirement = {
-                    refNumber: 'RET' + Date.now(),
-                    staffName: this.currentUser,
-                    paymentRef: formData.get('paymentRef'),
-                    actualSpent: parseFloat(formData.get('actualSpent')),
-                    amountReturned: parseFloat(formData.get('amountReturned')) || 0,
-                    expenditureDetails: formData.get('expenditureDetails'),
-                    attachments: formData.get('attachments'),
-                    status: 'pending',
-                    submittedDate: new Date().toISOString()
-                };
+                // Validate
+                const actualSpent = parseFloat(formData.get('actualSpent'));
+                if (!this.validateAmount(actualSpent)) {
+                    this.showError('actualSpent', 'Please enter a valid amount');
+                    return;
+                }
                 
-                const { data, error } = await supabaseClient
-                    .from('retirements')
-                    .insert([retirement])
-                    .select();
-                
-                if (error) {
-                    alert('Error submitting retirement: ' + error.message);
-                } else {
-                    this.data.retirements.push(data[0]);
+                try {
+                    const retirement = {
+                        refNumber: 'RET' + Date.now(),
+                        staffName: this.currentUser,
+                        paymentRef: formData.get('paymentRef'),
+                        actualSpent: actualSpent,
+                        amountReturned: parseFloat(formData.get('amountReturned')) || 0,
+                        expenditureDetails: formData.get('expenditureDetails'),
+                        attachments: formData.get('attachments'),
+                        status: 'pending',
+                        submittedDate: new Date().toISOString()
+                    };
+                    
+                    const { data, error } = await supabaseClient
+                        .from('retirements')
+                        .insert([retirement])
+                        .select();
+                    
+                    if (error) throw error;
+                    
+                    // Update local data
+                    this.data.retirements.unshift(data[0]);
+                    this.clearCache();
+                    
                     alert('Retirement submitted successfully!');
                     this.showView('dashboard');
+                } catch (error) {
+                    console.error('Submit error:', error);
+                    alert('Error submitting retirement: ' + error.message);
                 }
             },
             
-            // FIX #7: Add renderApprovals method with full approval logic
             renderApprovals(content) {
                 const role = this.getUserRole();
                 
-                // Get items pending this user's approval
                 const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
                     if (cn.status !== 'pending') return false;
                     
-                    // Budget Owner sees all pending
                     if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
-                    
-                    // ED sees only those >1M forwarded by Budget Owner
                     if (role === 'ed' && cn.currentApprover === 'ed') return true;
-                    
-                    // Procurement sees those flagged for procurement
                     if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
                     
                     return false;
@@ -1431,7 +2033,7 @@ const toBase64 = file => new Promise((resolve, reject) => {
                                                         ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
                                                     </button>
                                                 ` : role === 'procurement' ? `
-                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'procurement_complete')">
+                                                    <button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">
                                                         ✓ Complete & Forward to Finance
                                                     </button>
                                                 ` : ''}
@@ -1460,32 +2062,30 @@ const toBase64 = file => new Promise((resolve, reject) => {
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
-                               <tbody>
-${pendingPayments.map(p => `
-<tr>
-    <td>${p.refNumber}</td>
-    <td>${p.staffName}</td>
-    <td>₦${p.amount.toLocaleString()}</td>
-    <td>${p.paymentMethod}</td>
-    <td>${new Date(p.requestDate).toLocaleDateString()}</td>
-    <td>
-        ${p.beneficiaryFile ? `
-            <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFile}', '${p.beneficiaryFileName}')">
-                📎 Beneficiaries
-            </button>
-        ` : ''}
-
-        <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
-            ✓ Process Payment
-        </button>
-
-        <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
-            ✗ Reject
-        </button>
-    </td>
-</tr>
-`).join('')}
-</tbody>
+                                <tbody>
+                                    ${pendingPayments.map(p => `
+                                        <tr>
+                                            <td>${p.refNumber}</td>
+                                            <td>${p.staffName}</td>
+                                            <td>₦${p.amount.toLocaleString()}</td>
+                                            <td>${p.paymentMethod}</td>
+                                            <td>${new Date(p.requestDate).toLocaleDateString()}</td>
+                                            <td>
+                                                ${p.beneficiaryFileUrl ? `
+                                                    <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">
+                                                        📎 Download Beneficiaries
+                                                    </button><br>
+                                                ` : ''}
+                                                <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
+                                                    ✓ Process Payment
+                                                </button>
+                                                <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
+                                                    ✗ Reject
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
                             </table>
                         </div>
                     ` : ''}
@@ -1531,7 +2131,6 @@ ${pendingPayments.map(p => `
                 `;
             },
             
-            // APPROVAL LOGIC METHODS
             async approveConceptNote(refNumber, action) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
@@ -1540,16 +2139,13 @@ ${pendingPayments.map(p => `
                 
                 switch(action) {
                     case 'approve_under_1m':
-                        // Budget Owner approving ≤₦1M
                         if (cn.requiresProcurement === 'yes') {
-                            // Route to procurement first
                             updates = {
                                 currentApprover: 'procurement',
                                 sentToProcurement: new Date().toISOString(),
                                 retirementresponsibility: 'procurement'
                             };
                         } else {
-                            // Direct to finance - staff will retire
                             updates = {
                                 status: 'approved',
                                 approvedDate: new Date().toISOString(),
@@ -1559,23 +2155,19 @@ ${pendingPayments.map(p => `
                         }
                         break;
                     case 'forward_to_ed':
-                        // Budget Owner forwarding >₦1M to ED
                         updates = {
                             currentApprover: 'ed',
                             forwardedToED: new Date().toISOString()
                         };
                         break;
                     case 'ed_approve':
-                        // ED approving >₦1M
                         if (cn.requiresProcurement === 'yes') {
-                            // Route to procurement
                             updates = {
                                 currentApprover: 'procurement',
                                 sentToProcurement: new Date().toISOString(),
                                 retirementresponsibility: 'procurement'
                             };
                         } else {
-                            // Direct to finance - staff will retire
                             updates = {
                                 status: 'approved',
                                 approvedDate: new Date().toISOString(),
@@ -1584,24 +2176,24 @@ ${pendingPayments.map(p => `
                             };
                         }
                         break;
-                    case 'procurement_complete':
-                        // Show upload form instead
-                        this.showProcurementUpload(refNumber);
-                        return; // Exit - modal handles completion
                 }
                 
-                const { error } = await supabaseClient
-                    .from('concept_notes')
-                    .update(updates)
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error updating concept note: ' + error.message);
-                } else {
+                try {
+                    const { error } = await supabaseClient
+                        .from('concept_notes')
+                        .update(updates)
+                        .eq('refNumber', refNumber);
+                    
+                    if (error) throw error;
+                    
                     Object.assign(cn, updates);
+                    this.clearCache();
+                    
                     alert('Concept note processed successfully!');
-                    await this.loadData();
                     this.showView('approvals');
+                } catch (error) {
+                    console.error('Approval error:', error);
+                    alert('Error updating concept note: ' + error.message);
                 }
             },
             
@@ -1609,22 +2201,25 @@ ${pendingPayments.map(p => `
                 const reason = prompt('Please provide a reason for rejection:');
                 if (!reason) return;
                 
-                const { error } = await supabaseClient
-                    .from('concept_notes')
-                    .update({
-                        status: 'rejected',
-                        rejectedDate: new Date().toISOString(),
-                        rejectedBy: this.currentUser,
-                        rejectionReason: reason
-                    })
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error rejecting concept note: ' + error.message);
-                } else {
-                    alert('Concept note rejected.');
+                try {
+                    const { error } = await supabaseClient
+                        .from('concept_notes')
+                        .update({
+                            status: 'rejected',
+                            rejectedDate: new Date().toISOString(),
+                            rejectedBy: this.currentUser,
+                            rejectionReason: reason
+                        })
+                        .eq('refNumber', refNumber);
+                    
+                    if (error) throw error;
+                    
                     await this.loadData();
+                    alert('Concept note rejected.');
                     this.showView('approvals');
+                } catch (error) {
+                    console.error('Reject error:', error);
+                    alert('Error rejecting concept note: ' + error.message);
                 }
             },
             
@@ -1639,7 +2234,7 @@ ${pendingPayments.map(p => `
                         <p>Upload documents and create payment request</p>
                     </div>
                     
-                    <div class="form-grid">
+                    <form class="form-grid" id="procurementForm" onsubmit="app.completeProcurementWithDocs(event, '${refNumber}')">
                         <div class="form-group full-width">
                             <div class="threshold-info">
                                 <strong>Concept Note:</strong> ${cn.refNumber} - ${cn.activityTitle}<br>
@@ -1650,12 +2245,20 @@ ${pendingPayments.map(p => `
                         
                         <div class="form-group full-width">
                             <label>Upload GRR (Goods Received Report) <span class="required">*</span></label>
-                            <input type="file" id="grrFile" accept=".pdf,.jpg,.jpeg,.png" required>
+                            <div class="file-upload-area" id="grrUploadArea" onclick="document.getElementById('grrFile').click()">
+                                <p>📎 Click to upload GRR document</p>
+                                <span class="form-hint">PDF, JPG, PNG - Maximum 5MB</span>
+                            </div>
+                            <input type="file" id="grrFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleFileUpload(this, 'grrUploadArea')">
                         </div>
                         
                         <div class="form-group full-width">
                             <label>Upload Purchase Order/Invoice <span class="required">*</span></label>
-                            <input type="file" id="poFile" accept=".pdf,.jpg,.jpeg,.png" required>
+                            <div class="file-upload-area" id="poUploadArea" onclick="document.getElementById('poFile').click()">
+                                <p>📎 Click to upload PO/Invoice</p>
+                                <span class="form-hint">PDF, JPG, PNG - Maximum 5MB</span>
+                            </div>
+                            <input type="file" id="poFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleFileUpload(this, 'poUploadArea')">
                         </div>
                         
                         <div class="form-group full-width">
@@ -1699,21 +2302,44 @@ ${pendingPayments.map(p => `
                         </div>
                         
                         <div class="btn-group full-width">
-                            <button class="btn btn-primary" onclick="app.completeProcurementWithDocs('${refNumber}')">
+                            <button type="submit" class="btn btn-primary" id="procurementSubmitBtn">
                                 Complete & Send to Finance
                             </button>
-                            <button class="btn btn-secondary" onclick="app.showView('approvals')">
+                            <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">
                                 Cancel
                             </button>
                         </div>
-                    </div>
+                    </form>
                 `;
             },
+            
+            handleFileUpload(input, areaId) {
+                const area = document.getElementById(areaId);
+                const file = input.files[0];
+                
+                if (file) {
+                    // Validate size
+                    if (file.size > MAX_FILE_SIZE) {
+                        alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+                        input.value = '';
+                        return;
+                    }
+                    
+                    area.classList.add('has-file');
+                    area.innerHTML = `
+                        <p>✓ ${file.name}</p>
+                        <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
+                    `;
+                }
+            },
 
-            async completeProcurementWithDocs(refNumber) {
+            async completeProcurementWithDocs(event, refNumber) {
+                event.preventDefault();
+                
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 
+                const submitBtn = document.getElementById('procurementSubmitBtn');
                 const grrFile = document.getElementById('grrFile').files[0];
                 const poFile = document.getElementById('poFile').files[0];
                 const notes = document.getElementById('procNotes').value;
@@ -1731,17 +2357,19 @@ ${pendingPayments.map(p => `
                     return;
                 }
                 
-                // Convert files to base64
-                const toBase64 = file => new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.readAsDataURL(file);
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = error => reject(error);
-                });
+                if (!this.validateAccountNumber(accountNumber)) {
+                    alert('Account number must be exactly 10 digits');
+                    return;
+                }
                 
                 try {
-                    const grrData = await toBase64(grrFile);
-                    const poData = await toBase64(poFile);
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Uploading documents...';
+                    
+                    // Upload files to Supabase Storage
+                    const grrData = await this.uploadFile(grrFile, 'grr');
+                    submitBtn.textContent = 'Processing...';
+                    const poData = await this.uploadFile(poFile, 'po');
                     
                     // Update concept note
                     const { error: cnError } = await supabaseClient
@@ -1752,10 +2380,10 @@ ${pendingPayments.map(p => `
                             approvedBy: this.currentUser,
                             procurementComplete: new Date().toISOString(),
                             retirementresponsibility: 'procurement',
-                            grrFile: grrData,
-                            grrFileName: grrFile.name,
-                            poFile: poData,
-                            poFileName: poFile.name,
+                            grrFileUrl: grrData.url,
+                            grrFileName: grrData.fileName,
+                            poFileUrl: poData.url,
+                            poFileName: poData.fileName,
                             procurementNotes: notes
                         })
                         .eq('refNumber', refNumber);
@@ -1793,7 +2421,11 @@ ${pendingPayments.map(p => `
                     this.showView('approvals');
                     
                 } catch (error) {
+                    console.error('Procurement error:', error);
                     alert('Error: ' + error.message);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Complete & Send to Finance';
                 }
             },
         
@@ -1801,35 +2433,36 @@ ${pendingPayments.map(p => `
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 if (!payment) return;
                 
-                // Check if account details already provided
                 if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
                     alert('Error: Account details not provided by staff member. Please contact the staff to update their payment request with bank details.');
                     return;
                 }
                 
-                // Show confirmation before processing
                 if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
                     return;
                 }
                 
-                const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
-                
-                const { error } = await supabaseClient
-                    .from('payments')
-                    .update({
-                        status: 'paid',
-                        paidDate: new Date().toISOString(),
-                        processedBy: this.currentUser,
-                        retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
-                    })
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error processing payment: ' + error.message);
-                } else {
+                try {
+                    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
+                    
+                    const { error } = await supabaseClient
+                        .from('payments')
+                        .update({
+                            status: 'paid',
+                            paidDate: new Date().toISOString(),
+                            processedBy: this.currentUser,
+                            retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
+                        })
+                        .eq('refNumber', refNumber);
+                    
+                    if (error) throw error;
+                    
                     alert(`Payment of ₦${payment.amount.toLocaleString()} processed successfully!`);
                     await this.loadData();
                     this.showView('approvals');
+                } catch (error) {
+                    console.error('Payment error:', error);
+                    alert('Error processing payment: ' + error.message);
                 }
             },
 
@@ -1905,14 +2538,18 @@ ${pendingPayments.map(p => `
                         ${cn.grrFileName ? `
                             <div class="form-group">
                                 <label>GRR Document</label>
-                                <input type="text" value="${cn.grrFileName}" readonly>
+                                <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">
+                                    📎 Download ${cn.grrFileName}
+                                </button>
                             </div>
                         ` : ''}
                         
                         ${cn.poFileName ? `
                             <div class="form-group">
                                 <label>PO/Invoice Document</label>
-                                <input type="text" value="${cn.poFileName}" readonly>
+                                <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.poFileUrl}', '${cn.poFileName}')">
+                                    📎 Download ${cn.poFileName}
+                                </button>
                             </div>
                         ` : ''}
                         
@@ -1929,41 +2566,47 @@ ${pendingPayments.map(p => `
                 const reason = prompt('Please provide a reason for rejection:');
                 if (!reason) return;
                 
-                const { error } = await supabaseClient
-                    .from('payments')
-                    .update({
-                        status: 'rejected',
-                        rejectedDate: new Date().toISOString(),
-                        rejectedBy: this.currentUser,
-                        rejectionReason: reason
-                    })
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error rejecting payment: ' + error.message);
-                } else {
+                try {
+                    const { error } = await supabaseClient
+                        .from('payments')
+                        .update({
+                            status: 'rejected',
+                            rejectedDate: new Date().toISOString(),
+                            rejectedBy: this.currentUser,
+                            rejectionReason: reason
+                        })
+                        .eq('refNumber', refNumber);
+                    
+                    if (error) throw error;
+                    
                     alert('Payment rejected.');
                     await this.loadData();
                     this.showView('approvals');
+                } catch (error) {
+                    console.error('Reject error:', error);
+                    alert('Error rejecting payment: ' + error.message);
                 }
             },
             
             async approveRetirement(refNumber) {
-                const { error } = await supabaseClient
-                    .from('retirements')
-                    .update({
-                        status: 'approved',
-                        approvedDate: new Date().toISOString(),
-                        approvedBy: this.currentUser
-                    })
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error approving retirement: ' + error.message);
-                } else {
+                try {
+                    const { error } = await supabaseClient
+                        .from('retirements')
+                        .update({
+                            status: 'approved',
+                            approvedDate: new Date().toISOString(),
+                            approvedBy: this.currentUser
+                        })
+                        .eq('refNumber', refNumber);
+                    
+                    if (error) throw error;
+                    
                     alert('Retirement approved successfully!');
                     await this.loadData();
                     this.showView('approvals');
+                } catch (error) {
+                    console.error('Approval error:', error);
+                    alert('Error approving retirement: ' + error.message);
                 }
             },
             
@@ -1971,26 +2614,28 @@ ${pendingPayments.map(p => `
                 const reason = prompt('Please provide a reason for rejection:');
                 if (!reason) return;
                 
-                const { error } = await supabaseClient
-                    .from('retirements')
-                    .update({
-                        status: 'rejected',
-                        rejectedDate: new Date().toISOString(),
-                        rejectedBy: this.currentUser,
-                        rejectionReason: reason
-                    })
-                    .eq('refNumber', refNumber);
-                
-                if (error) {
-                    alert('Error rejecting retirement: ' + error.message);
-                } else {
+                try {
+                    const { error } = await supabaseClient
+                        .from('retirements')
+                        .update({
+                            status: 'rejected',
+                            rejectedDate: new Date().toISOString(),
+                            rejectedBy: this.currentUser,
+                            rejectionReason: reason
+                        })
+                        .eq('refNumber', refNumber);
+                    
+                    if (error) throw error;
+                    
                     alert('Retirement rejected.');
                     await this.loadData();
                     this.showView('approvals');
+                } catch (error) {
+                    console.error('Reject error:', error);
+                    alert('Error rejecting retirement: ' + error.message);
                 }
             },
             
-            // FIX #8: Add renderReports method
             renderReports(content) {
                 const role = this.getUserRole();
                 
@@ -2004,7 +2649,6 @@ ${pendingPayments.map(p => `
                     return;
                 }
                 
-                // Calculate budget usage per project
                 const projectStats = this.data.projects.map(project => {
                     const spent = this.getProjectSpent(project.code);
                     const remaining = project.budget - spent;
@@ -2085,7 +2729,6 @@ ${pendingPayments.map(p => `
                 `;
             },
             
-            // FIX #9: Add renderSettings method
             renderSettings(content) {
                 content.innerHTML = `
                     <div class="header">
@@ -2102,8 +2745,9 @@ ${pendingPayments.map(p => `
                         
                         <div class="form-group full-width">
                             <h3 style="margin-bottom: 16px;">System Information</h3>
-                            <p><strong>Version:</strong> 1.0.0</p>
+                            <p><strong>Version:</strong> 2.0.0 (Optimized)</p>
                             <p><strong>Last Updated:</strong> ${new Date().toLocaleDateString()}</p>
+                            <p><strong>Storage:</strong> Supabase Cloud Storage</p>
                         </div>
                         
                         <div class="btn-group full-width">
@@ -2119,27 +2763,8 @@ ${pendingPayments.map(p => `
                     localStorage.removeItem('pms_user');
                     window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
                 } 
-            },
-       downloadFile(base64, fileName) {
-    const byteCharacters = atob(base64.split(',')[1]);
-    const byteNumbers = new Array(byteCharacters.length);
-
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray]);
-
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName || 'beneficiaries';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
+            }
         };
-        
         
         // Initialize app when page loads
         window.addEventListener('DOMContentLoaded', () => {
