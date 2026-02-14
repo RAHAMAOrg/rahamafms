@@ -9,13 +9,13 @@
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Archivo:wght@600;700&display=swap');
         
         :root {
-            --primary: #00796B;
-            --primary-dark: #004D40;
-            --primary-light: #4DB6AC;
-            --accent: #FF6F00;
+            --primary: #059669;
+            --primary-dark: #047857;
+            --primary-light: #10b981;
+            --accent: #34d399;
             --danger: #D32F2F;
             --warning: #F57C00;
-            --success: #388E3C;
+            --success: #059669;
             --bg: #F5F7FA;
             --surface: #FFFFFF;
             --text: #1A1A1A;
@@ -62,7 +62,7 @@
             font-family: 'Archivo', sans-serif;
             font-size: 20px;
             font-weight: 700;
-            color: var(--primary);
+            color: #059669;
             margin-bottom: 4px;
         }
         
@@ -132,7 +132,7 @@
         .portal-link {
             margin: 24px 16px 0;
             padding: 12px;
-            background: var(--primary);
+            background: linear-gradient(135deg, #059669, #047857);
             color: white;
             text-align: center;
             border-radius: 8px;
@@ -144,7 +144,7 @@
         }
         
         .portal-link:hover {
-            background: var(--primary-dark);
+            background: linear-gradient(135deg, #047857, #065f46);
             transform: translateY(-1px);
             box-shadow: var(--shadow-lg);
         }
@@ -180,13 +180,18 @@
         
         .loading-spinner i {
             font-size: 32px;
-            color: var(--primary);
+            color: #059669;
             animation: spin 1s linear infinite;
         }
         
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
         }
         
         /* Alert badges */
@@ -264,8 +269,8 @@
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(0,121,107,0.1);
+            border-color: #059669;
+            box-shadow: 0 0 0 3px rgba(5,150,105,0.1);
         }
         
         .form-group input.error,
@@ -318,8 +323,8 @@
         }
         
         .file-upload-area:hover {
-            border-color: var(--primary);
-            background: rgba(0,121,107,0.05);
+            border-color: #059669;
+            background: rgba(5,150,105,0.05);
         }
         
         .file-upload-area.has-file {
@@ -346,14 +351,14 @@
         }
         
         .btn-primary {
-            background: var(--primary);
+            background: linear-gradient(135deg, #059669, #047857);
             color: white;
         }
         
         .btn-primary:hover:not(:disabled) {
-            background: var(--primary-dark);
+            background: linear-gradient(135deg, #047857, #065f46);
             transform: translateY(-1px);
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 4px 20px rgba(5,150,105,0.4);
         }
         
         .btn-secondary {
@@ -642,7 +647,7 @@
             top: 20px;
             left: 40px;
             height: 4px;
-            background: var(--primary);
+            background: linear-gradient(90deg, #059669, #10b981);
             z-index: 1;
             transition: width 0.5s ease;
         }
@@ -673,15 +678,15 @@
         }
         
         .progress-step.completed .progress-icon {
-            background: var(--primary);
-            border-color: var(--primary);
+            background: linear-gradient(135deg, #059669, #047857);
+            border-color: #059669;
             color: white;
         }
         
         .progress-step.active .progress-icon {
-            background: var(--primary-light);
-            border-color: var(--primary);
-            color: var(--primary-dark);
+            background: #10b981;
+            border-color: #059669;
+            color: white;
             animation: pulse 2s infinite;
         }
         
@@ -693,10 +698,10 @@
         
         @keyframes pulse {
             0%, 100% {
-                box-shadow: 0 0 0 0 rgba(0,121,107,0.4);
+                box-shadow: 0 0 0 0 rgba(5,150,105,0.4);
             }
             50% {
-                box-shadow: 0 0 0 8px rgba(0,121,107,0);
+                box-shadow: 0 0 0 8px rgba(5,150,105,0);
             }
         }
         
@@ -727,7 +732,7 @@
             background: var(--bg);
             padding: 12px 16px;
             border-radius: 8px;
-            border-left: 4px solid var(--primary);
+            border-left: 4px solid #059669;
             margin-top: 16px;
         }
         
@@ -765,7 +770,7 @@
         
         .tracking-ref {
             font-weight: 700;
-            color: var(--primary);
+            color: #059669;
         }
         
         .tracking-amount {
@@ -862,12 +867,8 @@
             },
             
             async init() {
-                // Show loading
-                this.showLoading();
+                this.loadStartTime = Date.now();
                 
-                // Load data
-                await this.loadData();
-
                 // URL takes priority
                 const params = new URLSearchParams(window.location.search);
                 const urlSession = params.get('session');
@@ -894,7 +895,13 @@
                     }
                 }
 
+                // Show dashboard immediately, load data in background
                 this.showView('dashboard');
+                
+                // Load data asynchronously (non-blocking)
+                this.loadData().catch(error => {
+                    console.error('Background data load error:', error);
+                });
             },
             
             showLoading() {
@@ -912,35 +919,144 @@
             
             async loadData() {
                 try {
-                    // Load with limits and proper ordering
-                    const [cnResult, payResult, retResult] = await Promise.all([
-                        supabaseClient
-                            .from('concept_notes')
-                            .select('*')
-                            .order('submittedDate', { ascending: false })
-                            .limit(200),
-                        supabaseClient
-                            .from('payments')
-                            .select('*')
-                            .order('requestDate', { ascending: false })
-                            .limit(200),
-                        supabaseClient
-                            .from('retirements')
-                            .select('*')
-                            .order('submittedDate', { ascending: false })
-                            .limit(200)
-                    ]);
+                    const role = this.getUserRole();
+                    
+                    // Strategy 1: If staff, load only their data
+                    if (role === 'staff') {
+                        const [cnResult, payResult, retResult] = await Promise.all([
+                            supabaseClient
+                                .from('concept_notes')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('submittedDate', { ascending: false }),
+                            supabaseClient
+                                .from('payments')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('requestDate', { ascending: false }),
+                            supabaseClient
+                                .from('retirements')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('submittedDate', { ascending: false })
+                        ]);
 
-                    this.data.conceptNotes = cnResult.data || [];
-                    this.data.payments = payResult.data || [];
-                    this.data.retirements = retResult.data || [];
+                        this.data.conceptNotes = cnResult.data || [];
+                        this.data.payments = payResult.data || [];
+                        this.data.retirements = retResult.data || [];
+                    } 
+                    // Strategy 2: If approver, load only pending items for their role + their own
+                    else {
+                        const queries = [];
+                        
+                        // Always load user's own items
+                        queries.push(
+                            supabaseClient
+                                .from('concept_notes')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('submittedDate', { ascending: false })
+                        );
+                        
+                        // Load pending items for this role
+                        if (role === 'budgetOwner' || role === 'ed' || role === 'procurement') {
+                            queries.push(
+                                supabaseClient
+                                    .from('concept_notes')
+                                    .select('*')
+                                    .eq('status', 'pending')
+                                    .order('submittedDate', { ascending: false })
+                                    .limit(50)
+                            );
+                        }
+                        
+                        if (role === 'finance') {
+                            queries.push(
+                                supabaseClient
+                                    .from('payments')
+                                    .select('*')
+                                    .eq('status', 'pending')
+                                    .order('requestDate', { ascending: false })
+                                    .limit(50)
+                            );
+                            queries.push(
+                                supabaseClient
+                                    .from('retirements')
+                                    .select('*')
+                                    .eq('status', 'pending')
+                                    .order('submittedDate', { ascending: false })
+                                    .limit(50)
+                            );
+                        }
+                        
+                        // Load user's own payments and retirements
+                        queries.push(
+                            supabaseClient
+                                .from('payments')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('requestDate', { ascending: false })
+                        );
+                        queries.push(
+                            supabaseClient
+                                .from('retirements')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('submittedDate', { ascending: false })
+                        );
+                        
+                        const results = await Promise.all(queries);
+                        
+                        // Merge results and deduplicate
+                        const allConceptNotes = [];
+                        const allPayments = [];
+                        const allRetirements = [];
+                        const seenCN = new Set();
+                        const seenPay = new Set();
+                        const seenRet = new Set();
+                        
+                        results.forEach(result => {
+                            if (!result.data) return;
+                            
+                            result.data.forEach(item => {
+                                if (item.refNumber && item.refNumber.startsWith('CN')) {
+                                    if (!seenCN.has(item.refNumber)) {
+                                        seenCN.add(item.refNumber);
+                                        allConceptNotes.push(item);
+                                    }
+                                } else if (item.refNumber && item.refNumber.startsWith('PAY')) {
+                                    if (!seenPay.has(item.refNumber)) {
+                                        seenPay.add(item.refNumber);
+                                        allPayments.push(item);
+                                    }
+                                } else if (item.refNumber && item.refNumber.startsWith('RET')) {
+                                    if (!seenRet.has(item.refNumber)) {
+                                        seenRet.add(item.refNumber);
+                                        allRetirements.push(item);
+                                    }
+                                }
+                            });
+                        });
+                        
+                        this.data.conceptNotes = allConceptNotes;
+                        this.data.payments = allPayments;
+                        this.data.retirements = allRetirements;
+                    }
                     
                     // Clear cache when data is reloaded
                     this.clearCache();
+                    
+                    // Refresh current view if dashboard
+                    if (document.querySelector('.nav button[data-view="dashboard"]')?.classList.contains('active')) {
+                        this.renderDashboard(document.getElementById('mainContent'));
+                    }
 
                 } catch (error) {
                     console.error('Data load error:', error);
-                    alert('Error loading data. Please refresh the page.');
+                    // Don't show error to user on background load
+                    if (this.data.conceptNotes.length === 0) {
+                        alert('Error loading data. Please refresh the page.');
+                    }
                 }
             },
             
@@ -1128,6 +1244,35 @@
                 const myPayments = this.getMyPayments();
                 const myRetirements = this.getMyRetirements();
                 
+                // Show skeleton if data is still loading
+                if (myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0) {
+                    const loadingTime = Date.now() - (this.loadStartTime || Date.now());
+                    if (loadingTime < 2000) {
+                        content.innerHTML = `
+                            <div class="header">
+                                <h2>Dashboard</h2>
+                                <p>Welcome back, ${this.currentUser.split(' ')[0]}</p>
+                            </div>
+                            <div class="stats-grid">
+                                ${[1,2,3,4].map(() => `
+                                    <div class="stat-card" style="background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); animation: shimmer 1.5s infinite;">
+                                        <div style="height: 20px; background: #ddd; border-radius: 4px; margin-bottom: 12px;"></div>
+                                        <div style="height: 40px; background: #ddd; border-radius: 4px;"></div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="loading-spinner" style="padding: 32px;">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p style="margin-top: 16px; color: var(--text-muted);">Loading your data...</p>
+                            </div>
+                        `;
+                        
+                        // Try again in 500ms
+                        setTimeout(() => this.renderDashboard(content), 500);
+                        return;
+                    }
+                }
+                
                 const unretiredPayments = myPayments.filter(p => 
                     p.status === 'paid' && !myRetirements.find(r => r.paymentRef === p.refNumber)
                 );
@@ -1140,11 +1285,27 @@
                 
                 const isLocked = unretiredPayments.length >= 2 || overdueRetirements.length > 0;
                 
+                // Get current time for greeting
+                const hour = new Date().getHours();
+                const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+                
                 content.innerHTML = `
                     <div class="header">
                         <h2>Dashboard</h2>
-                        <p>Welcome back, ${this.currentUser.split(' ')[0]}</p>
+                        <p>${greeting}, ${this.currentUser.split(' ')[0]} • <span style="color: var(--success);">● System Online</span></p>
                     </div>
+                    
+                    ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `
+                        <div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;">
+                            <h2 style="font-size: 28px; margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Welcome to RAHAMA FMS! 🎉</h2>
+                            <p style="font-size: 16px; opacity: 0.95; max-width: 600px; margin: 0 auto 24px;">
+                                You're all set to start managing your financial workflows. Create your first concept note to get started.
+                            </p>
+                            <button onclick="app.showView('conceptNote')" class="btn" style="background: white; color: var(--primary); padding: 16px 32px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                                Create Your First Concept Note →
+                            </button>
+                        </div>
+                    ` : ''}
                     
                     ${isLocked ? `
                         <div class="alert-badge danger">
@@ -2741,6 +2902,9 @@
                             <h3 style="margin-bottom: 16px;">User Information</h3>
                             <p><strong>Name:</strong> ${this.currentUser}</p>
                             <p><strong>Role:</strong> ${this.getUserRole() === 'staff' ? 'Staff Member' : this.getUserRole().toUpperCase()}</p>
+                            <p style="margin-top: 16px; padding: 16px; background: var(--bg); border-radius: 8px; font-size: 13px;">
+                                <strong>💡 Quick Tip:</strong> Your role determines what you can see and approve in the system. Contact your administrator if you need role changes.
+                            </p>
                         </div>
                         
                         <div class="form-group full-width">
@@ -2748,6 +2912,46 @@
                             <p><strong>Version:</strong> 2.0.0 (Optimized)</p>
                             <p><strong>Last Updated:</strong> ${new Date().toLocaleDateString()}</p>
                             <p><strong>Storage:</strong> Supabase Cloud Storage</p>
+                            <p><strong>Database:</strong> PostgreSQL with Row Level Security</p>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <h3 style="margin-bottom: 16px;">Need Help?</h3>
+                            <div style="background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                                <p style="margin-bottom: 16px; font-size: 14px;">For technical support or questions about the system:</p>
+                                <ul style="list-style: none; padding: 0; margin: 0;">
+                                    <li style="padding: 8px 0; border-bottom: 1px solid var(--border);">
+                                        <strong>Finance Questions:</strong> Contact Finance Team
+                                    </li>
+                                    <li style="padding: 8px 0; border-bottom: 1px solid var(--border);">
+                                        <strong>Approval Issues:</strong> Contact Budget Owner
+                                    </li>
+                                    <li style="padding: 8px 0; border-bottom: 1px solid var(--border);">
+                                        <strong>Technical Support:</strong> Contact IT Support
+                                    </li>
+                                    <li style="padding: 8px 0;">
+                                        <strong>System Administrator:</strong> Aisha Linatu Abdulrahman
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <h3 style="margin-bottom: 16px;">Keyboard Shortcuts</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                                <div style="background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px;">
+                                    <kbd style="background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace;">Alt + D</kbd>
+                                    <span style="margin-left: 8px;">Dashboard</span>
+                                </div>
+                                <div style="background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px;">
+                                    <kbd style="background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace;">Alt + C</kbd>
+                                    <span style="margin-left: 8px;">Create Concept Note</span>
+                                </div>
+                                <div style="background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px;">
+                                    <kbd style="background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace;">Alt + A</kbd>
+                                    <span style="margin-left: 8px;">My Approvals</span>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="btn-group full-width">
@@ -2769,6 +2973,34 @@
         // Initialize app when page loads
         window.addEventListener('DOMContentLoaded', () => {
             app.init();
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.altKey) {
+                    switch(e.key.toLowerCase()) {
+                        case 'd':
+                            e.preventDefault();
+                            app.showView('dashboard');
+                            break;
+                        case 'c':
+                            e.preventDefault();
+                            app.showView('conceptNote');
+                            break;
+                        case 'a':
+                            e.preventDefault();
+                            app.showView('approvals');
+                            break;
+                        case 'p':
+                            e.preventDefault();
+                            app.showView('payment');
+                            break;
+                        case 'r':
+                            e.preventDefault();
+                            app.showView('retirement');
+                            break;
+                    }
+                }
+            });
         });
     </script>
 </body>
