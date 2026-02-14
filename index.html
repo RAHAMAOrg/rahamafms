@@ -1087,7 +1087,11 @@
                             <label>Justification</label>
                             <textarea name="justification" placeholder="Additional payment information"></textarea>
                         </div>
-
+                        <div class="form-group full-width">
+    <label>Beneficiary List (Optional)</label>
+    <input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png">
+    <span class="form-hint">Upload attendance or payment list if paying multiple people</span>
+</div>
                         <div class="form-group">
                             <label>Account Name <span class="required">*</span></label>
                             <input type="text" name="accountName" required placeholder="Name as it appears on bank account">
@@ -1145,7 +1149,29 @@
                 event.preventDefault();
                 const form = event.target;
                 const formData = new FormData(form);
-                
+                // Check if beneficiary file was uploaded
+const file = document.getElementById('beneficiaryFile')?.files[0];
+
+let beneficiaryData = null;
+let beneficiaryName = null;
+
+if (file) {
+    const reader = new FileReader();
+    beneficiaryData = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+    beneficiaryName = file.name;
+}
+
+const toBase64 = file => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+});
+
                 const payment = {
                     refNumber: 'PAY' + Date.now(),
                     conceptNoteId: parseInt(formData.get('conceptNoteId')),
@@ -1157,7 +1183,10 @@
                     accountNumber: formData.get('accountNumber'),
                     bankName: formData.get('bankName'),
                     status: 'pending',
-                    requestDate: new Date().toISOString()
+                    requestDate: new Date().toISOString(),
+                    beneficiaryFile: beneficiaryData,
+                    beneficiaryFileName: beneficiaryName,
+
                 };
                 
                 const { data, error } = await supabaseClient
@@ -1432,24 +1461,33 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${pendingPayments.map(p => `
-                                        <tr>
-                                            <td>${p.refNumber}</td>
-                                            <td>${p.staffName}</td>
-                                            <td>₦${p.amount.toLocaleString()}</td>
-                                            <td>${p.paymentType}</td>
-                                            <td>${new Date(p.requestDate).toLocaleDateString()}</td>
-                                            <td>
-                                                <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
-                                                    ✓ Process Payment
-                                                </button>
-                                                <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
-                                                    ✗ Reject
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
+                                   <td>
+   <tbody>
+${pendingPayments.map(p => `
+<tr>
+    <td>${p.refNumber}</td>
+    <td>${p.staffName}</td>
+    <td>₦${p.amount.toLocaleString()}</td>
+    <td>${p.paymentMethod}</td>
+    <td>${new Date(p.requestDate).toLocaleDateString()}</td>
+    <td>
+        ${p.beneficiaryFile ? `
+            <button class="action-btn" onclick="window.open('${p.beneficiaryFile}')">
+                📎 Beneficiaries
+            </button>
+        ` : ''}
+
+        <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
+            ✓ Process Payment
+        </button>
+
+        <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
+            ✗ Reject
+        </button>
+    </td>
+</tr>
+`).join('')}
+</tbody>
                             </table>
                         </div>
                     ` : ''}
