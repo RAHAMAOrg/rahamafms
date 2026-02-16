@@ -2912,16 +2912,7 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
             </div>
         </div>
  `;
-},               
-                        ${cn.grrFileName ? `
-                            <div class="form-group">
-                                <label>GRR Document</label>
-                                <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">
-                                    📎 Download ${cn.grrFileName}
-                                </button>
-                            </div>
-                        ` : ''}
-                        
+},
                         ${cn.poFileName ? `
                             <div class="form-group">
                                 <label>PO/Invoice Document</label>
