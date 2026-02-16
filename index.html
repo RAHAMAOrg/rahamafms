@@ -899,19 +899,15 @@
                 }
 
                 // Show dashboard immediately, load data in background
-                this.showView('dashboard');
-                
-                // Load data asynchronously (non-blocking)
-                this.loadData().catch(error => {
-                    console.error('Background data load error:', error);
-                });
-            },
-            this.loadData().catch(error => {
-        console.error('Background data load error:', error);
-    }).then(() => {
-        // Start notification checker after data loads
-        this.checkForNewApprovals();
-    });
+              this.showView('dashboard');
+
+    this.loadData()
+        .catch(error => {
+            console.error('Background data load error:', error);
+        })
+        .then(() => {
+            this.checkForNewApprovals();
+        });
 },
             
             showLoading() {
