@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rahama Financial Management System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Archivo:wght@600;700&display=swap');
         
@@ -42,6 +43,43 @@
             grid-template-columns: 280px 1fr;
             min-height: 100vh;
         }
+        downloadFile(url, name) {
+    if (!url) {
+        alert('File not found.');
+        return;
+    }
+
+    window.open(url, '_blank');
+}
+        async uploadFile(file, folder = 'general') {
+    const fileName = `${folder}/${Date.now()}_${file.name}`;
+
+    const { error } = await supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .upload(fileName, file);
+
+    if (error) {
+        alert('Upload failed: ' + error.message);
+        return null;
+    }
+
+    const { data } = supabaseClient.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(fileName);
+
+    return {
+        url: data.publicUrl,
+        fileName: file.name
+    },
+                                  downloadFile(url, name) {
+    if (!url) {
+        alert('File not found.');
+        return;
+    }
+
+    window.open(url, '_blank');
+};
+}
         
         /* Sidebar */
         .sidebar {
@@ -608,6 +646,12 @@
     </div>
     
     <script>
+        const SUPABASE_URL = 'https://sqygmoxpegbfxddglhbx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8';
+const STORAGE_BUCKET = 'fms-documents';
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     const app = {
     currentUser: '',
     data: {
@@ -1672,14 +1716,16 @@ completeProcurementWithFile(refNumber) {
     const file = fileInput.files[0];
     const reader = new FileReader();
 
-    reader.onload = () => {
+  const uploaded = await this.uploadFile(file, 'procurement');
+if (!uploaded) return;
         cn.approvalHistory.push({
             approver: this.currentUser,
             role: 'Procurement Officer',
             action: 'procurement_completed',
             comment,
             fileName: file.name,
-            fileData: reader.result,
+            fileUrl: uploaded.url,
+fileName: uploaded.fileName,
             date: new Date().toISOString()
         });
 
