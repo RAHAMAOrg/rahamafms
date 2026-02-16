@@ -1733,9 +1733,6 @@ fileName: uploaded.fileName,
         this.saveData();
         alert('Sent to Finance successfully.');
         this.showView('approvals');
-    }
-
-    reader.readAsDataURL(file);
 },
             processPayment(refNumber) {
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
