@@ -2834,7 +2834,6 @@ projectCode: conceptNote?.projectCode,
             },
             
             renderReports(content) {
-                this.loadData();
                 const role = this.getUserRole();
                 
                 if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
