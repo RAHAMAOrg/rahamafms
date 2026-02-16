@@ -747,9 +747,9 @@ this.showView('dashboard');
              // Update active nav safely
 document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
 
-if (typeof event !== 'undefined' && event?.target) {
-    event.target.classList.add('active');
-}
+const activeBtn = document.querySelector(`.nav button[onclick="app.showView('${viewName}')"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+},
                 const content = document.getElementById('mainContent');
                 
                 if (!this.currentUser) {
