@@ -2,21 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rahama Financial Management System</title>
-    <link rel="icon" type="image/png" href="RAHAMA Empowerment Logo Design (3).png">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Archivo:wght@600;700&display=swap');
         
         :root {
-            --primary: #059669;
-            --primary-dark: #047857;
-            --primary-light: #10b981;
-            --accent: #34d399;
+            --primary: #00796B;
+            --primary-dark: #004D40;
+            --primary-light: #4DB6AC;
+            --accent: #FF6F00;
             --danger: #D32F2F;
             --warning: #F57C00;
-            --success: #059669;
+            --success: #388E3C;
             --bg: #F5F7FA;
             --surface: #FFFFFF;
             --text: #1A1A1A;
@@ -63,7 +61,7 @@
             font-family: 'Archivo', sans-serif;
             font-size: 20px;
             font-weight: 700;
-            color: #059669;
+            color: var(--primary);
             margin-bottom: 4px;
         }
         
@@ -89,6 +87,16 @@
             letter-spacing: 0.5px;
             color: var(--text-muted);
             margin-bottom: 8px;
+        }
+        
+        .user-info select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            background: var(--surface);
         }
         
         .nav {
@@ -133,7 +141,7 @@
         .portal-link {
             margin: 24px 16px 0;
             padding: 12px;
-            background: linear-gradient(135deg, #059669, #047857);
+            background: var(--primary);
             color: white;
             text-align: center;
             border-radius: 8px;
@@ -145,7 +153,7 @@
         }
         
         .portal-link:hover {
-            background: linear-gradient(135deg, #047857, #065f46);
+            background: var(--primary-dark);
             transform: translateY(-1px);
             box-shadow: var(--shadow-lg);
         }
@@ -171,28 +179,6 @@
         .header p {
             color: var(--text-muted);
             font-size: 14px;
-        }
-        
-        /* Loading spinner */
-        .loading-spinner {
-            text-align: center;
-            padding: 64px;
-        }
-        
-        .loading-spinner i {
-            font-size: 32px;
-            color: #059669;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        
-        @keyframes shimmer {
-            0% { background-position: -1000px 0; }
-            100% { background-position: 1000px 0; }
         }
         
         /* Alert badges */
@@ -270,20 +256,8 @@
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #059669;
-            box-shadow: 0 0 0 3px rgba(5,150,105,0.1);
-        }
-        
-        .form-group input.error,
-        .form-group select.error,
-        .form-group textarea.error {
-            border-color: var(--danger);
-        }
-        
-        .form-error {
-            color: var(--danger);
-            font-size: 12px;
-            margin-top: -4px;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0,121,107,0.1);
         }
         
         .form-group textarea {
@@ -313,26 +287,6 @@
             color: var(--warning);
         }
         
-        /* File upload */
-        .file-upload-area {
-            border: 2px dashed var(--border);
-            border-radius: 8px;
-            padding: 24px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .file-upload-area:hover {
-            border-color: #059669;
-            background: rgba(5,150,105,0.05);
-        }
-        
-        .file-upload-area.has-file {
-            border-color: var(--success);
-            background: #E8F5E9;
-        }
-        
         /* Buttons */
         .btn-group {
             display: flex;
@@ -352,14 +306,14 @@
         }
         
         .btn-primary {
-            background: linear-gradient(135deg, #059669, #047857);
+            background: var(--primary);
             color: white;
         }
         
         .btn-primary:hover:not(:disabled) {
-            background: linear-gradient(135deg, #047857, #065f46);
+            background: var(--primary-dark);
             transform: translateY(-1px);
-            box-shadow: 0 4px 20px rgba(5,150,105,0.4);
+            box-shadow: var(--shadow-lg);
         }
         
         .btn-secondary {
@@ -525,16 +479,15 @@
         
         /* Action buttons in table */
         .action-btn {
-            padding: 12px 18px;
+            padding: 6px 12px;
             background: none;
             border: 1px solid var(--border);
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             margin-right: 8px;
-            min-width: 180px;
         }
         
         .action-btn:hover {
@@ -565,6 +518,13 @@
             text-align: center;
             padding: 64px 32px;
             color: var(--text-muted);
+        }
+        
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            opacity: 0.3;
         }
         
         .workflow-diagram {
@@ -613,196 +573,28 @@
             font-size: 13px;
             color: var(--text-muted);
         }
-        
-        /* Progress Tracker */
-        .progress-tracker {
-            background: var(--surface);
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            margin-bottom: 24px;
-        }
-        
-        .progress-timeline {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: relative;
-            margin: 32px 0;
-        }
-        
-        .progress-timeline::before {
-            content: '';
-            position: absolute;
-            top: 20px;
-            left: 40px;
-            right: 40px;
-            height: 4px;
-            background: var(--border);
-            z-index: 0;
-        }
-        
-        .progress-line {
-            position: absolute;
-            top: 20px;
-            left: 40px;
-            height: 4px;
-            background: linear-gradient(90deg, #059669, #10b981);
-            z-index: 1;
-            transition: width 0.5s ease;
-        }
-        
-        .progress-step {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            position: relative;
-            z-index: 2;
-            flex: 1;
-        }
-        
-        .progress-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--surface);
-            border: 3px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 16px;
-            color: var(--text-muted);
-            transition: all 0.3s;
-        }
-        
-        .progress-step.completed .progress-icon {
-            background: linear-gradient(135deg, #059669, #047857);
-            border-color: #059669;
-            color: white;
-        }
-        
-        .progress-step.active .progress-icon {
-            background: #10b981;
-            border-color: #059669;
-            color: white;
-            animation: pulse 2s infinite;
-        }
-        
-        .progress-step.rejected .progress-icon {
-            background: var(--danger);
-            border-color: var(--danger);
-            color: white;
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                box-shadow: 0 0 0 0 rgba(5,150,105,0.4);
-            }
-            50% {
-                box-shadow: 0 0 0 8px rgba(5,150,105,0);
-            }
-        }
-        
-        .progress-label {
-            text-align: center;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-muted);
-            max-width: 100px;
-        }
-        
-        .progress-step.completed .progress-label,
-        .progress-step.active .progress-label {
-            color: var(--text);
-        }
-        
-        .progress-step.rejected .progress-label {
-            color: var(--danger);
-        }
-        
-        .progress-date {
-            font-size: 10px;
-            color: var(--text-muted);
-            margin-top: 4px;
-        }
-        
-        .progress-note {
-            background: var(--bg);
-            padding: 12px 16px;
-            border-radius: 8px;
-            border-left: 4px solid #059669;
-            margin-top: 16px;
-        }
-        
-        .progress-note.warning {
-            border-left-color: var(--warning);
-            background: #FFF3E0;
-        }
-        
-        .progress-note.danger {
-            border-left-color: var(--danger);
-            background: #FFEBEE;
-        }
-        
-        .tracking-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .tracking-card:hover {
-            box-shadow: var(--shadow);
-            transform: translateY(-2px);
-        }
-        
-        .tracking-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-        
-        .tracking-ref {
-            font-weight: 700;
-            color: #059669;
-        }
-        
-        .tracking-amount {
-            font-weight: 700;
-            color: var(--text);
-        }
     </style>
 </head>
 <body>
     <div class="app">
         <div class="sidebar">
             <div class="logo">
-    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width: 80px; height: 80px; object-fit: contain; margin: 0 auto 12px; display: block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-    <div style="display: none;">
-        <h1>Rahama FMS</h1>
-    </div>
-    <p style="text-align: center;">Financial Management System</p>
-</div>
-            <div class="user-info">
-                <label>Signed in as</label>
-                <div id="loggedInUser" style="font-weight:600;"></div>
+                <h1>Rahama FMS</h1>
+                <p>Financial Management System</p>
             </div>
+           <div class="user-info">
+    <label>Signed in as</label>
+    <div id="loggedInUser" style="font-weight:600;"></div>
+</div>
             
             <ul class="nav">
-                <li><button onclick="app.showView('dashboard')" class="active" data-view="dashboard">Dashboard</button></li>
-                <li><button onclick="app.showView('conceptNote')" data-view="conceptNote">Create Concept Note</button></li>
-                <li><button onclick="app.showView('payment')" data-view="payment">Request Payment</button></li>
-                <li><button onclick="app.showView('retirement')" data-view="retirement">Submit Retirement</button></li>
-                <li><button onclick="app.showView('approvals')" data-view="approvals">My Approvals</button></li>
-                <li><button id="reportsBtn" onclick="app.showView('reports')" data-view="reports">Reports & Budget</button></li>
-                <li><button onclick="app.showView('settings')" data-view="settings">Settings</button></li>
+                <li><button onclick="app.showView('dashboard')" class="active">Dashboard</button></li>
+                <li><button onclick="app.showView('conceptNote')">Create Concept Note</button></li>
+                <li><button onclick="app.showView('payment')">Request Payment</button></li>
+                <li><button onclick="app.showView('retirement')">Submit Retirement</button></li>
+                <li><button onclick="app.showView('approvals')">My Approvals</button></li>
+                <li><button id="reportsBtn" onclick="app.showView('reports')">Reports & Budget</button></li>
+                <li><button onclick="app.showView('settings')">Settings</button></li>
             </ul>
             
             <a href="https://rahamaorg.github.io/appraisal-system/" class="portal-link" target="_blank">
@@ -816,500 +608,148 @@
     </div>
     
     <script>
-        const SUPABASE_URL = "https://sqygmoxpegbfxddglhbx.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8";
-        const STORAGE_BUCKET = 'fms-documents';  // Supabase Storage bucket name
-        const MAX_FILE_SIZE = 5 * 1024 * 1024;  // 5MB limit
+    const app = {
+    currentUser: '',
+    data: {
+        conceptNotes: [],
+        payments: [],
+        retirements: [],
 
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        
-        const app = {
-            currentUser: '',
-            cache: {
-                myConceptNotes: null,
-                myPayments: null,
-                myRetirements: null
-            },
-            data: {
-                conceptNotes: [],
-                payments: [],
-                retirements: [],
+        staff: [
+            'Usman Musa',
+            'Aisha Linatu Abdulrahman',
+            'Fatima Yusuf Matsayi',
+            'Khadijah Abdulrahman',
+            'Sani Hamisu',
+            'Salahuddeen Sambo',
+            'Ahmad Abdulrahman Tijjani',
+            'Maryam Abdulrahman Tijjani',
+            'Sumayya Adam',
+            'Aisha Umar',
+            'Paulina Paul',
+            'Fatima Tijjani'
+        ],
 
-                staff: [
-                    'Musa Usman',
-                    'Aisha Linatu Abdulrahman',
-                    'Fatima Yusuf Matsayi',
-                    'Khadijah Abdulrahman',
-                    'Sani Hamisu',
-                    'Salahuddeen Sambo',
-                    'Ahmad Abdulrahman Tijjani',
-                    'Maryam Abdulrahman Tijjani',
-                    'Sumayya Adam',
-                    'Aisha Umar',
-                    'Paulina Paul',
-                    'Fatima Tijjani'
-                ],
+        projects: [
+            { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
+            { code: 'CBA101', name: 'Community Health Initiative', budget: 16000000 },
+            { code: 'GEPP101', name: 'Girls Education & Protection Program GEPP', budget: 75000000 },
+            { code: 'AYP101', name: 'Adolescents and Young People Project', budget: 8000000 },
+            { code: 'TES101', name: 'TES', budget: 500000 },
+            { code: 'ADM001', name: 'Admin & Operations', budget: 1000000 }
+        ],
 
-                projects: [
-                    { code: 'DRT102', name: 'Ascent Phase II', budget: 35000000 },
-                    { code: 'CBA101', name: 'Community Health Initiative', budget: 16000000 },
-                    { code: 'GEPP101', name: 'Girls Education & Protection Program GEPP', budget: 75000000 },
-                    { code: 'AYP101', name: 'Adolescents and Young People Project', budget: 8000000 },
-                    { code: 'TES101', name: 'TES', budget: 500000 },
-                    { code: 'ADM001', name: 'Admin & Operations', budget: 1000000 }
-                ],
+        roles: {
+            'Aisha Linatu Abdulrahman': 'budgetOwner',
+            'Fatima Tijjani': 'ed',
+            'Fatima Yusuf Matsayi': 'procurement',
+            'Musa Usman': 'procurement',
+            'Salahuddeen Ahmad': 'finance',
+            'Sani Hamisu': 'finance'
+        }
+    },
+init() {
+    this.loadData();
 
-                roles: {
-                    'Aisha Linatu Abdulrahman': 'budgetOwner',
-                    'Fatima Tijjani': 'ed',
-                    'Khadijah Abdulrahman': 'procurement',
-                    'Fatima Yusuf Matsayi': 'procurement',
-                    'Musa Usman': 'procurement',
-                    'Salahuddeen Sambo': 'finance',
-                    'Sani Hamisu': 'finance'
+    // ALWAYS try URL first
+    const params = new URLSearchParams(window.location.search);
+    const urlSession = params.get('session');
+
+    if (urlSession) {
+    localStorage.setItem('pms_user', decodeURIComponent(urlSession));
+}
+
+    const session = localStorage.getItem('pms_user');
+
+    if (session) {
+    const user = JSON.parse(session);
+    this.currentUser = user.name;
+
+    const el = document.getElementById('loggedInUser');
+    if (el) el.innerText = user.name;
+
+    /* ===== HIDE REPORTS IF NOT AUTHORIZED ===== */
+    const role = this.getUserRole();
+    const btn = document.getElementById('reportsBtn');
+
+    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+        if (btn) btn.style.display = 'none';
+    }
+    /* ========================================== */
+}
+
+this.showView('dashboard');
+},
+            
+            loadData() {
+                const saved = localStorage.getItem('fms_data');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    this.data.conceptNotes = parsed.conceptNotes || [];
+                    this.data.payments = parsed.payments || [];
+                    this.data.retirements = parsed.retirements || [];
                 }
             },
             
-            async init() {
-                this.loadStartTime = Date.now();
-                
-                // URL takes priority
-                const params = new URLSearchParams(window.location.search);
-                const urlSession = params.get('session');
-
-                if (urlSession) {
-                    localStorage.setItem('pms_user', decodeURIComponent(urlSession));
-                }
-
-                const session = localStorage.getItem('pms_user');
-
-                if (session) {
-                    const user = JSON.parse(session);
-                    this.currentUser = user.name;
-
-                    const el = document.getElementById('loggedInUser');
-                    if (el) el.innerText = user.name;
-
-                    // Hide Reports if not authorized
-                    const role = this.getUserRole();
-                    const btn = document.getElementById('reportsBtn');
-
-                    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
-                        if (btn) btn.style.display = 'none';
-                    }
-                }
-
-                // Show dashboard immediately, load data in background
-                this.showView('dashboard');
-                
-                // Load data asynchronously (non-blocking)
-                this.loadData().catch(error => {
-                    console.error('Background data load error:', error);
-                });
-            },
-            
-            showLoading() {
-                const content = document.getElementById('mainContent');
-                content.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
-            },
-            
-            clearCache() {
-                this.cache = {
-                    myConceptNotes: null,
-                    myPayments: null,
-                    myRetirements: null
-                };
-            },
-            
-            async loadData() {
-                try {
-                    const role = this.getUserRole();
-                    
-                    // Strategy 1: If staff, load only their data
-                    if (role === 'staff') {
-                        const [cnResult, payResult, retResult] = await Promise.all([
-                            supabaseClient
-                                .from('concept_notes')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('submittedDate', { ascending: false }),
-                            supabaseClient
-                                .from('payments')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('requestDate', { ascending: false }),
-                            supabaseClient
-                                .from('retirements')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('submittedDate', { ascending: false })
-                        ]);
-
-                        this.data.conceptNotes = cnResult.data || [];
-                        this.data.payments = payResult.data || [];
-                        this.data.retirements = retResult.data || [];
-                    } 
-                    // Strategy 2: If approver, load only pending items for their role + their own
-                    else {
-                        const queries = [];
-                        
-                        // Always load user's own items
-                        queries.push(
-                            supabaseClient
-                                .from('concept_notes')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('submittedDate', { ascending: false })
-                        );
-                        
-                        // Load pending items for this role
-                        if (role === 'budgetOwner' || role === 'ed' || role === 'procurement') {
-                            queries.push(
-                                supabaseClient
-                                    .from('concept_notes')
-                                    .select('*')
-                                    .eq('status', 'pending')
-                                    .order('submittedDate', { ascending: false })
-                                    .limit(50)
-                            );
-                        }
-                        
-                        if (role === 'finance') {
-                            queries.push(
-                                supabaseClient
-                                    .from('payments')
-                                    .select('*')
-                                    .eq('status', 'pending')
-                                    .order('requestDate', { ascending: false })
-                                    .limit(50)
-                            );
-                            queries.push(
-                                supabaseClient
-                                    .from('retirements')
-                                    .select('*')
-                                    .eq('status', 'pending')
-                                    .order('submittedDate', { ascending: false })
-                                    .limit(50)
-                            );
-                        }
-                        
-                        // Load user's own payments and retirements
-                        queries.push(
-                            supabaseClient
-                                .from('payments')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('requestDate', { ascending: false })
-                        );
-                        queries.push(
-                            supabaseClient
-                                .from('retirements')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('submittedDate', { ascending: false })
-                        );
-                        
-                        const results = await Promise.all(queries);
-                        
-                        // Merge results and deduplicate
-                        const allConceptNotes = [];
-                        const allPayments = [];
-                        const allRetirements = [];
-                        const seenCN = new Set();
-                        const seenPay = new Set();
-                        const seenRet = new Set();
-                        
-                        results.forEach(result => {
-                            if (!result.data) return;
-                            
-                            result.data.forEach(item => {
-                                if (item.refNumber && item.refNumber.startsWith('CN')) {
-                                    if (!seenCN.has(item.refNumber)) {
-                                        seenCN.add(item.refNumber);
-                                        allConceptNotes.push(item);
-                                    }
-                                } else if (item.refNumber && item.refNumber.startsWith('PAY')) {
-                                    if (!seenPay.has(item.refNumber)) {
-                                        seenPay.add(item.refNumber);
-                                        allPayments.push(item);
-                                    }
-                                } else if (item.refNumber && item.refNumber.startsWith('RET')) {
-                                    if (!seenRet.has(item.refNumber)) {
-                                        seenRet.add(item.refNumber);
-                                        allRetirements.push(item);
-                                    }
-                                }
-                            });
-                        });
-                        
-                        this.data.conceptNotes = allConceptNotes;
-                        this.data.payments = allPayments;
-                        this.data.retirements = allRetirements;
-                    }
-                    
-                    // Clear cache when data is reloaded
-                    this.clearCache();
-                    
-                    // Refresh current view if dashboard
-                    if (document.querySelector('.nav button[data-view="dashboard"]')?.classList.contains('active')) {
-                        this.renderDashboard(document.getElementById('mainContent'));
-                    }
-
-                } catch (error) {
-                    console.error('Data load error:', error);
-                    // Don't show error to user on background load
-                    if (this.data.conceptNotes.length === 0) {
-                        alert('Error loading data. Please refresh the page.');
-                    }
-                }
-            },
-            
-            getUserRole() {
-                return this.data.roles[this.currentUser] || 'staff';
-            },
-            
-            getMyConceptNotes() {
-                if (!this.cache.myConceptNotes) {
-                    this.cache.myConceptNotes = this.data.conceptNotes.filter(
-                        cn => cn.staffName === this.currentUser
-                    );
-                }
-                return this.cache.myConceptNotes;
-            },
-            
-            getMyPayments() {
-                if (!this.cache.myPayments) {
-                    this.cache.myPayments = this.data.payments.filter(
-                        p => p.staffName === this.currentUser
-                    );
-                }
-                return this.cache.myPayments;
-            },
-            
-            getMyRetirements() {
-                if (!this.cache.myRetirements) {
-                    this.cache.myRetirements = this.data.retirements.filter(
-                        r => r.staffName === this.currentUser
-                    );
-                }
-                return this.cache.myRetirements;
-            },
-            
-            updateProjectBudget(projectCode) {
-                const project = this.data.projects.find(p => p.code === projectCode);
-                const infoDiv = document.getElementById('budgetInfo');
-                
-                if (project && infoDiv) {
-                    const spent = this.getProjectSpent(projectCode);
-                    const remaining = project.budget - spent;
-                    const percentUsed = (spent / project.budget * 100).toFixed(1);
-                    
-                    infoDiv.innerHTML = `
-                        <strong>Budget Status:</strong> ₦${remaining.toLocaleString()} remaining 
-                        (${percentUsed}% used of ₦${project.budget.toLocaleString()})
-                    `;
-                    
-                    if (percentUsed > 80) {
-                        infoDiv.className = 'threshold-info high';
-                    } else {
-                        infoDiv.className = 'threshold-info';
-                    }
-                    
-                    infoDiv.style.display = 'block';
-                }
-            },
-            
-            getProjectSpent(projectCode) {
-                return this.data.payments
-                    .filter(p => p.projectCode === projectCode && p.status === 'paid')
-                    .reduce((sum, p) => sum + (p.amount || 0), 0);
-            },
-            
-            // FILE UPLOAD HELPERS with Supabase Storage
-            async uploadFile(file, type = 'general') {
-                if (!file) return null;
-                
-                // Validate file size
-                if (file.size > MAX_FILE_SIZE) {
-                    throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-                }
-                
-                // Create unique filename
-                const timestamp = Date.now();
-                const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                const fileName = `${type}/${timestamp}_${sanitizedName}`;
-                
-                try {
-                    // Upload to Supabase Storage
-                    const { data, error } = await supabaseClient.storage
-                        .from(STORAGE_BUCKET)
-                        .upload(fileName, file);
-                    
-                    if (error) throw error;
-                    
-                    // Get public URL
-                    const { data: urlData } = supabaseClient.storage
-                        .from(STORAGE_BUCKET)
-                        .getPublicUrl(fileName);
-                    
-                    return {
-                        url: urlData.publicUrl,
-                        fileName: file.name,
-                        size: file.size,
-                        type: file.type
-                    };
-                } catch (error) {
-                    console.error('Upload error:', error);
-                    throw new Error('Failed to upload file: ' + error.message);
-                }
-            },
-            
-            async downloadFile(fileUrl, fileName) {
-                try {
-                    const response = await fetch(fileUrl);
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName || 'download';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url);
-                } catch (error) {
-                    console.error('Download error:', error);
-                    alert('Failed to download file');
-                }
-            },
-            
-            // INPUT VALIDATION
-            validateAccountNumber(accountNumber) {
-                return /^\d{10}$/.test(accountNumber);
-            },
-            
-            validateAmount(amount) {
-                return !isNaN(amount) && amount > 0;
-            },
-            
-            showError(elementId, message) {
-                const element = document.getElementById(elementId);
-                if (element) {
-                    element.classList.add('error');
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'form-error';
-                    errorDiv.textContent = message;
-                    element.parentNode.appendChild(errorDiv);
-                }
-            },
-            
-            clearErrors() {
-                document.querySelectorAll('.error').forEach(el => el.classList.remove('error'));
-                document.querySelectorAll('.form-error').forEach(el => el.remove());
+            saveData() {
+                localStorage.setItem('fms_data', JSON.stringify({
+                    conceptNotes: this.data.conceptNotes,
+                    payments: this.data.payments,
+                    retirements: this.data.retirements
+                }));
             },
             
             showView(viewName) {
-                // Update active nav
-                document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
-                const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
-                if (targetBtn) targetBtn.classList.add('active');
-                
+             // Update active nav safely
+document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+
+if (typeof event !== 'undefined' && event?.target) {
+    event.target.classList.add('active');
+}
                 const content = document.getElementById('mainContent');
                 
                 if (!this.currentUser) {
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <h2>User session not found</h2>
-                            <p>Please login from the Staff Portal.</p>
-                        </div>
-                    `;
-                    return;
+    content.innerHTML = `
+        <div class="empty-state">
+            <h2>User session not found</h2>
+            <p>Please login from the Staff Portal.</p>
+        </div>
+    `;
+    return;
+}
+                
+                switch(viewName) {
+                    case 'dashboard': this.renderDashboard(content); break;
+                    case 'conceptNote': this.renderConceptNoteForm(content); break;
+                    case 'payment': this.renderPaymentForm(content); break;
+                    case 'retirement': this.renderRetirementForm(content); break;
+                    case 'approvals': this.renderApprovals(content); break;
+                    case 'reports': this.renderReports(content); break;
+                    case 'settings': this.renderSettings(content); break;
                 }
-                
-                // Show loading first
-                this.showLoading();
-                
-                // Render after short delay to show loading
-                setTimeout(() => {
-                    switch(viewName) {
-                        case 'dashboard': this.renderDashboard(content); break;
-                        case 'conceptNote': this.renderConceptNoteForm(content); break;
-                        case 'payment': this.renderPaymentForm(content); break;
-                        case 'retirement': this.renderRetirementForm(content); break;
-                        case 'approvals': this.renderApprovals(content); break;
-                        case 'reports': this.renderReports(content); break;
-                        case 'settings': this.renderSettings(content); break;
-                    }
-                }, 100);
             },
             
             renderDashboard(content) {
-                const myConceptNotes = this.getMyConceptNotes();
-                const myPayments = this.getMyPayments();
-                const myRetirements = this.getMyRetirements();
-                
-                // Show skeleton if data is still loading
-                if (myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0) {
-                    const loadingTime = Date.now() - (this.loadStartTime || Date.now());
-                    if (loadingTime < 2000) {
-                        content.innerHTML = `
-                            <div class="header">
-                                <h2>Dashboard</h2>
-                                <p>Welcome back, ${this.currentUser.split(' ')[0]}</p>
-                            </div>
-                            <div class="stats-grid">
-                                ${[1,2,3,4].map(() => `
-                                    <div class="stat-card" style="background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); animation: shimmer 1.5s infinite;">
-                                        <div style="height: 20px; background: #ddd; border-radius: 4px; margin-bottom: 12px;"></div>
-                                        <div style="height: 40px; background: #ddd; border-radius: 4px;"></div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <div class="loading-spinner" style="padding: 32px;">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                <p style="margin-top: 16px; color: var(--text-muted);">Loading your data...</p>
-                            </div>
-                        `;
-                        
-                        // Try again in 500ms
-                        setTimeout(() => this.renderDashboard(content), 500);
-                        return;
-                    }
-                }
+                const myConceptNotes = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser);
+                const myPayments = this.data.payments.filter(p => p.staffName === this.currentUser);
+                const myRetirements = this.data.retirements.filter(r => r.staffName === this.currentUser);
                 
                 const unretiredPayments = myPayments.filter(p => 
-                    p.status === 'paid' && !myRetirements.find(r => r.paymentRef === p.refNumber)
+                    p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)
                 );
                 
                 const overdueRetirements = unretiredPayments.filter(p => {
-                    if (!p.paidDate) return false;
                     const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
                     return daysSince > 10;
                 });
                 
                 const isLocked = unretiredPayments.length >= 2 || overdueRetirements.length > 0;
                 
-                // Get current time for greeting
-                const hour = new Date().getHours();
-                const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-                
                 content.innerHTML = `
                     <div class="header">
                         <h2>Dashboard</h2>
-                        <p>${greeting}, ${this.currentUser.split(' ')[0]} • <span style="color: var(--success);">● System Online</span></p>
+                        <p>Welcome back, ${this.currentUser.split(' ')[0]}</p>
                     </div>
-                    
-                    ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `
-                        <div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;">
-                            <h2 style="font-size: 28px; margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Welcome to RAHAMA FMS! 🎉</h2>
-                            <p style="font-size: 16px; opacity: 0.95; max-width: 600px; margin: 0 auto 24px;">
-                                You're all set to start managing your financial workflows. Create your first concept note to get started.
-                            </p>
-                            <button onclick="app.showView('conceptNote')" class="btn" style="background: white; color: var(--primary); padding: 16px 32px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                                Create Your First Concept Note →
-                            </button>
-                        </div>
-                    ` : ''}
                     
                     ${isLocked ? `
                         <div class="alert-badge danger">
@@ -1381,41 +821,6 @@
                         </div>
                     </div>
                     
-                    <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">My Concept Notes</h3>
-                    ${myConceptNotes.length === 0 ? `
-                        <div class="empty-state" style="padding: 32px;">
-                            <p>No concept notes yet. Create one to get started!</p>
-                        </div>
-                    ` : `
-                        <div style="margin-bottom: 32px;">
-                            ${myConceptNotes.slice(0, 5).map(cn => {
-                                const progress = this.getConceptNoteProgress(cn);
-                                return `
-                                    <div class="tracking-card" onclick="app.showConceptNoteTracking('${cn.refNumber}')">
-                                        <div class="tracking-header">
-                                            <div>
-                                                <span class="tracking-ref">${cn.refNumber}</span>
-                                                <span style="color: var(--text-muted); font-size: 13px; margin-left: 12px;">${cn.activityTitle}</span>
-                                            </div>
-                                            <span class="tracking-amount">₦${cn.estimatedCost.toLocaleString()}</span>
-                                        </div>
-                                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                                            <div style="flex: 1; margin-right: 16px;">
-                                                <div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
-                                                    <div style="height: 100%; background: ${cn.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'}; width: ${progress.percentComplete}%; transition: width 0.3s;"></div>
-                                                </div>
-                                                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                                                    ${progress.currentStep}
-                                                </div>
-                                            </div>
-                                            <span class="status-badge status-${cn.status}">${cn.status}</span>
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    `}
-                    
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Recent Activity</h3>
                     <div class="table-container">
                         <table>
@@ -1446,11 +851,8 @@
             
             getRecentActivity() {
                 const activity = [];
-                const myConceptNotes = this.getMyConceptNotes();
-                const myPayments = this.getMyPayments();
-                const myRetirements = this.getMyRetirements();
                 
-                myConceptNotes.forEach(cn => {
+                this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser).forEach(cn => {
                     activity.push({
                         date: cn.submittedDate,
                         type: 'Concept Note',
@@ -1460,7 +862,7 @@
                     });
                 });
                 
-                myPayments.forEach(p => {
+                this.data.payments.filter(p => p.staffName === this.currentUser).forEach(p => {
                     activity.push({
                         date: p.requestDate,
                         type: 'Payment',
@@ -1470,7 +872,7 @@
                     });
                 });
                 
-                myRetirements.forEach(r => {
+                this.data.retirements.filter(r => r.staffName === this.currentUser).forEach(r => {
                     activity.push({
                         date: r.submittedDate,
                         type: 'Retirement',
@@ -1483,183 +885,6 @@
                 return activity.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
             },
             
-            getConceptNoteProgress(cn) {
-                const steps = [
-                    { id: 'submitted', label: 'Submitted', icon: '📝', date: cn.submittedDate },
-                    { id: 'budgetOwner', label: 'Budget Owner', icon: '👤', date: null },
-                    { id: 'ed', label: 'Executive Director', icon: '👔', date: cn.forwardedToED },
-                    { id: 'procurement', label: 'Procurement', icon: '🛒', date: cn.sentToProcurement },
-                    { id: 'approved', label: 'Approved', icon: '✓', date: cn.approvedDate }
-                ];
-                
-                let progress = {
-                    steps: [],
-                    currentStep: '',
-                    percentComplete: 0,
-                    message: ''
-                };
-                
-                // Filter out skipped steps
-                let activeSteps = [steps[0]]; // Always include submitted
-                
-                // Check if it went through budget owner
-                if (cn.status === 'pending' && cn.currentApprover === 'budgetOwner') {
-                    activeSteps.push({ ...steps[1], status: 'active' });
-                    progress.currentStep = 'Budget Owner Review';
-                    progress.message = 'Awaiting Budget Owner approval';
-                }
-                
-                // Check if forwarded to ED
-                if (cn.forwardedToED || (cn.status === 'pending' && cn.currentApprover === 'ed')) {
-                    activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
-                    activeSteps.push({ 
-                        ...steps[2], 
-                        status: cn.currentApprover === 'ed' ? 'active' : 'completed' 
-                    });
-                    if (cn.currentApprover === 'ed') {
-                        progress.currentStep = 'Executive Director Review';
-                        progress.message = 'Awaiting ED approval';
-                    }
-                }
-                
-                // Check if sent to procurement
-                if (cn.sentToProcurement || (cn.status === 'pending' && cn.currentApprover === 'procurement')) {
-                    if (!cn.forwardedToED) {
-                        activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
-                    }
-                    activeSteps.push({ 
-                        ...steps[3], 
-                        status: cn.currentApprover === 'procurement' ? 'active' : 'completed' 
-                    });
-                    if (cn.currentApprover === 'procurement') {
-                        progress.currentStep = 'Procurement Processing';
-                        progress.message = 'Items being procured';
-                    }
-                }
-                
-                // Check if approved
-                if (cn.status === 'approved') {
-                    if (!cn.sentToProcurement && !cn.forwardedToED) {
-                        activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
-                    }
-                    activeSteps.push({ ...steps[4], status: 'completed' });
-                    progress.currentStep = 'Approved';
-                    progress.message = '✓ Concept note approved! Payment can be requested.';
-                }
-                
-                // Check if rejected
-                if (cn.status === 'rejected') {
-                    const lastStep = activeSteps[activeSteps.length - 1];
-                    lastStep.status = 'rejected';
-                    progress.currentStep = 'Rejected';
-                    progress.message = `❌ Rejected: ${cn.rejectionReason || 'See comments'}`;
-                }
-                
-                progress.steps = activeSteps;
-                progress.percentComplete = ((activeSteps.filter(s => s.status === 'completed').length) / activeSteps.length) * 100;
-                
-                return progress;
-            },
-            
-            showConceptNoteTracking(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
-                
-                const progress = this.getConceptNoteProgress(cn);
-                const content = document.getElementById('mainContent');
-                
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Track Concept Note</h2>
-                        <p>Follow your concept note through the approval process</p>
-                    </div>
-                    
-                    <div class="progress-tracker">
-                        <div class="tracking-header">
-                            <div>
-                                <h3 style="font-family: 'Archivo', sans-serif; margin-bottom: 8px;">${cn.activityTitle}</h3>
-                                <p style="color: var(--text-muted); font-size: 14px;">
-                                    ${cn.refNumber} • ₦${cn.estimatedCost.toLocaleString()}
-                                </p>
-                            </div>
-                            <span class="status-badge status-${cn.status}">${cn.status}</span>
-                        </div>
-                        
-                        <div class="progress-timeline">
-                            <div class="progress-line" style="width: ${progress.percentComplete}%"></div>
-                            ${progress.steps.map((step, index) => `
-                                <div class="progress-step ${step.status || ''}">
-                                    <div class="progress-icon">
-                                        ${step.status === 'completed' ? '✓' : 
-                                          step.status === 'rejected' ? '✗' : 
-                                          step.icon || (index + 1)}
-                                    </div>
-                                    <div class="progress-label">
-                                        ${step.label}
-                                        ${step.date ? `<div class="progress-date">${new Date(step.date).toLocaleDateString()}</div>` : ''}
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <div class="progress-note ${cn.status === 'rejected' ? 'danger' : cn.status === 'approved' ? '' : 'warning'}">
-                            <strong>${progress.currentStep}</strong><br>
-                            <span style="font-size: 13px;">${progress.message}</span>
-                        </div>
-                        
-                        ${cn.status === 'approved' ? `
-                            <div style="margin-top: 16px;">
-                                <button class="btn btn-primary" onclick="app.showView('payment')">
-                                    Request Payment →
-                                </button>
-                            </div>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="form-grid two-col">
-                        <div class="form-group">
-                            <label>Project Code</label>
-                            <input type="text" value="${cn.projectCode}" readonly>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Requires Procurement</label>
-                            <input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Objective</label>
-                            <textarea rows="3" readonly>${cn.objective}</textarea>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Description</label>
-                            <textarea rows="4" readonly>${cn.description}</textarea>
-                        </div>
-                        
-                        ${cn.procurementNotes ? `
-                            <div class="form-group full-width">
-                                <label>Procurement Notes</label>
-                                <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
-                            </div>
-                        ` : ''}
-                        
-                        ${cn.rejectionReason ? `
-                            <div class="form-group full-width">
-                                <label style="color: var(--danger);">Rejection Reason</label>
-                                <textarea rows="2" readonly style="border-color: var(--danger);">${cn.rejectionReason}</textarea>
-                            </div>
-                        ` : ''}
-                        
-                        <div class="btn-group full-width">
-                            <button class="btn btn-primary" onclick="app.showView('dashboard')">
-                                ← Back to Dashboard
-                            </button>
-                        </div>
-                    </div>
-                `;
-            },
-            
             renderConceptNoteForm(content) {
                 content.innerHTML = `
                     <div class="header">
@@ -1670,7 +895,7 @@
                     <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
                         <div class="form-group">
                             <label>Project Code <span class="required">*</span></label>
-                            <select name="projectCode" id="projectCode" required>
+                            <select name="projectCode" required onchange="app.updateProjectBudget(this.value)">
                                 <option value="">Select project</option>
                                 ${this.data.projects.map(p => `
                                     <option value="${p.code}">${p.code} - ${p.name}</option>
@@ -1680,36 +905,34 @@
                         
                         <div class="form-group">
                             <label>Activity Title <span class="required">*</span></label>
-                            <input type="text" name="activityTitle" id="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano">
+                            <input type="text" name="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano">
                         </div>
                         
                         <div class="form-group full-width">
                             <label>Objective <span class="required">*</span></label>
-                            <textarea name="objective" id="objective" required placeholder="What is the purpose of this activity?"></textarea>
+                            <textarea name="objective" required placeholder="What is the purpose of this activity?"></textarea>
                         </div>
                         
                         <div class="form-group full-width">
                             <label>Description <span class="required">*</span></label>
-                            <textarea name="description" id="description" required placeholder="Detailed description of the activity"></textarea>
+                            <textarea name="description" required placeholder="Detailed description of the activity"></textarea>
                         </div>
                         
                         <div class="form-group">
                             <label>Estimated Cost (₦) <span class="required">*</span></label>
-                            <input type="number" name="estimatedCost" id="estimatedCost" required min="0" step="0.01">
-                        </div>
-                        <div class="form-group">
-                            <label>Implementation Date <span class="required">*</span></label>
-                            <input type="date" name="ImplementationDate" id="ImplementationDate" required placeholder="e.g., when is your activity">
+                            <input type="number" name="estimatedCost" required min="1" onchange="app.checkThreshold(this.value)">
+                            <span class="form-hint">Enter amount in Naira</span>
                         </div>
                         
-                        <div class="form-group full-width">
-                            <label>Are items/services to be procured? <span class="required">*</span></label>
+                        <div class="form-group">
+                            <label>Requires Procurement? <span class="required">*</span></label>
                             <select name="requiresProcurement" required>
-                                <option value="no">No - Direct payment</option>
-                                <option value="yes">Yes - Procurement needed</option>
+                                <option value="no">No - Direct service/payment</option>
+                                <option value="yes">Yes - Items need to be procured</option>
                             </select>
-                            <span class="form-hint">Select "Yes" if items need to be purchased by Procurement team</span>
                         </div>
+                        
+                        <div class="form-group full-width" id="thresholdInfo"></div>
                         
                         <div class="btn-group full-width">
                             <button type="submit" class="btn btn-primary">Submit Concept Note</button>
@@ -1719,85 +942,158 @@
                 `;
             },
             
-            async submitConceptNote(event) {
-                event.preventDefault();
-                this.clearErrors();
-                
-                const form = event.target;
-                const formData = new FormData(form);
-                
-                // Validate
-                const amount = parseFloat(formData.get('estimatedCost'));
-                if (!this.validateAmount(amount)) {
-                    this.showError('estimatedCost', 'Please enter a valid amount');
+            checkThreshold(amount) {
+                const info = document.getElementById('thresholdInfo');
+                if (!amount || amount <= 0) {
+                    info.innerHTML = '';
                     return;
                 }
                 
-                try {
-                    const conceptNote = {
-                        refNumber: 'CN' + Date.now(),
-                        staffName: this.currentUser,
-                        projectCode: formData.get('projectCode'),
-                        activityTitle: formData.get('activityTitle'),
-                        objective: formData.get('objective'),
-                        description: formData.get('description'),
-                        estimatedCost: amount,
-                        requiresProcurement: formData.get('requiresProcurement'),
-                        status: 'pending',
-                        currentApprover: 'budgetOwner',
-                        submittedDate: new Date().toISOString()
-                    };
-                    
-                    const { data, error } = await supabaseClient
-                        .from('concept_notes')
-                        .insert([conceptNote])
-                        .select();
-                    
-                    if (error) throw error;
-                    
-                    // Update local data without full reload
-                    this.data.conceptNotes.unshift(data[0]);
-                    this.clearCache();
-                    
-                    alert('Concept note submitted successfully!');
-                    this.showView('dashboard');
-                } catch (error) {
-                    console.error('Submit error:', error);
-                    alert('Error submitting concept note: ' + error.message);
+                const num = parseFloat(amount);
+                if (num <= 1000000) {
+                    info.innerHTML = `
+                        <div class="threshold-info">
+                            ✓ Budget Owner approval required (Amount ≤ ₦1,000,000)
+                        </div>
+                    `;
+                } else {
+                    info.innerHTML = `
+                        <div class="threshold-info high">
+                            ⚠️ Executive Director approval required (Amount > ₦1,000,000)
+                        </div>
+                    `;
                 }
             },
             
+            submitConceptNote(e) {
+                e.preventDefault();
+                const form = e.target;
+                const data = new FormData(form);
+                
+                const cn = {
+                    refNumber: this.generateRefNumber('CN'),
+                    staffName: this.currentUser,
+                    projectCode: data.get('projectCode'),
+                    activityTitle: data.get('activityTitle'),
+                    objective: data.get('objective'),
+                    description: data.get('description'),
+                    estimatedCost: parseFloat(data.get('estimatedCost')),
+                    requiresProcurement: data.get('requiresProcurement'),
+                    status: 'pending_budget_owner',
+                    submittedDate: new Date().toISOString(),
+                    approvalHistory: []
+                };
+                
+                this.data.conceptNotes.push(cn);
+                this.saveData();
+                
+                alert(`Concept Note ${cn.refNumber} submitted successfully!\nSent to Budget Owner for review.`);
+                this.showView('dashboard');
+            },
+            
+            generateRefNumber(type) {
+                const date = new Date();
+                const year = date.getFullYear();
+                const count = this.data.conceptNotes.length + this.data.payments.length + this.data.retirements.length + 1;
+                const num = count.toString().padStart(3, '0');
+                
+                return `${type}-${year}-${num}`;
+            },
+            
             renderPaymentForm(content) {
-                const approvedNotes = this.data.conceptNotes.filter(cn => 
-                    cn.staffName === this.currentUser && cn.status === 'approved'
+                const approvedCNs = this.data.conceptNotes.filter(cn => 
+                    cn.staffName === this.currentUser && 
+                    (cn.status === 'approved' || cn.status === 'procurement_complete')
                 );
+                
+                const unretiredPayments = this.data.payments.filter(p => 
+                    p.staffName === this.currentUser &&
+                    p.status === 'paid' && 
+                    !this.data.retirements.find(r => r.paymentRef === p.refNumber)
+                );
+                
+                const overdueRetirements = unretiredPayments.filter(p => {
+                    const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
+                    return daysSince > 10;
+                });
+                
+                const isLocked = unretiredPayments.length >= 2 || overdueRetirements.length > 0;
+                
+                if (isLocked) {
+                    content.innerHTML = `
+                        <div class="header">
+                            <h2>Request Payment</h2>
+                            <p>Payment requests are currently locked</p>
+                        </div>
+                        
+                        <div class="alert-badge danger">
+                            🔒 Account Locked - You cannot request new payments
+                        </div>
+                        
+                        <div class="form-grid">
+                            <div class="form-group full-width">
+                                <p style="margin-bottom: 16px;"><strong>Reason for lock:</strong></p>
+                                ${unretiredPayments.length >= 2 ? `
+                                    <p>You have ${unretiredPayments.length} unretired advances. Maximum allowed is 2.</p>
+                                ` : ''}
+                                ${overdueRetirements.length > 0 ? `
+                                    <p>You have retirements overdue by more than 10 days.</p>
+                                    <ul style="margin-top: 8px;">
+                                        ${overdueRetirements.map(p => `
+                                            <li>${p.refNumber}: ${Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24))} days overdue</li>
+                                        `).join('')}
+                                    </ul>
+                                ` : ''}
+                                <p style="margin-top: 16px;"><strong>Action required:</strong> Please submit retirement forms for your outstanding advances.</p>
+                            </div>
+                            <div class="btn-group full-width">
+                                <button class="btn btn-primary" onclick="app.showView('retirement')">Submit Retirement</button>
+                                <button class="btn btn-secondary" onclick="app.showView('dashboard')">Back to Dashboard</button>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                if (approvedCNs.length === 0) {
+                    content.innerHTML = `
+                        <div class="header">
+                            <h2>Request Payment</h2>
+                            <p>No approved concept notes available</p>
+                        </div>
+                        
+                        <div class="empty-state">
+                            <p>You need an approved concept note before requesting payment.</p>
+                            <button class="btn btn-primary" onclick="app.showView('conceptNote')" style="margin-top: 16px;">Create Concept Note</button>
+                        </div>
+                    `;
+                    return;
+                }
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>Request Payment</h2>
-                        <p>Submit a payment request for an approved concept note</p>
+                        <p>Step 2: Request payment for approved activity</p>
                     </div>
                     
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
                         <div class="form-group full-width">
                             <label>Select Approved Concept Note <span class="required">*</span></label>
-                            <select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)">
-                                <option value="">Choose a concept note</option>
-                                ${approvedNotes.map(cn => `
-                                    <option value="${cn.id}">${cn.refNumber} - ${cn.activityTitle}</option>
+                            <select name="conceptNoteRef" required onchange="app.loadConceptNoteDetails(this.value)">
+                                <option value="">Choose concept note</option>
+                                ${approvedCNs.map(cn => `
+                                    <option value="${cn.refNumber}">
+                                        ${cn.refNumber} - ${cn.activityTitle} (₦${cn.estimatedCost.toLocaleString()})
+                                    </option>
                                 `).join('')}
                             </select>
                         </div>
                         
-                        <div id="conceptNoteDetails" style="display: none;" class="form-group full-width">
-                            <div class="threshold-info">
-                                <div id="cnDetailsContent"></div>
-                            </div>
-                        </div>
+                        <div id="cnDetails"></div>
                         
                         <div class="form-group">
                             <label>Payment Amount (₦) <span class="required">*</span></label>
-                            <input type="number" name="amount" id="amount" required min="0" step="0.01">
+                            <input type="number" name="amount" required min="1" id="paymentAmount">
                         </div>
                         
                         <div class="form-group">
@@ -1810,1223 +1106,908 @@
                         </div>
                         
                         <div class="form-group full-width">
-                            <label>Justification</label>
-                            <textarea name="justification" placeholder="Additional payment information"></textarea>
+                            <label>Justification <span class="required">*</span></label>
+                            <textarea name="justification" required placeholder="Provide details on how this amount will be used"></textarea>
                         </div>
                         
-                        <div class="form-group full-width">
-                            <label>Beneficiary List (Optional)</label>
-                            <div class="file-upload-area" id="beneficiaryUploadArea" onclick="document.getElementById('beneficiaryFile').click()">
-                                <p>📎 Click to upload attendance or payment list</p>
-                                <span class="form-hint">Maximum 5MB - Excel, CSV, PDF, or Image</span>
-                            </div>
-                            <input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)">
-                        </div>
-                        <div id="bankDetailsSection">
-                        <div class="form-group">
-                            <label>Account Name <span class="required">*</span></label>
-                            <input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account">
-                        </div>
-
-                        <div class="form-group">
-                            <label>Account Number <span class="required">*</span></label>
-                            <input type="text" name="accountNumber" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
-                        </div>
-
-                        <div class="form-group full-width">
-                            <label>Bank Name <span class="required">*</span></label>
-                            <select name="bankName" id="bankName" required>
-                                <option value="">Select Bank</option>
-                                <option value="Access Bank">Access Bank</option>
-                                <option value="Fidelity Bank">Fidelity Bank</option>
-                                <option value="First Bank">First Bank</option>
-                                <option value="FCMB">FCMB</option>
-                                <option value="GTBank">GTBank</option>
-                                <option value="Keystone Bank">Keystone Bank</option>
-                                <option value="Polaris Bank">Polaris Bank</option>
-                                <option value="Stanbic IBTC">Stanbic IBTC</option>
-                                <option value="UBA">UBA</option>
-                                <option value="Union Bank">Union Bank</option>
-                                <option value="Unity Bank">Unity Bank</option>
-                                <option value="Wema Bank">Wema Bank</option>
-                                <option value="Zenith Bank">Zenith Bank</option>
-                            </select>
-                        </div>
-                        </div>
-
                         <div class="btn-group full-width">
-                            <button type="submit" class="btn btn-primary" id="submitPaymentBtn">Submit Payment Request</button>
+                            <button type="submit" class="btn btn-primary">Submit Payment Request</button>
                             <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
                         </div>
                     </form>
                 `;
             },
             
-          handleBeneficiaryUpload(input) {
-    const area = document.getElementById('beneficiaryUploadArea');
-    const file = input.files[0];
-    const bankSection = document.getElementById('bankDetailsSection');
-    
-    if (file) {
-        if (file.size > MAX_FILE_SIZE) {
-            alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-            input.value = '';
-            return;
-        }
-        
-        area.classList.add('has-file');
-        area.innerHTML = `
-            <p>✓ ${file.name}</p>
-            <span class="form-hint">${(file.size / 1024).toFixed(1)} KB — Bank details not needed for batch payments</span>
-        `;
-        
-        // Hide bank details and remove required
-        if (bankSection) {
-            bankSection.style.display = 'none';
-            bankSection.querySelectorAll('[required]').forEach(el => {
-                el.removeAttribute('required');
-                el.value = '';
-            });
-        }
-    } else {
-        // Show bank details again if file removed
-        if (bankSection) {
-            bankSection.style.display = '';
-            document.getElementById('accountName').setAttribute('required', '');
-            document.getElementById('accountNumber').setAttribute('required', '');
-            document.getElementById('bankName').setAttribute('required', '');
-        }
-    }
-},
-            
-            loadConceptNoteDetails(id) {
-                const cn = this.data.conceptNotes.find(c => c.id == id);
-                const detailsDiv = document.getElementById('conceptNoteDetails');
-                const contentDiv = document.getElementById('cnDetailsContent');
+            loadConceptNoteDetails(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
                 
-                if (cn && detailsDiv && contentDiv) {
-                    detailsDiv.style.display = 'block';
-                    contentDiv.innerHTML = `
-                        <strong>Activity:</strong> ${cn.activityTitle}<br>
-                        <strong>Estimated Cost:</strong> ₦${cn.estimatedCost.toLocaleString()}<br>
-                        <strong>Project:</strong> ${cn.projectCode}
-                    `;
-                }
+                const details = document.getElementById('cnDetails');
+                details.className = 'form-group full-width';
+                details.innerHTML = `
+                    <div style="background: #F5F7FA; padding: 16px; border-radius: 8px; border: 1px solid #E0E0E0;">
+                        <p><strong>Activity:</strong> ${cn.activityTitle}</p>
+                        <p style="margin-top: 8px;"><strong>Project:</strong> ${cn.projectCode}</p>
+                        <p style="margin-top: 8px;"><strong>Estimated Cost:</strong> ₦${cn.estimatedCost.toLocaleString()}</p>
+                        <p style="margin-top: 8px;"><strong>Status:</strong> <span class="status-badge status-${cn.status}">${cn.status.replace(/_/g, ' ')}</span></p>
+                    </div>
+                `;
+                
+                document.getElementById('paymentAmount').value = cn.estimatedCost;
             },
             
-            async submitPayment(event) {
-                event.preventDefault();
-                this.clearErrors();
+            submitPayment(e) {
+                e.preventDefault();
+                const form = e.target;
+                const data = new FormData(form);
                 
-                const form = event.target;
-                const formData = new FormData(form);
-                const submitBtn = document.getElementById('submitPaymentBtn');
+                const payment = {
+                    refNumber: this.generateRefNumber('PR'),
+                    conceptNoteRef: data.get('conceptNoteRef'),
+                    staffName: this.currentUser,
+                    amount: parseFloat(data.get('amount')),
+                    paymentMethod: data.get('paymentMethod'),
+                    justification: data.get('justification'),
+                    status: 'pending_finance',
+                    requestDate: new Date().toISOString()
+                };
                 
-                // Validate
-                const amount = parseFloat(formData.get('amount'));
-                if (!this.validateAmount(amount)) {
-                    this.showError('amount', 'Please enter a valid amount');
-                    return;
-                }
-                const accountNumber = formData.get('accountNumber');
-const hasBeneficiaryFile = document.getElementById('beneficiaryFile').files.length > 0;
-if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
-    this.showError('accountNumber', 'Account number must be exactly 10 digits');
-    return;
-}
-                try {
-                    submitBtn.disabled = true;
-                    submitBtn.textContent = 'Uploading...';
-                    
-                    // Upload beneficiary file if provided
-                    const file = document.getElementById('beneficiaryFile').files[0];
-                    let beneficiaryFileData = null;
-                    
-                    if (file) {
-                        beneficiaryFileData = await this.uploadFile(file, 'beneficiaries');
-                    }
-                    const cn = this.data.conceptNotes.find(
-    c => c.id == formData.get('conceptNoteId')
-);
-                    const payment = {
-                        refNumber: 'PAY' + Date.now(),
-                        conceptNoteId: parseInt(formData.get('conceptNoteId')),
-                        staffName: this.currentUser,
-                        amount: amount,
-                        paymentMethod: formData.get('paymentMethod'),
-                        justification: formData.get('justification'),
-                        accountName: formData.get('accountName'),
-                        accountNumber: accountNumber,
-                        bankName: formData.get('bankName'),
-                        beneficiaryFileUrl: beneficiaryFileData?.url,
-                        beneficiaryFileName: beneficiaryFileData?.fileName,
-                        status: 'pending',
-                        requestDate: new Date().toISOString(),
-                        projectCode: cn ? cn.projectCode : null,
-                        conceptNoteRef: cn ? cn.refNumber : null,
-                    };
-                    
-                    const { data, error } = await supabaseClient
-                        .from('payments')
-                        .insert([payment])
-                        .select();
-                    
-                    if (error) throw error;
-                    
-                    // Update local data
-                    this.data.payments.unshift(data[0]);
-                    this.clearCache();
-                    
-                    alert('Payment request submitted successfully!');
-                    this.showView('dashboard');
-                } catch (error) {
-                    console.error('Submit error:', error);
-                    alert('Error submitting payment: ' + error.message);
-                } finally {
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Submit Payment Request';
-                }
+                this.data.payments.push(payment);
+                this.saveData();
+                
+                alert(`Payment request ${payment.refNumber} submitted successfully!\nSent to Finance for processing.`);
+                this.showView('dashboard');
             },
             
             renderRetirementForm(content) {
-                const userRole = this.getUserRole();
-                const myPayments = this.getMyPayments();
+                const paidPayments = this.data.payments.filter(p => 
+                    p.staffName === this.currentUser && 
+                    p.status === 'paid' &&
+                    !this.data.retirements.find(r => r.paymentRef === p.refNumber)
+                );
                 
-                const paidPayments = this.data.payments.filter(p => {
-                    if (p.status !== 'paid') return false;
-                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-                    if (!p.paidDate) return false;
-                    
-                    const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
-                    
-                    if (userRole === 'staff' && p.retirementresponsibility === 'staff' && p.staffName === this.currentUser) {
-                        return daysSincePaid >= 5;
-                    }
-                    
-                    if (userRole === 'procurement' && p.retirementresponsibility === 'procurement') {
-                        return true;
-                    }
-                    
-                    return false;
-                });
-                
-                const waitingPayments = this.data.payments.filter(p => {
-                    if (p.status !== 'paid') return false;
-                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-                    if (!p.paidDate) return false;
-                    
-                    const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
-                    
-                    return userRole === 'staff' && 
-                           p.retirementresponsibility === 'staff' && 
-                           p.staffName === this.currentUser && 
-                           daysSincePaid < 5;
-                });
+                if (paidPayments.length === 0) {
+                    content.innerHTML = `
+                        <div class="header">
+                            <h2>Submit Retirement</h2>
+                            <p>No payments available for retirement</p>
+                        </div>
+                        
+                        <div class="empty-state">
+                            <p>You don't have any paid advances that need retirement.</p>
+                            <button class="btn btn-secondary" onclick="app.showView('dashboard')" style="margin-top: 16px;">Back to Dashboard</button>
+                        </div>
+                    `;
+                    return;
+                }
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>Submit Retirement</h2>
-                        <p>${userRole === 'procurement' ? 'Retire procured activities' : 'Retire advance payments (available 5 days after payment)'}</p>
+                        <p>Step 3: Retire your advance within 10 days of payment</p>
                     </div>
                     
-                    ${waitingPayments.length > 0 && userRole === 'staff' ? `
-                        <div class="alert-badge warning" style="display: block; margin-bottom: 24px;">
-                            ⏳ You have ${waitingPayments.length} payment(s) waiting for the 5-day period before retirement can be submitted
+                    <form class="form-grid two-col" onsubmit="app.submitRetirement(event)">
+                        <div class="form-group full-width">
+                            <label>Select Payment to Retire <span class="required">*</span></label>
+                            <select name="paymentRef" required onchange="app.loadPaymentDetails(this.value)">
+                                <option value="">Choose payment</option>
+                                ${paidPayments.map(p => {
+                                    const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
+                                    const overdue = daysSince > 10;
+                                    return `
+                                        <option value="${p.refNumber}" ${overdue ? 'style="color: #D32F2F; font-weight: 600;"' : ''}>
+                                            ${p.refNumber} - ₦${p.amount.toLocaleString()} ${overdue ? `(${daysSince} days overdue!)` : `(${daysSince} days ago)`}
+                                        </option>
+                                    `;
+                                }).join('')}
+                            </select>
                         </div>
-                    ` : ''}
-                    
-                    ${paidPayments.length === 0 ? `
-                        <div class="empty-state">
-                            <h3>No payments to retire</h3>
-                            <p>${userRole === 'procurement' ? 
-                                "You don't have any procured activities that need retirement." : 
-                                "You don't have any paid advances ready for retirement."}</p>
+                        
+                        <div id="paymentDetails"></div>
+                        
+                        <div class="form-group">
+                            <label>Actual Amount Spent (₦) <span class="required">*</span></label>
+                            <input type="number" name="actualSpent" required min="0" id="actualSpent">
                         </div>
-                    ` : `
-                        <form class="form-grid two-col" onsubmit="app.submitRetirement(event)">
-                            <div class="form-group full-width">
-                                <label>Select Payment to Retire <span class="required">*</span></label>
-                                <select name="paymentRef" required onchange="app.loadPaymentDetails(this.value)">
-                                    <option value="">Choose a payment</option>
-                                    ${paidPayments.map(p => {
-                                        const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
-                                        return `<option value="${p.refNumber}">${p.refNumber} - ₦${p.amount.toLocaleString()} (Paid ${daysSince} days ago)</option>`;
-                                    }).join('')}
-                                </select>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Actual Amount Spent (₦) <span class="required">*</span></label>
-                                <input type="number" name="actualSpent" id="actualSpent" required min="0" step="0.01">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>Amount to Return (₦)</label>
-                                <input type="number" name="amountReturned" min="0" step="0.01" value="0">
-                            </div>
-                            
-                            <div class="form-group full-width">
-                                <label>Expenditure Details <span class="required">*</span></label>
-                                <textarea name="expenditureDetails" required placeholder="Describe how the funds were spent"></textarea>
-                            </div>
-                            
-                            <div class="form-group full-width">
-                                <label>Attachments/Receipts</label>
-                                <input type="text" name="attachments" placeholder="List of attached receipts">
-                                <span class="form-hint">Upload receipts separately and list them here</span>
-                            </div>
-                            
-                            <div class="btn-group full-width">
-                                <button type="submit" class="btn btn-primary">Submit Retirement</button>
-                                <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
-                            </div>
-                        </form>
-                    `}
+                        
+                        <div class="form-group">
+                            <label>Balance to Return (₦)</label>
+                            <input type="number" id="balance" readonly style="background: #F5F7FA;">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Activity Report <span class="required">*</span></label>
+                            <textarea name="activityReport" required placeholder="Describe how the funds were used and outcomes achieved"></textarea>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label>Supporting Documents</label>
+                            <input type="text" name="supportingDocs" placeholder="List receipts, invoices, photos, etc.">
+                            <span class="form-hint">Attach evidence of expenditure</span>
+                        </div>
+                        
+                        <div class="btn-group full-width">
+                            <button type="submit" class="btn btn-primary">Submit Retirement</button>
+                            <button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button>
+                        </div>
+                    </form>
                 `;
+                
+                // Add listener to calculate balance
+                setTimeout(() => {
+                    const actualSpent = document.getElementById('actualSpent');
+                    if (actualSpent) {
+                        actualSpent.addEventListener('input', function() {
+                            const paymentRef = document.querySelector('[name="paymentRef"]').value;
+                            if (!paymentRef) return;
+                            
+                            const payment = app.data.payments.find(p => p.refNumber === paymentRef);
+                            if (!payment) return;
+                            
+                            const spent = parseFloat(this.value) || 0;
+                            const balance = payment.amount - spent;
+                            document.getElementById('balance').value = balance.toFixed(2);
+                        });
+                    }
+                }, 100);
             },
             
             loadPaymentDetails(refNumber) {
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
-                if (payment) {
-                    const form = document.querySelector('form');
-                    const actualSpentInput = form.querySelector('[name="actualSpent"]');
-                    if (actualSpentInput) {
-                        actualSpentInput.max = payment.amount;
-                    }
-                }
+                if (!payment) return;
+                
+                const daysSince = Math.floor((Date.now() - new Date(payment.paidDate)) / (1000 * 60 * 60 * 24));
+                const overdue = daysSince > 10;
+                
+                const details = document.getElementById('paymentDetails');
+                details.className = 'form-group full-width';
+                details.innerHTML = `
+                    <div style="background: ${overdue ? '#FFEBEE' : '#F5F7FA'}; padding: 16px; border-radius: 8px; border: 1px solid ${overdue ? '#FFCDD2' : '#E0E0E0'};">
+                        <p><strong>Payment Reference:</strong> ${payment.refNumber}</p>
+                        <p style="margin-top: 8px;"><strong>Amount Received:</strong> ₦${payment.amount.toLocaleString()}</p>
+                        <p style="margin-top: 8px;"><strong>Paid Date:</strong> ${new Date(payment.paidDate).toLocaleDateString()}</p>
+                        <p style="margin-top: 8px;"><strong>Days Since Payment:</strong> ${daysSince} days ${overdue ? '⚠️ OVERDUE' : ''}</p>
+                        ${overdue ? '<p style="margin-top: 8px; color: #D32F2F; font-weight: 600;">Retirement is overdue! Please submit immediately.</p>' : ''}
+                    </div>
+                `;
+                
+                document.getElementById('actualSpent').value = payment.amount;
+                document.getElementById('actualSpent').dispatchEvent(new Event('input'));
             },
             
-            async submitRetirement(event) {
-                event.preventDefault();
-                this.clearErrors();
+            submitRetirement(e) {
+                e.preventDefault();
+                const form = e.target;
+                const data = new FormData(form);
                 
-                const form = event.target;
-                const formData = new FormData(form);
+                const retirement = {
+                    refNumber: this.generateRefNumber('RT'),
+                    paymentRef: data.get('paymentRef'),
+                    staffName: this.currentUser,
+                    actualSpent: parseFloat(data.get('actualSpent')),
+                    balanceToReturn: parseFloat(document.getElementById('balance').value),
+                    activityReport: data.get('activityReport'),
+                    supportingDocs: data.get('supportingDocs'),
+                    status: 'completed',
+                    submittedDate: new Date().toISOString()
+                };
                 
-                // Validate
-                const actualSpent = parseFloat(formData.get('actualSpent'));
-                if (!this.validateAmount(actualSpent)) {
-                    this.showError('actualSpent', 'Please enter a valid amount');
-                    return;
-                }
+                this.data.retirements.push(retirement);
+                this.saveData();
                 
-                try {
-                    const retirement = {
-                        refNumber: 'RET' + Date.now(),
-                        staffName: this.currentUser,
-                        paymentRef: formData.get('paymentRef'),
-                        actualSpent: actualSpent,
-                        amountReturned: parseFloat(formData.get('amountReturned')) || 0,
-                        expenditureDetails: formData.get('expenditureDetails'),
-                        attachments: formData.get('attachments'),
-                        status: 'pending',
-                        submittedDate: new Date().toISOString()
-                    };
-                    
-                    const { data, error } = await supabaseClient
-                        .from('retirements')
-                        .insert([retirement])
-                        .select();
-                    
-                    if (error) throw error;
-                    
-                    // Update local data
-                    this.data.retirements.unshift(data[0]);
-                    this.clearCache();
-                    
-                    alert('Retirement submitted successfully!');
-                    this.showView('dashboard');
-                } catch (error) {
-                    console.error('Submit error:', error);
-                    alert('Error submitting retirement: ' + error.message);
-                }
+                alert(`Retirement ${retirement.refNumber} submitted successfully!`);
+                this.showView('dashboard');
             },
             
             renderApprovals(content) {
-                const role = this.getUserRole();
+                const userRole = this.getUserRole();
                 
-                const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
-                    if (cn.status !== 'pending') return false;
-                    
-                    if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
-                    if (role === 'ed' && cn.currentApprover === 'ed') return true;
-                    if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
-                    
-                    return false;
-                });
+                if (!userRole) {
+                    content.innerHTML = `
+                        <div class="header">
+                            <h2>My Approvals</h2>
+                            <p>You do not have approval authority</p>
+                        </div>
+                        <div class="empty-state">
+                            <p>This section is only available for Budget Owners, ED, Procurement, and Finance staff.</p>
+                        </div>
+                    `;
+                    return;
+                }
                 
-                const pendingPayments = this.data.payments.filter(p => 
-                    p.status === 'pending' && role === 'finance'
-                );
-                
-                const pendingRetirements = this.data.retirements.filter(r => 
-                    r.status === 'pending' && role === 'finance'
-                );
+                const pendingItems = this.getPendingApprovals(userRole);
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>My Approvals</h2>
-                        <p>Items requiring your review and approval</p>
+                        <p>Items pending your review as ${this.getRoleName(userRole)}</p>
                     </div>
                     
-                    ${pendingConceptNotes.length === 0 && pendingPayments.length === 0 && pendingRetirements.length === 0 ? `
+                    ${pendingItems.length === 0 ? `
                         <div class="empty-state">
-                            <h3>No pending approvals</h3>
-                            <p>You don't have any items waiting for your approval.</p>
+                            <p>No items pending your approval</p>
                         </div>
-                    ` : ''}
-                    
-                    ${pendingConceptNotes.length > 0 ? `
-                        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3>
-                        <div class="table-container" style="margin-bottom: 32px;">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Ref</th>
-                                        <th>Staff</th>
-                                        <th>Activity</th>
-                                        <th>Project</th>
-                                        <th>Amount</th>
-                                        <th>Submitted</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${pendingConceptNotes.map(cn => `
-                                        <tr>
-                                            <td>${cn.refNumber}</td>
-                                            <td>${cn.staffName}</td>
-                                            <td>${cn.activityTitle}</td>
-                                            <td>${cn.projectCode}</td>
-                                            <td>₦${cn.estimatedCost.toLocaleString()}</td>
-                                            <td>${new Date(cn.submittedDate).toLocaleDateString()}</td>
-                                            <td>
-                                                <button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
-                                                    📄 View Details
-                                                </button><br>
-                                                ${role === 'budgetOwner' ? `
-                                                    ${cn.estimatedCost <= 1000000 ? `
-                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">
-                                                            ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
-                                                        </button>
-                                                    ` : `
-                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">
-                                                            → Forward to ED (>₦1M)
-                                                        </button>
-                                                    `}
-                                                ` : role === 'ed' ? `
-                                                    <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">
-                                                        ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
-                                                    </button>
-                                                ` : role === 'procurement' ? `
-                                                    <button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">
-                                                        ✓ Complete & Forward to Finance
-                                                    </button>
-                                                ` : ''}
-                                                <button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">
-                                                    ✗ Reject
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    ` : ''}
-                    
-                    ${pendingPayments.length > 0 ? `
-                        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3>
-                        <div class="table-container" style="margin-bottom: 32px;">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Ref</th>
-                                        <th>Staff</th>
-                                        <th>Amount</th>
-                                        <th>Type</th>
-                                        <th>Requested</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${pendingPayments.map(p => `
-                                        <tr>
-                                            <td>${p.refNumber}</td>
-                                            <td>${p.staffName}</td>
-                                            <td>₦${p.amount.toLocaleString()}</td>
-                                            <td>${p.paymentMethod}</td>
-                                            <td>${new Date(p.requestDate).toLocaleDateString()}</td>
-                                            <td>
-                                                ${p.beneficiaryFileUrl ? `
-                                                    <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">
-                                                        📎 Download Beneficiaries
-                                                    </button><br>
-                                                ` : ''}
-                                                <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
-                                                    ✓ Process Payment
-                                                </button>
-                                                <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
-                                                    ✗ Reject
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    ` : ''}
-                    
-                    ${pendingRetirements.length > 0 ? `
-                        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3>
+                    ` : `
                         <div class="table-container">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>Ref</th>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Reference</th>
                                         <th>Staff</th>
-                                        <th>Payment Ref</th>
-                                        <th>Spent</th>
-                                        <th>Returned</th>
-                                        <th>Submitted</th>
+                                        <th>Amount</th>
+                                        <th>Details</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${pendingRetirements.map(r => `
+                                    ${pendingItems.map(item => `
                                         <tr>
-                                            <td>${r.refNumber}</td>
-                                            <td>${r.staffName}</td>
-                                            <td>${r.paymentRef}</td>
-                                            <td>₦${r.actualSpent.toLocaleString()}</td>
-                                            <td>₦${r.amountReturned.toLocaleString()}</td>
-                                            <td>${new Date(r.submittedDate).toLocaleDateString()}</td>
+                                            <td>${new Date(item.date).toLocaleDateString()}</td>
+                                            <td>${item.type}</td>
+                                            <td>${item.ref}</td>
+                                            <td>${item.staff}</td>
+                                            <td>₦${item.amount.toLocaleString()}</td>
+                                            <td>${item.details}</td>
                                             <td>
-                                                <button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">
-                                                    ✓ Approve Retirement
-                                                </button>
-                                                <button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">
-                                                    ✗ Reject
-                                                </button>
+                                                ${this.getApprovalButtons(item, userRole)}
                                             </td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
                             </table>
                         </div>
-                    ` : ''}
+                    `}
                 `;
             },
             
-            async approveConceptNote(refNumber, action) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
-                
-                let updates = {};
-                
-                switch(action) {
-                    case 'approve_under_1m':
-                        if (cn.requiresProcurement === 'yes') {
-                            updates = {
-                                currentApprover: 'procurement',
-                                sentToProcurement: new Date().toISOString(),
-                                retirementresponsibility: 'procurement'
-                            };
-                        } else {
-                            updates = {
-                                status: 'approved',
-                                approvedDate: new Date().toISOString(),
-                                approvedBy: this.currentUser,
-                                retirementresponsibility: 'staff'
-                            };
-                        }
-                        break;
-                    case 'forward_to_ed':
-                        updates = {
-                            currentApprover: 'ed',
-                            forwardedToED: new Date().toISOString()
-                        };
-                        break;
-                    case 'ed_approve':
-                        if (cn.requiresProcurement === 'yes') {
-                            updates = {
-                                currentApprover: 'procurement',
-                                sentToProcurement: new Date().toISOString(),
-                                retirementresponsibility: 'procurement'
-                            };
-                        } else {
-                            updates = {
-                                status: 'approved',
-                                approvedDate: new Date().toISOString(),
-                                approvedBy: this.currentUser,
-                                retirementresponsibility: 'staff'
-                            };
-                        }
-                        break;
-                }
-                
-                try {
-                    const { error } = await supabaseClient
-                        .from('concept_notes')
-                        .update(updates)
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    Object.assign(cn, updates);
-                    this.clearCache();
-                    
-                    alert('Concept note processed successfully!');
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Approval error:', error);
-                    alert('Error updating concept note: ' + error.message);
-                }
+            getUserRole() {
+                const userName = this.currentUser.split(' (')[0]; // Remove role suffix if present
+                return this.data.roles[userName] || this.data.roles[this.currentUser];
             },
             
-            async rejectConceptNote(refNumber) {
-                const reason = prompt('Please provide a reason for rejection:');
-                if (!reason) return;
-                
-                try {
-                    const { error } = await supabaseClient
-                        .from('concept_notes')
-                        .update({
-                            status: 'rejected',
-                            rejectedDate: new Date().toISOString(),
-                            rejectedBy: this.currentUser,
-                            rejectionReason: reason
-                        })
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    await this.loadData();
-                    alert('Concept note rejected.');
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Reject error:', error);
-                    alert('Error rejecting concept note: ' + error.message);
-                }
+            getRoleName(role) {
+                const names = {
+                    budgetOwner: 'Budget Owner',
+                    ed: 'Executive Director',
+                    procurement: 'Procurement Officer',
+                    finance: 'Finance Officer'
+                };
+                return names[role] || role;
             },
             
-            showProcurementUpload(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
-                
-                const content = document.getElementById('mainContent');
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Complete Procurement & Forward to Finance</h2>
-                        <p>Upload documents and create payment request</p>
-                    </div>
-                    
-                    <form class="form-grid" id="procurementForm" onsubmit="app.completeProcurementWithDocs(event, '${refNumber}')">
-                        <div class="form-group full-width">
-                            <div class="threshold-info">
-                                <strong>Concept Note:</strong> ${cn.refNumber} - ${cn.activityTitle}<br>
-                                <strong>Amount:</strong> ₦${cn.estimatedCost.toLocaleString()}<br>
-                                <strong>Staff:</strong> ${cn.staffName}
-                            </div>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Upload GRR (Goods Received Report) <span class="required">*</span></label>
-                            <div class="file-upload-area" id="grrUploadArea" onclick="document.getElementById('grrFile').click()">
-                                <p>📎 Click to upload GRR document</p>
-                                <span class="form-hint">PDF, JPG, PNG - Maximum 5MB</span>
-                            </div>
-                            <input type="file" id="grrFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleFileUpload(this, 'grrUploadArea')">
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Upload Purchase Order/Invoice <span class="required">*</span></label>
-                            <div class="file-upload-area" id="poUploadArea" onclick="document.getElementById('poFile').click()">
-                                <p>📎 Click to upload PO/Invoice</p>
-                                <span class="form-hint">PDF, JPG, PNG - Maximum 5MB</span>
-                            </div>
-                            <input type="file" id="poFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleFileUpload(this, 'poUploadArea')">
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Procurement Notes</label>
-                            <textarea id="procNotes" rows="3" placeholder="Additional information for Finance..."></textarea>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <h3 style="margin: 24px 0 16px; font-family: 'Archivo', sans-serif;">Staff Bank Account Details</h3>
-                            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Required for Finance to process payment</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Account Name <span class="required">*</span></label>
-                            <input type="text" id="accountName" required placeholder="Name as it appears on bank account">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Account Number <span class="required">*</span></label>
-                            <input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Bank Name <span class="required">*</span></label>
-                            <select id="bankName" required>
-                                <option value="">Select Bank</option>
-                                <option value="Access Bank">Access Bank</option>
-                                <option value="Fidelity Bank">Fidelity Bank</option>
-                                <option value="First Bank">First Bank</option>
-                                <option value="FCMB">FCMB</option>
-                                <option value="GTBank">GTBank</option>
-                                <option value="Keystone Bank">Keystone Bank</option>
-                                <option value="Polaris Bank">Polaris Bank</option>
-                                <option value="Stanbic IBTC">Stanbic IBTC</option>
-                                <option value="UBA">UBA</option>
-                                <option value="Union Bank">Union Bank</option>
-                                <option value="Unity Bank">Unity Bank</option>
-                                <option value="Wema Bank">Wema Bank</option>
-                                <option value="Zenith Bank">Zenith Bank</option>
-                            </select>
-                        </div>
-                        
-                        <div class="btn-group full-width">
-                            <button type="submit" class="btn btn-primary" id="procurementSubmitBtn">
-                                Complete & Send to Finance
-                            </button>
-                            <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                `;
+            getProjectSpent(projectCode) {
+                return this.data.payments
+                    .filter(p => {
+                        // Find the linked concept note
+                        const cn = this.data.conceptNotes.find(c => c.id === p.conceptNoteId);
+                        // Check if concept note exists, matches project, and payment is paid
+                        return cn && cn.projectCode === projectCode && p.status === 'paid';
+                    })
+                    .reduce((sum, p) => sum + (p.amount || 0), 0);
             },
             
-            handleFileUpload(input, areaId) {
-                const area = document.getElementById(areaId);
-                const file = input.files[0];
+            updateProjectBudget(projectCode) {
+                const project = this.data.projects.find(p => p.code === projectCode);
+                const infoDiv = document.getElementById('budgetInfo');
                 
-                if (file) {
-                    // Validate size
-                    if (file.size > MAX_FILE_SIZE) {
-                        alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-                        input.value = '';
-                        return;
+                if (project && infoDiv) {
+                    const spent = this.getProjectSpent(projectCode);
+                    const remaining = project.budget - spent;
+                    const percentUsed = (spent / project.budget * 100).toFixed(1);
+                    
+                    infoDiv.innerHTML = `
+                        <strong>Budget Status:</strong> ₦${remaining.toLocaleString()} remaining 
+                        (${percentUsed}% used of ₦${project.budget.toLocaleString()})
+                    `;
+                    
+                    if (percentUsed > 80) {
+                        infoDiv.className = 'threshold-info high';
+                    } else {
+                        infoDiv.className = 'threshold-info';
                     }
                     
-                    area.classList.add('has-file');
-                    area.innerHTML = `
-                        <p>✓ ${file.name}</p>
-                        <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
-                    `;
+                    infoDiv.style.display = 'block';
                 }
             },
-
-            async completeProcurementWithDocs(event, refNumber) {
-                event.preventDefault();
+            
+            getPendingApprovals(userRole) {
+                const items = [];
                 
+                // Concept notes pending approval
+                if (userRole === 'budgetOwner') {
+                    this.data.conceptNotes.filter(cn => cn.status === 'pending_budget_owner').forEach(cn => {
+                        items.push({
+                            type: 'Concept Note',
+                            ref: cn.refNumber,
+                            date: cn.submittedDate,
+                            staff: cn.staffName,
+                            amount: cn.estimatedCost,
+                            details: cn.activityTitle,
+                            item: cn,
+                            itemType: 'conceptNote'
+                        });
+                    });
+                }
+                
+                if (userRole === 'ed') {
+                    this.data.conceptNotes.filter(cn => cn.status === 'pending_ed').forEach(cn => {
+                        items.push({
+                            type: 'Concept Note',
+                            ref: cn.refNumber,
+                            date: cn.submittedDate,
+                            staff: cn.staffName,
+                            amount: cn.estimatedCost,
+                            details: cn.activityTitle,
+                            item: cn,
+                            itemType: 'conceptNote'
+                        });
+                    });
+                }
+                
+                if (userRole === 'procurement') {
+                    this.data.conceptNotes.filter(cn => cn.status === 'pending_procurement').forEach(cn => {
+                        items.push({
+                            type: 'Procurement Request',
+                            ref: cn.refNumber,
+                            date: cn.submittedDate,
+                            staff: cn.staffName,
+                            amount: cn.estimatedCost,
+                            details: cn.activityTitle,
+                            item: cn,
+                            itemType: 'procurement'
+                        });
+                    });
+                }
+                
+                if (userRole === 'finance') {
+                    this.data.payments.filter(p => p.status === 'pending_finance').forEach(p => {
+                        items.push({
+                            type: 'Payment Request',
+                            ref: p.refNumber,
+                            date: p.requestDate,
+                            staff: p.staffName,
+                            amount: p.amount,
+                            details: p.justification,
+                            item: p,
+                            itemType: 'payment'
+                        });
+                    });
+                }
+                
+                return items;
+            },
+            
+          getApprovalButtons(item, userRole) {
+
+    // ===== BUDGET OWNER =====
+    if (userRole === 'budgetOwner' && item.itemType === 'conceptNote') {
+        const needsED = item.amount > 1000000;
+
+        return `
+            ${item.item.requiresProcurement === 'yes' ? 
+                `<button class="action-btn" onclick="app.routeToProcurement('${item.ref}')">
+                    → Route to Procurement
+                </button>` : 
+                `<button class="action-btn approve" onclick="app.approveConceptNote('${item.ref}', ${needsED})">
+                    ✓ Approve${needsED ? ' & Forward to ED' : ''}
+                </button>`
+            }
+            <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'conceptNote')">
+                ✗ Reject
+            </button>
+        `;
+    }
+
+    // ===== ED =====
+    if (userRole === 'ed' && item.itemType === 'conceptNote') {
+        return `
+            <button class="action-btn approve" onclick="app.approveByED('${item.ref}')">✓ Approve</button>
+            <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'conceptNote')">✗ Reject</button>
+        `;
+    }
+
+    // ===== PROCUREMENT =====
+    if (userRole === 'procurement' && item.itemType === 'procurement') {
+    return `
+        <button class="action-btn approve" onclick="app.showProcurementUpload('${item.ref}')">
+            Upload Docs & Send to Finance
+        </button>
+    `;
+}
+    // ===== FINANCE =====
+    if (userRole === 'finance' && item.itemType === 'payment') {
+        return `
+            <button class="action-btn approve" onclick="app.processPayment('${item.ref}')">
+                ✓ Process Payment
+            </button>
+            <button class="action-btn reject" onclick="app.rejectItem('${item.ref}', 'payment')">
+                ✗ Reject
+            </button>
+        `;
+    }
+
+   return '';
+},
+            
+            approveConceptNote(refNumber, needsED) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 
-                const submitBtn = document.getElementById('procurementSubmitBtn');
-                const grrFile = document.getElementById('grrFile').files[0];
-                const poFile = document.getElementById('poFile').files[0];
-                const notes = document.getElementById('procNotes').value;
-                const accountName = document.getElementById('accountName').value;
-                const accountNumber = document.getElementById('accountNumber').value;
-                const bankName = document.getElementById('bankName').value;
+                cn.approvalHistory.push({
+                    approver: this.currentUser,
+                    role: 'Budget Owner',
+                    action: 'approved',
+                    date: new Date().toISOString()
+                });
                 
-                if (!grrFile || !poFile) {
-                    alert('Please upload both GRR and PO/Invoice documents');
-                    return;
+                if (needsED) {
+                    cn.status = 'pending_ed';
+                    alert(`${refNumber} approved and forwarded to Executive Director (amount > ₦1,000,000)`);
+                } else {
+                    cn.status = 'approved';
+                    alert(`${refNumber} approved! Staff can now request payment.`);
                 }
                 
-                if (!accountName || !accountNumber || !bankName) {
-                    alert('Please provide all bank account details');
-                    return;
-                }
-                
-                if (!this.validateAccountNumber(accountNumber)) {
-                    alert('Account number must be exactly 10 digits');
-                    return;
-                }
-                
-                try {
-                    submitBtn.disabled = true;
-                    submitBtn.textContent = 'Uploading documents...';
-                    
-                    // Upload files to Supabase Storage
-                    const grrData = await this.uploadFile(grrFile, 'grr');
-                    submitBtn.textContent = 'Processing...';
-                    const poData = await this.uploadFile(poFile, 'po');
-                    
-                    // Update concept note
-                    const { error: cnError } = await supabaseClient
-                        .from('concept_notes')
-                        .update({
-                            status: 'approved',
-                            approvedDate: new Date().toISOString(),
-                            approvedBy: this.currentUser,
-                            procurementComplete: new Date().toISOString(),
-                            retirementresponsibility: 'procurement',
-                            grrFileUrl: grrData.url,
-                            grrFileName: grrData.fileName,
-                            poFileUrl: poData.url,
-                            poFileName: poData.fileName,
-                            procurementNotes: notes
-                        })
-                        .eq('refNumber', refNumber);
-                    
-                    if (cnError) throw cnError;
-                    
-                    // AUTO-CREATE PAYMENT REQUEST for Finance
-                    const payment = {
-                        refNumber: 'PAY' + Date.now(),
-                        conceptNoteId: cn.id,
-                        conceptNoteRef: cn.refNumber,
-                        projectCode: cn.projectCode,
-                        staffName: cn.staffName,
-                        amount: cn.estimatedCost,
-                        paymentMethod: 'bank_transfer',
-                        justification: `Procurement completed by ${this.currentUser}. ${notes}`,
-                        accountName: accountName,
-                        accountNumber: accountNumber,
-                        bankName: bankName,
-                        status: 'pending',
-                        requestDate: new Date().toISOString(),
-                        procurementComplete: true,
-                        retirementresponsibility: 'procurement'
-                    };
-                    
-                    const { error: payError } = await supabaseClient
-                        .from('payments')
-                        .insert([payment])
-                        .select();
-                    
-                    if (payError) throw payError;
-                    
-                    alert('Procurement completed and payment request sent to Finance!');
-                    await this.loadData();
-                    this.showView('approvals');
-                    
-                } catch (error) {
-                    console.error('Procurement error:', error);
-                    alert('Error: ' + error.message);
-                } finally {
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Complete & Send to Finance';
-                }
+                this.saveData();
+                this.renderApprovals(document.getElementById('mainContent'));
             },
-        
-            async processPayment(refNumber) {
+            
+            routeToProcurement(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+
+    const comment = prompt('Add approval comment for procurement:');
+    if (!comment) {
+        alert('Comment is required.');
+        return;
+    }
+
+    cn.approvalHistory.push({
+        approver: this.currentUser,
+        role: 'Budget Owner',
+        action: 'routed_to_procurement',
+        comment: comment,
+        date: new Date().toISOString()
+    });
+
+    cn.status = 'pending_procurement';
+
+    this.saveData();
+
+    alert(`${refNumber} sent to Procurement successfully.`);
+    
+    this.renderApprovals(document.getElementById('mainContent'));
+},
+            
+            approveByED(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                
+                cn.approvalHistory.push({
+                    approver: this.currentUser,
+                    role: 'Executive Director',
+                    action: 'approved',
+                    date: new Date().toISOString()
+                });
+                
+                if (cn.requiresProcurement === 'yes') {
+                    cn.status = 'pending_procurement';
+                    alert(`${refNumber} approved and sent to Procurement`);
+                } else {
+                    cn.status = 'approved';
+                    alert(`${refNumber} approved! Staff can now request payment.`);
+                }
+                
+                this.saveData();
+                this.renderApprovals(document.getElementById('mainContent'));
+            },
+            
+            completeProcurement(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                
+                const evidence = prompt('Enter GRR reference and evidence details:');
+                if (!evidence) return;
+                
+                cn.approvalHistory.push({
+                    approver: this.currentUser,
+                    role: 'Procurement Officer',
+                    action: 'procurement_completed',
+                    evidence: evidence,
+                    date: new Date().toISOString()
+                });
+                
+                cn.status = 'procurement_complete';
+                alert(`${refNumber} procurement completed with evidence: ${evidence}\nSent to Finance for payment.`);
+                
+                this.saveData();
+                this.renderApprovals(document.getElementById('mainContent'));
+            },
+            showProcurementUpload(refNumber) {
+    const content = document.getElementById('mainContent');
+
+    content.innerHTML = `
+        <div class="header">
+            <h2>Procurement Documentation</h2>
+            <p>Attach GRR / invoice before sending to Finance</p>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <label>Upload Document</label>
+                <input type="file" id="procFile" required />
+            </div>
+
+            <div class="form-group full-width">
+                <label>Comment</label>
+                <textarea id="procComment" placeholder="Optional note to finance"></textarea>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="app.completeProcurementWithFile('${refNumber}')">
+                    Send to Finance
+                </button>
+                <button class="btn btn-secondary" onclick="app.showView('approvals')">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    `;
+},
+completeProcurementWithFile(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+
+    const fileInput = document.getElementById('procFile');
+    if (!fileInput.files.length) {
+        alert('Please upload a document.');
+        return;
+    }
+
+    const comment = document.getElementById('procComment').value || '';
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = () => {
+        cn.approvalHistory.push({
+            approver: this.currentUser,
+            role: 'Procurement Officer',
+            action: 'procurement_completed',
+            comment,
+            fileName: file.name,
+            fileData: reader.result,
+            date: new Date().toISOString()
+        });
+
+        cn.status = 'procurement_complete';
+
+        this.saveData();
+        alert('Sent to Finance successfully.');
+        this.showView('approvals');
+    };
+
+    reader.readAsDataURL(file);
+},
+            processPayment(refNumber) {
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 if (!payment) return;
                 
-                if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
-                    alert('Error: Account details not provided by staff member. Please contact the staff to update their payment request with bank details.');
-                    return;
-                }
+                const confirm = window.confirm(`Process payment of ₦${payment.amount.toLocaleString()} to ${payment.staffName}?`);
+                if (!confirm) return;
                 
-                if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
-                    return;
-                }
+                payment.status = 'paid';
+                payment.paidDate = new Date().toISOString();
+                payment.processedBy = this.currentUser;
                 
-                try {
-                    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
-                    
-                    const { error } = await supabaseClient
-                        .from('payments')
-                        .update({
-                            status: 'paid',
-                            paidDate: new Date().toISOString(),
-                            processedBy: this.currentUser,
-                            retirementresponsibility: conceptNote?.retirementresponsibility || 'staff'
-                        })
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    alert(`Payment of ₦${payment.amount.toLocaleString()} processed successfully!`);
-                    await this.loadData();
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Payment error:', error);
-                    alert('Error processing payment: ' + error.message);
-                }
+                alert(`Payment ${refNumber} processed successfully!\nStaff has been notified to submit retirement within 10 days.`);
+                
+                this.saveData();
+                this.renderApprovals(document.getElementById('mainContent'));
             },
+            
+            rejectItem(refNumber, type) {
+                const reason = prompt('Enter rejection reason:');
+                if (!reason) return;
+                
+                if (type === 'conceptNote') {
+                    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                    if (cn) {
+                        cn.status = 'rejected';
+                        cn.rejectionReason = reason;
+                        cn.rejectedBy = this.currentUser;
+                        cn.rejectedDate = new Date().toISOString();
+                    }
+                } else if (type === 'payment') {
+                    const payment = this.data.payments.find(p => p.refNumber === refNumber);
+                    if (payment) {
+                        payment.status = 'rejected';
+                        payment.rejectionReason = reason;
+                        payment.rejectedBy = this.currentUser;
+                        payment.rejectedDate = new Date().toISOString();
+                    }
+                }
+                
+                alert(`${refNumber} rejected. Reason: ${reason}`);
+                this.saveData();
+                this.renderApprovals(document.getElementById('mainContent'));
+            },
+            
+ renderReports(content) {
 
-            viewConceptNoteDetails(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
-                
-                const content = document.getElementById('mainContent');
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Concept Note Details</h2>
-                        <p>Full information for ${cn.refNumber}</p>
-                    </div>
-                    
-                    <div class="form-grid two-col">
-                        <div class="form-group">
-                            <label>Reference Number</label>
-                            <input type="text" value="${cn.refNumber}" readonly>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Status</label>
-                            <span class="status-badge status-${cn.status}">${cn.status}</span>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Staff Name</label>
-                            <input type="text" value="${cn.staffName}" readonly>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Submitted Date</label>
-                            <input type="text" value="${new Date(cn.submittedDate).toLocaleString()}" readonly>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Project Code</label>
-                            <input type="text" value="${cn.projectCode}" readonly>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Estimated Cost</label>
-                            <input type="text" value="₦${cn.estimatedCost.toLocaleString()}" readonly>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Activity Title</label>
-                            <input type="text" value="${cn.activityTitle}" readonly>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Objective</label>
-                            <textarea rows="3" readonly>${cn.objective}</textarea>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <label>Description</label>
-                            <textarea rows="4" readonly>${cn.description}</textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Requires Procurement?</label>
-                            <input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly>
-                        </div>
-                        
-                        ${cn.procurementNotes ? `
-                            <div class="form-group full-width">
-                                <label>Procurement Notes</label>
-                                <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
-                            </div>
-                        ` : ''}
-                        
-                        ${cn.grrFileName ? `
-                            <div class="form-group">
-                                <label>GRR Document</label>
-                                <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">
-                                    📎 Download ${cn.grrFileName}
-                                </button>
-                            </div>
-                        ` : ''}
-                        
-                        ${cn.poFileName ? `
-                            <div class="form-group">
-                                <label>PO/Invoice Document</label>
-                                <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.poFileUrl}', '${cn.poFileName}')">
-                                    📎 Download ${cn.poFileName}
-                                </button>
-                            </div>
-                        ` : ''}
-                        
-                        <div class="btn-group full-width">
-                            <button class="btn btn-primary" onclick="app.showView('approvals')">
-                                ← Back to Approvals
-                            </button>
-                        </div>
-                    </div>
-                `;
-            },
+    const role = this.getUserRole();
+    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+        content.innerHTML =
+            '<div class="empty-state">' +
+            '<h2>Access Denied</h2>' +
+            '<p>You are not authorized to view financial reports.</p>' +
+            '</div>';
+        return;
+    }
+
+    const projectStats = this.data.projects.map(project => {
+        const spent = this.getProjectSpent(project.code);
+        const remaining = project.budget - spent;
+        const percentUsed = (spent / project.budget * 100).toFixed(1);
+        
+        return {
+            ...project,
+            spent,
+            remaining,
+            percentUsed
+        };
+    });
+
+    content.innerHTML = `
+        <div class="header">
+            <h2>Reports & Budget Tracking</h2>
+            <p>Financial overview and budget utilization</p>
+        </div>
+        
+        <div style="margin-bottom: 24px;">
+            <button class="btn btn-primary" onclick="app.downloadBudgetReport()">
+                📥 Download Budget Report (Excel)
+            </button>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Budget</h3>
+                <div class="stat-value">₦${this.data.projects.reduce((sum, p) => sum + p.budget, 0).toLocaleString()}</div>
+                <div class="stat-label">Across all projects</div>
+            </div>
+            <div class="stat-card warning">
+                <h3>Total Spent</h3>
+                <div class="stat-value">₦${this.data.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div>
+                <div class="stat-label">All paid requests</div>
+            </div>
+            <div class="stat-card">
+                <h3>Pending Approvals</h3>
+                <div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending').length}</div>
+                <div class="stat-label">Concept notes awaiting review</div>
+            </div>
+            <div class="stat-card danger">
+                <h3>Unretired Advances</h3>
+                <div class="stat-value">${this.data.payments.filter(p => p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)).length}</div>
+                <div class="stat-label">Need retirement</div>
+            </div>
+        </div>
+        
+        <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Project Code</th>
+                        <th>Project Name</th>
+                        <th>Total Budget</th>
+                        <th>Spent</th>
+                        <th>Remaining</th>
+                        <th>Usage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${projectStats.map(p => `
+                        <tr>
+                            <td><strong>${p.code}</strong></td>
+                            <td>${p.name}</td>
+                            <td>₦${p.budget.toLocaleString()}</td>
+                            <td>₦${p.spent.toLocaleString()}</td>
+                            <td>₦${p.remaining.toLocaleString()}</td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div class="budget-bar" style="flex: 1; margin: 0;">
+                                        <div class="budget-fill ${p.percentUsed > 90 ? 'danger' : p.percentUsed > 70 ? 'warning' : ''}" 
+                                             style="width: ${p.percentUsed}%"></div>
+                                    </div>
+                                    <span style="font-weight: 600; min-width: 50px;">${p.percentUsed}%</span>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+},
             
-            async rejectPayment(refNumber) {
-                const reason = prompt('Please provide a reason for rejection:');
-                if (!reason) return;
+            downloadBudgetReport() {
+                // Create CSV content
+                let csv = 'RAHAMA FMS - Budget Report\n';
+                csv += 'Generated: ' + new Date().toLocaleString() + '\n\n';
                 
-                try {
-                    const { error } = await supabaseClient
-                        .from('payments')
-                        .update({
-                            status: 'rejected',
-                            rejectedDate: new Date().toISOString(),
-                            rejectedBy: this.currentUser,
-                            rejectionReason: reason
-                        })
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    alert('Payment rejected.');
-                    await this.loadData();
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Reject error:', error);
-                    alert('Error rejecting payment: ' + error.message);
-                }
-            },
-            
-            async approveRetirement(refNumber) {
-                try {
-                    const { error } = await supabaseClient
-                        .from('retirements')
-                        .update({
-                            status: 'approved',
-                            approvedDate: new Date().toISOString(),
-                            approvedBy: this.currentUser
-                        })
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    alert('Retirement approved successfully!');
-                    await this.loadData();
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Approval error:', error);
-                    alert('Error approving retirement: ' + error.message);
-                }
-            },
-            
-            async rejectRetirement(refNumber) {
-                const reason = prompt('Please provide a reason for rejection:');
-                if (!reason) return;
+                csv += 'PROJECT BUDGET SUMMARY\n';
+                csv += 'Project Code,Project Name,Total Budget,Spent,Remaining,Percentage Used\n';
                 
-                try {
-                    const { error } = await supabaseClient
-                        .from('retirements')
-                        .update({
-                            status: 'rejected',
-                            rejectedDate: new Date().toISOString(),
-                            rejectedBy: this.currentUser,
-                            rejectionReason: reason
-                        })
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    alert('Retirement rejected.');
-                    await this.loadData();
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Reject error:', error);
-                    alert('Error rejecting retirement: ' + error.message);
-                }
-            },
-            
-            renderReports(content) {
-                const role = this.getUserRole();
-                
-                if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <h3>Access Denied</h3>
-                            <p>You don't have permission to view reports.</p>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                const projectStats = this.data.projects.map(project => {
+                this.data.projects.forEach(project => {
                     const spent = this.getProjectSpent(project.code);
                     const remaining = project.budget - spent;
                     const percentUsed = (spent / project.budget * 100).toFixed(1);
                     
-                    return {
-                        ...project,
-                        spent,
-                        remaining,
-                        percentUsed
-                    };
+                    csv += `${project.code},${project.name},${project.budget},${spent},${remaining},${percentUsed}%\n`;
                 });
                 
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Reports & Budget Tracking</h2>
-                        <p>Financial overview and budget utilization</p>
-                    </div>
+                csv += '\n\nDETAILED TRANSACTIONS BY PROJECT\n\n';
+                
+                this.data.projects.forEach(project => {
+                    const projectPayments = this.data.payments.filter(p => {
+                        const cn = this.data.conceptNotes.find(c => c.id === p.conceptNoteId);
+                        return cn && cn.projectCode === project.code && p.status === 'paid';
+                    });
                     
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>Total Budget</h3>
-                            <div class="stat-value">₦${this.data.projects.reduce((sum, p) => sum + p.budget, 0).toLocaleString()}</div>
-                            <div class="stat-label">Across all projects</div>
-                        </div>
-                        <div class="stat-card warning">
-                            <h3>Total Spent</h3>
-                            <div class="stat-value">₦${this.data.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div>
-                            <div class="stat-label">All paid requests</div>
-                        </div>
-                        <div class="stat-card">
-                            <h3>Pending Approvals</h3>
-                            <div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending').length}</div>
-                            <div class="stat-label">Concept notes awaiting review</div>
-                        </div>
-                        <div class="stat-card danger">
-                            <h3>Unretired Advances</h3>
-                            <div class="stat-value">${this.data.payments.filter(p => p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)).length}</div>
-                            <div class="stat-label">Need retirement</div>
-                        </div>
-                    </div>
+                    if (projectPayments.length > 0) {
+                        csv += `\n${project.code} - ${project.name}\n`;
+                        csv += 'Payment Ref,Staff,Amount,Date,Concept Note\n';
+                        
+                        projectPayments.forEach(p => {
+                            const cn = this.data.conceptNotes.find(c => c.id === p.conceptNoteId);
+                            csv += `${p.refNumber},${p.staffName},${p.amount},${new Date(p.paidDate).toLocaleDateString()},${cn ? cn.refNumber : 'N/A'}\n`;
+                        });
+                    }
+                });
+                
+                // Download file
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `RAHAMA_Budget_Report_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            },
+            
+            
+            calculateBudgetUtilization() {
+                return this.data.projects.map(proj => {
+                    const utilized = this.data.payments
+                        .filter(p => {
+                            const cn = this.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef);
+                            return cn && cn.projectCode === proj.code && p.status === 'paid';
+                        })
+                        .reduce((sum, p) => sum + p.amount, 0);
                     
-                    <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Project Code</th>
-                                    <th>Project Name</th>
-                                    <th>Total Budget</th>
-                                    <th>Spent</th>
-                                    <th>Remaining</th>
-                                    <th>Usage</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${projectStats.map(p => `
-                                    <tr>
-                                        <td><strong>${p.code}</strong></td>
-                                        <td>${p.name}</td>
-                                        <td>₦${p.budget.toLocaleString()}</td>
-                                        <td>₦${p.spent.toLocaleString()}</td>
-                                        <td>₦${p.remaining.toLocaleString()}</td>
-                                        <td>
-                                            <div style="display: flex; align-items: center; gap: 12px;">
-                                                <div class="budget-bar" style="flex: 1; margin: 0;">
-                                                    <div class="budget-fill ${p.percentUsed > 90 ? 'danger' : p.percentUsed > 70 ? 'warning' : ''}" 
-                                                         style="width: ${p.percentUsed}%"></div>
-                                                </div>
-                                                <span style="font-weight: 600; min-width: 50px;">${p.percentUsed}%</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+                    const remaining = proj.budget - utilized;
+                    const percentage = Math.round((utilized / proj.budget) * 100);
+                    
+                    return {
+                        code: proj.code,
+                        name: proj.name,
+                        budget: proj.budget,
+                        utilized,
+                        remaining,
+                        percentage
+                    };
+                });
+            },
+            
+            getRetirementRate() {
+                const paid = this.data.payments.filter(p => p.status === 'paid').length;
+                if (paid === 0) return 0;
+                return Math.round((this.data.retirements.length / paid) * 100);
             },
             
             renderSettings(content) {
                 content.innerHTML = `
                     <div class="header">
                         <h2>Settings</h2>
-                        <p>System configuration and user preferences</p>
+                        <p>System configuration and data management</p>
                     </div>
                     
                     <div class="form-grid">
                         <div class="form-group full-width">
-                            <h3 style="margin-bottom: 16px;">User Information</h3>
-                            <p><strong>Name:</strong> ${this.currentUser}</p>
-                            <p><strong>Role:</strong> ${this.getUserRole() === 'staff' ? 'Staff Member' : this.getUserRole().toUpperCase()}</p>
-                            <p style="margin-top: 16px; padding: 16px; background: var(--bg); border-radius: 8px; font-size: 13px;">
-                                <strong>💡 Quick Tip:</strong> Your role determines what you can see and approve in the system. Contact your administrator if you need role changes.
+                            <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Data Management</h3>
+                            <p style="margin-bottom: 16px; color: var(--text-muted);">
+                                Export your financial data to CSV for reporting or backup purposes.
                             </p>
+                            <button class="btn btn-primary" onclick="app.exportToCSV()">Export All Data to CSV</button>
                         </div>
                         
                         <div class="form-group full-width">
-                            <h3 style="margin-bottom: 16px;">System Information</h3>
-                            <p><strong>Version:</strong> 2.0.0 (Optimized)</p>
-                            <p><strong>Last Updated:</strong> ${new Date().toLocaleDateString()}</p>
-                            <p><strong>Storage:</strong> Supabase Cloud Storage</p>
-                            <p><strong>Database:</strong> PostgreSQL with Row Level Security</p>
-                        </div>
-                        
-                        <div class="form-group full-width">
-                            <h3 style="margin-bottom: 16px;">Need Help?</h3>
-                            <div style="background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
-                                <p style="margin-bottom: 16px; font-size: 14px;">For technical support or questions about the system:</p>
-                                <ul style="list-style: none; padding: 0; margin: 0;">
-                                    <li style="padding: 8px 0; border-bottom: 1px solid var(--border);">
-                                        <strong>Finance Questions:</strong> Contact Finance Team
-                                    </li>
-                                    <li style="padding: 8px 0; border-bottom: 1px solid var(--border);">
-                                        <strong>Approval Issues:</strong> Contact Budget Owner
-                                    </li>
-                                    <li style="padding: 8px 0; border-bottom: 1px solid var(--border);">
-                                        <strong>Technical Support:</strong> Contact IT Support
-                                    </li>
-                                    <li style="padding: 8px 0;">
-                                        <strong>System Administrator:</strong> Aisha Linatu Abdulrahman
-                                    </li>
-                                </ul>
+                            <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">System Information</h3>
+                            <div style="background: #F5F7FA; padding: 16px; border-radius: 8px; border: 1px solid #E0E0E0;">
+                                <p><strong>Version:</strong> 2.0</p>
+                                <p style="margin-top: 8px;"><strong>Last Updated:</strong> ${new Date().toLocaleDateString()}</p>
+                                <p style="margin-top: 8px;"><strong>Data Storage:</strong> Browser localStorage</p>
+                                <p style="margin-top: 8px;"><strong>Active User:</strong> ${this.currentUser || 'None'}</p>
                             </div>
                         </div>
                         
                         <div class="form-group full-width">
-                            <h3 style="margin-bottom: 16px;">Keyboard Shortcuts</h3>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
-                                <div style="background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px;">
-                                    <kbd style="background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace;">Alt + D</kbd>
-                                    <span style="margin-left: 8px;">Dashboard</span>
-                                </div>
-                                <div style="background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px;">
-                                    <kbd style="background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace;">Alt + C</kbd>
-                                    <span style="margin-left: 8px;">Create Concept Note</span>
-                                </div>
-                                <div style="background: var(--bg); padding: 12px; border-radius: 8px; font-size: 13px;">
-                                    <kbd style="background: white; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); font-family: monospace;">Alt + A</kbd>
-                                    <span style="margin-left: 8px;">My Approvals</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="btn-group full-width">
-                            <button class="btn btn-primary" onclick="app.showView('dashboard')">Back to Dashboard</button>
-                            <button class="btn btn-secondary" onclick="app.logout()">Logout</button>
+                            <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif; color: var(--danger);">Danger Zone</h3>
+                            <p style="margin-bottom: 16px; color: var(--text-muted);">
+                                Caution: This action cannot be undone. Only use for testing or if you need to start fresh.
+                            </p>
+                            <button class="btn btn-secondary" style="border-color: var(--danger); color: var(--danger);" 
+                                    onclick="app.clearAllData()">Clear All Data</button>
                         </div>
                     </div>
                 `;
             },
             
-            logout() {
-                if (confirm('Are you sure you want to logout?')) {
-                    localStorage.removeItem('pms_user');
-                    window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
-                } 
+            exportToCSV() {
+                const csvData = [];
+                
+                // Export concept notes
+                csvData.push('CONCEPT NOTES');
+                csvData.push('Reference,Staff Name,Project Code,Activity Title,Estimated Cost,Status,Submitted Date,Requires Procurement');
+                this.data.conceptNotes.forEach(cn => {
+                    csvData.push(`${cn.refNumber},${cn.staffName},${cn.projectCode},"${cn.activityTitle}",${cn.estimatedCost},${cn.status},${cn.submittedDate},${cn.requiresProcurement}`);
+                });
+                csvData.push('');
+                
+                // Export payments
+                csvData.push('PAYMENTS');
+                csvData.push('Reference,Concept Note Ref,Staff Name,Amount,Payment Method,Status,Request Date,Paid Date');
+                this.data.payments.forEach(p => {
+                    csvData.push(`${p.refNumber},${p.conceptNoteRef},${p.staffName},${p.amount},${p.paymentMethod},${p.status},${p.requestDate},${p.paidDate || ''}`);
+                });
+                csvData.push('');
+                
+                // Export retirements
+                csvData.push('RETIREMENTS');
+                csvData.push('Reference,Payment Ref,Staff Name,Actual Spent,Balance to Return,Status,Submitted Date');
+                this.data.retirements.forEach(r => {
+                    csvData.push(`${r.refNumber},${r.paymentRef},${r.staffName},${r.actualSpent},${r.balanceToReturn},${r.status},${r.submittedDate}`);
+                });
+                
+                // Create and download CSV
+                const blob = new Blob([csvData.join('\n')], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `rahama-fms-export-${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                alert('Data exported successfully!');
+            },
+            
+            clearAllData() {
+                const confirm = window.confirm('Are you sure you want to delete ALL data? This cannot be undone!');
+                if (!confirm) return;
+                
+                const doubleConfirm = window.confirm('This will permanently delete all concept notes, payments, and retirements. Continue?');
+                if (!doubleConfirm) return;
+                
+                localStorage.removeItem('fms_data');
+                this.data.conceptNotes = [];
+                this.data.payments = [];
+                this.data.retirements = [];
+                
+                alert('All data cleared. The system has been reset.');
+                this.showView('dashboard');
             }
         };
         
-        // Initialize app when page loads
-        window.addEventListener('DOMContentLoaded', () => {
-            app.init();
-            
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', (e) => {
-                if (e.altKey) {
-                    switch(e.key.toLowerCase()) {
-                        case 'd':
-                            e.preventDefault();
-                            app.showView('dashboard');
-                            break;
-                        case 'c':
-                            e.preventDefault();
-                            app.showView('conceptNote');
-                            break;
-                        case 'a':
-                            e.preventDefault();
-                            app.showView('approvals');
-                            break;
-                        case 'p':
-                            e.preventDefault();
-                            app.showView('payment');
-                            break;
-                        case 'r':
-                            e.preventDefault();
-                            app.showView('retirement');
-                            break;
-                    }
-                }
-            });
-        });
+        // Initialize on page load
+       window.addEventListener('DOMContentLoaded', () => {
+    app.init();
+});
     </script>
 </body>
 </html>
