@@ -1714,7 +1714,6 @@ async completeProcurementWithFile(refNumber) {
     const comment = document.getElementById('procComment').value || '';
 
     const file = fileInput.files[0];
-    const reader = new FileReader();
 
   const uploaded = await this.uploadFile(file, 'procurement');
 if (!uploaded) return;
@@ -1734,7 +1733,7 @@ fileName: uploaded.fileName,
         this.saveData();
         alert('Sent to Finance successfully.');
         this.showView('approvals');
-    };
+    }
 
     reader.readAsDataURL(file);
 },
