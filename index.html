@@ -1046,7 +1046,17 @@
                         this.data.payments = allPayments;
                         this.data.retirements = allRetirements;
                     }
-                    
+                    // Load ALL payments for leadership & finance (needed for reports & budgets)
+if (['budgetOwner','ed','finance'].includes(role)) {
+    const { data: allPaymentsForReports } = await supabaseClient
+        .from('payments')
+        .select('*');
+
+    if (allPaymentsForReports) {
+        this.data.payments = allPaymentsForReports;
+    }
+}
+
                     // Clear cache when data is reloaded
                     this.clearCache();
                     
@@ -2824,6 +2834,7 @@ projectCode: conceptNote?.projectCode,
             },
             
             renderReports(content) {
+                this.loadData();
                 const role = this.getUserRole();
                 
                 if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
