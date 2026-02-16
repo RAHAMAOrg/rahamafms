@@ -1920,6 +1920,9 @@
                 
                 const form = event.target;
                 const formData = new FormData(form);
+                const conceptNote = this.data.conceptNotes.find(
+    c => c.id == formData.get('conceptNoteId')
+        );
                 const submitBtn = document.getElementById('submitPaymentBtn');
                 
                 // Validate
@@ -1959,7 +1962,9 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                         beneficiaryFileUrl: beneficiaryFileData?.url,
                         beneficiaryFileName: beneficiaryFileData?.fileName,
                         status: 'pending',
-                        requestDate: new Date().toISOString()
+                        requestDate: new Date().toISOString(),
+                        conceptNoteRef: conceptNote?.refNumber,
+projectCode: conceptNote?.projectCode,
                     };
                     
                     const { data, error } = await supabaseClient
@@ -2874,6 +2879,11 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                     </div>
                     
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
+                    <div style="margin-bottom:16px;">
+    <button class="btn btn-primary" onclick="app.exportPaymentsReport()">
+        ⬇ Download Payments Report
+    </button>
+</div>
                     <div class="table-container">
                         <table>
                             <thead>
@@ -2982,7 +2992,57 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                     </div>
                 `;
             },
-            
+            exportPaymentsReport() {
+    const payments = this.data.payments;
+
+    if (!payments.length) {
+        alert('No payments available to export.');
+        return;
+    }
+
+    // CSV headers
+    let csv = [
+        [
+            'Reference',
+            'Concept Note',
+            'Project Code',
+            'Staff Name',
+            'Amount',
+            'Status',
+            'Request Date',
+            'Paid Date',
+            'Processed By'
+        ].join(',')
+    ];
+
+    // Rows
+    payments.forEach(p => {
+        csv.push([
+            p.refNumber || '',
+            p.conceptNoteRef || '',
+            p.projectCode || '',
+            p.staffName || '',
+            p.amount || 0,
+            p.status || '',
+            p.requestDate ? new Date(p.requestDate).toLocaleDateString() : '',
+            p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '',
+            p.processedBy || ''
+        ].join(','));
+    });
+
+    // Create file
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'rahama_payments_report.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(url);
+},
             logout() {
                 if (confirm('Are you sure you want to logout?')) {
                     localStorage.removeItem('pms_user');
