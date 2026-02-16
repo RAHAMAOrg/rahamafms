@@ -5,7 +5,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rahama Financial Management System</title>
-    <link rel="icon" type="image/png" href="RAHAMA Empowerment Logo Design (3).png">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Archivo:wght@600;700&display=swap');
         
@@ -869,51 +868,10 @@
                     'Sani Hamisu': 'finance'
                 }
             },
-            async checkForNewApprovals() {
-    const role = this.getUserRole();
-    if (role === 'staff') return; // Staff don't approve anything
-    
-    // Count pending items
-    let pendingCount = 0;
-    
-    if (role === 'budgetOwner' || role === 'ed' || role === 'procurement') {
-        pendingCount += this.data.conceptNotes.filter(cn => {
-            if (cn.status !== 'pending') return false;
-            if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
-            if (role === 'ed' && cn.currentApprover === 'ed') return true;
-            if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
-            return false;
-        }).length;
-    }
-    
-    if (role === 'finance') {
-        pendingCount += this.data.payments.filter(p => p.status === 'pending').length;
-        pendingCount += this.data.retirements.filter(r => r.status === 'pending').length;
-    }
-    
-    // Show notification if there are pending items
-    if (pendingCount > 0 && Notification.permission === 'granted') {
-        const lastNotified = localStorage.getItem('lastNotificationCount');
-        if (lastNotified !== pendingCount.toString()) {
-            new Notification('RAHAMA FMS - Pending Approvals', {
-                body: `You have ${pendingCount} item(s) requiring your approval`,
-                icon: 'RAHAMA Empowerment Logo Design (3).png',
-                tag: 'approval-notification'
-            });
-            localStorage.setItem('lastNotificationCount', pendingCount);
-        }
-    }
-    
-    // Check every 5 minutes
-    setTimeout(() => this.checkForNewApprovals(), 5 * 60 * 1000);
-},
+            
             async init() {
-    this.loadStartTime = Date.now();
-    
-    // Request notification permission
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
+                this.loadStartTime = Date.now();
+                
                 // URL takes priority
                 const params = new URLSearchParams(window.location.search);
                 const urlSession = params.get('session');
@@ -943,13 +901,10 @@
                 // Show dashboard immediately, load data in background
                 this.showView('dashboard');
                 
-// Load data asynchronously (non-blocking)
-this.loadData().catch(error => {
-    console.error('Background data load error:', error);
-}).then(() => {
-    // Start notification checker after data loads
-    this.checkForNewApprovals();
-});
+                // Load data asynchronously (non-blocking)
+                this.loadData().catch(error => {
+                    console.error('Background data load error:', error);
+                });
             },
             
             showLoading() {
@@ -958,19 +913,11 @@ this.loadData().catch(error => {
             },
             
             clearCache() {
-    this.cache = {
-        myConceptNotes: null,
-        myPayments: null,
-        myRetirements: null
-    };
-},
-                // Load data asynchronously (non-blocking)
-    this.loadData().catch(error => {
-        console.error('Background data load error:', error);
-    }).then(() => {
-        // Start notification checker after data loads
-        this.checkForNewApprovals();
-    });
+                this.cache = {
+                    myConceptNotes: null,
+                    myPayments: null,
+                    myRetirements: null
+                };
             },
             
             async loadData() {
@@ -1172,14 +1119,10 @@ this.loadData().catch(error => {
             },
             
             getProjectSpent(projectCode) {
-    return this.data.payments
-        .filter(p => {
-            // Check if payment has a concept note with this project code
-            const cn = this.data.conceptNotes.find(c => c.id === p.conceptNoteId);
-            return cn && cn.projectCode === projectCode && p.status === 'paid';
-        })
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
-},
+                return this.data.payments
+                    .filter(p => p.projectCode === projectCode && p.status === 'paid')
+                    .reduce((sum, p) => sum + (p.amount || 0), 0);
+            },
             
             // FILE UPLOAD HELPERS with Supabase Storage
             async uploadFile(file, type = 'general') {
@@ -2309,22 +2252,19 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                                             <td>${p.paymentMethod}</td>
                                             <td>${new Date(p.requestDate).toLocaleDateString()}</td>
                                             <td>
-    <button class="action-btn" onclick="app.viewPaymentDetails('${p.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
-        📄 View Details
-    </button><br>
-    ${p.beneficiaryFileUrl ? `
-        <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">
-            📎 Download Beneficiaries
-        </button><br>
-    ` : ''}
-    <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
-        ✓ Process Payment
-    </button>
-    <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
-        ✗ Reject
-    </button>
-</td>
-                              </tr>
+                                                ${p.beneficiaryFileUrl ? `
+                                                    <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">
+                                                        📎 Download Beneficiaries
+                                                    </button><br>
+                                                ` : ''}
+                                                <button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">
+                                                    ✓ Process Payment
+                                                </button>
+                                                <button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">
+                                                    ✗ Reject
+                                                </button>
+                                            </td>
+                                        </tr>
                                     `).join('')}
                                 </tbody>
                             </table>
@@ -2777,180 +2717,13 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                         ` : ''}
                         
                         ${cn.grrFileName ? `
-    <div class="form-group">
-        <label>GRR Document</label>
-        <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">
-            📎 Download ${cn.grrFileName}
-        </button>
-    </div>
-` : ''}
-
-${cn.poFileName ? `
-    <div class="form-group">
-        <label>PO/Invoice Document</label>
-        <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.poFileUrl}', '${cn.poFileName}')">
-            📎 Download ${cn.poFileName}
-        </button>
-    </div>
-` : ''}
-
-<div class="btn-group full-width">
-    <button class="btn btn-primary" onclick="app.showView('approvals')">
-        ← Back to Approvals
-    </button>
-</div>
-</div>
-`;
-},
-
-viewPaymentDetails(refNumber) {
-    const payment = this.data.payments.find(p => p.refNumber === refNumber);
-    if (!payment) return;
-    
-    const cn = this.data.conceptNotes.find(c => c.id === payment.conceptNoteId);
-    
-    const content = document.getElementById('mainContent');
-    content.innerHTML = `
-        <div class="header">
-            <h2>Payment Request Details</h2>
-            <p>Full information for ${payment.refNumber}</p>
-        </div>
-        
-        <div class="form-grid two-col">
-            <div class="form-group">
-                <label>Payment Reference</label>
-                <input type="text" value="${payment.refNumber}" readonly>
-            </div>
-            
-            <div class="form-group">
-                <label>Status</label>
-                <span class="status-badge status-${payment.status}">${payment.status}</span>
-            </div>
-            
-            <div class="form-group">
-                <label>Staff Name</label>
-                <input type="text" value="${payment.staffName}" readonly>
-            </div>
-            
-            <div class="form-group">
-                <label>Request Date</label>
-                <input type="text" value="${new Date(payment.requestDate).toLocaleString()}" readonly>
-            </div>
-            
-            <div class="form-group">
-                <label>Amount</label>
-                <input type="text" value="₦${payment.amount.toLocaleString()}" readonly>
-            </div>
-            
-            <div class="form-group">
-                <label>Payment Method</label>
-                <input type="text" value="${payment.paymentMethod}" readonly>
-            </div>
-            
-            ${cn ? `
-                <div class="form-group full-width" style="margin-top: 24px;">
-                    <h3 style="font-family: 'Archivo', sans-serif; margin-bottom: 16px;">Related Concept Note</h3>
-                </div>
-                
-                <div class="form-group">
-                    <label>Concept Note Reference</label>
-                    <input type="text" value="${cn.refNumber}" readonly>
-                </div>
-                
-                <div class="form-group">
-                    <label>Project Code</label>
-                    <input type="text" value="${cn.projectCode}" readonly>
-                </div>
-                
-                <div class="form-group full-width">
-                    <label>Activity Title</label>
-                    <input type="text" value="${cn.activityTitle}" readonly>
-                </div>
-                
-                <div class="form-group full-width">
-                    <label>Objective</label>
-                    <textarea rows="2" readonly>${cn.objective}</textarea>
-                </div>
-                
-                <div class="form-group full-width">
-                    <label>Description</label>
-                    <textarea rows="3" readonly>${cn.description}</textarea>
-                </div>
-                
-                ${cn.procurementNotes ? `
-                    <div class="form-group full-width">
-                        <label>Procurement Notes</label>
-                        <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
-                    </div>
-                ` : ''}
-                
-                ${cn.grrFileName ? `
-                    <div class="form-group">
-                        <label>GRR Document</label>
-                        <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">
-                            📎 Download ${cn.grrFileName}
-                        </button>
-                    </div>
-                ` : ''}
-                
-                ${cn.poFileName ? `
-                    <div class="form-group">
-                        <label>PO/Invoice Document</label>
-                        <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.poFileUrl}', '${cn.poFileName}')">
-                            📎 Download ${cn.poFileName}
-                        </button>
-                    </div>
-                ` : ''}
-            ` : ''}
-            
-            <div class="form-group full-width" style="margin-top: 24px;">
-                <h3 style="font-family: 'Archivo', sans-serif; margin-bottom: 16px;">Payment Details</h3>
-            </div>
-            
-            <div class="form-group">
-                <label>Account Name</label>
-                <input type="text" value="${payment.accountName || 'N/A'}" readonly>
-            </div>
-            
-            <div class="form-group">
-                <label>Account Number</label>
-                <input type="text" value="${payment.accountNumber || 'N/A'}" readonly>
-            </div>
-            
-            <div class="form-group full-width">
-                <label>Bank Name</label>
-                <input type="text" value="${payment.bankName || 'N/A'}" readonly>
-            </div>
-            
-            ${payment.justification ? `
-                <div class="form-group full-width">
-                    <label>Justification</label>
-                    <textarea rows="2" readonly>${payment.justification}</textarea>
-                </div>
-            ` : ''}
-            
-            ${payment.beneficiaryFileName ? `
-                <div class="form-group full-width">
-                    <label>Beneficiary List</label>
-                    <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${payment.beneficiaryFileUrl}', '${payment.beneficiaryFileName}')">
-                        📎 Download ${payment.beneficiaryFileName}
-                    </button>
-                </div>
-            ` : ''}
-            
-            <div class="btn-group full-width">
-                <button class="btn btn-primary" onclick="app.showView('approvals')">
-                    ← Back to Approvals
-                </button>
-                ${payment.status === 'pending' ? `
-                    <button class="btn btn-secondary" style="background: var(--success); color: white; border: none;" onclick="app.processPayment('${payment.refNumber}')">
-                        ✓ Process Payment
-                    </button>
-                ` : ''}
-            </div>
-        </div>
-    `;
-},
+                            <div class="form-group">
+                                <label>GRR Document</label>
+                                <button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">
+                                    📎 Download ${cn.grrFileName}
+                                </button>
+                            </div>
+                        ` : ''}
                         
                         ${cn.poFileName ? `
                             <div class="form-group">
