@@ -1701,7 +1701,7 @@ if (typeof event !== 'undefined' && event?.target) {
         </div>
     `;
 },
-completeProcurementWithFile(refNumber) {
+async completeProcurementWithFile(refNumber) {
     const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
     if (!cn) return;
 
