@@ -1945,7 +1945,9 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                     if (file) {
                         beneficiaryFileData = await this.uploadFile(file, 'beneficiaries');
                     }
-                    
+                    const cn = this.data.conceptNotes.find(
+    c => c.id == formData.get('conceptNoteId')
+);
                     const payment = {
                         refNumber: 'PAY' + Date.now(),
                         conceptNoteId: parseInt(formData.get('conceptNoteId')),
@@ -1959,7 +1961,9 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                         beneficiaryFileUrl: beneficiaryFileData?.url,
                         beneficiaryFileName: beneficiaryFileData?.fileName,
                         status: 'pending',
-                        requestDate: new Date().toISOString()
+                        requestDate: new Date().toISOString(),
+                        projectCode: cn ? cn.projectCode : null,
+                        conceptNoteRef: cn ? cn.refNumber : null,
                     };
                     
                     const { data, error } = await supabaseClient
