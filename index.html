@@ -2763,6 +2763,8 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                                 <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
                             </div>
                         ` : ''}
+                        `;
+},
                         viewPaymentDetails(refNumber) {
     const payment = this.data.payments.find(p => p.refNumber === refNumber);
     if (!payment) return;
