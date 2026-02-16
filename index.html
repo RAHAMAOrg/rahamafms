@@ -1010,44 +1010,6 @@
                                 .eq('staffName', this.currentUser)
                                 .order('submittedDate', { ascending: false })
                         );
-                        async checkForNewApprovals() {
-    const role = this.getUserRole();
-    if (role === 'staff') return; // Staff don't approve anything
-    
-    // Count pending items
-    let pendingCount = 0;
-    
-    if (role === 'budgetOwner' || role === 'ed' || role === 'procurement') {
-        pendingCount += this.data.conceptNotes.filter(cn => {
-            if (cn.status !== 'pending') return false;
-            if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
-            if (role === 'ed' && cn.currentApprover === 'ed') return true;
-            if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
-            return false;
-        }).length;
-    }
-    
-    if (role === 'finance') {
-        pendingCount += this.data.payments.filter(p => p.status === 'pending').length;
-        pendingCount += this.data.retirements.filter(r => r.status === 'pending').length;
-    }
-    
-    // Show notification if there are pending items
-    if (pendingCount > 0 && Notification.permission === 'granted') {
-        const lastNotified = localStorage.getItem('lastNotificationCount');
-        if (lastNotified !== pendingCount.toString()) {
-            new Notification('RAHAMA FMS - Pending Approvals', {
-                body: `You have ${pendingCount} item(s) requiring your approval`,
-                icon: 'RAHAMA Empowerment Logo Design (3).png',
-                tag: 'approval-notification'
-            });
-            localStorage.setItem('lastNotificationCount', pendingCount);
-        }
-    }
-    
-    // Check every 5 minutes
-    setTimeout(() => this.checkForNewApprovals(), 5 * 60 * 1000);
-},
                         const results = await Promise.all(queries);
                         
                         // Merge results and deduplicate
@@ -1102,7 +1064,44 @@
                     }
                 }
             },
-            
+              async checkForNewApprovals() {
+    const role = this.getUserRole();
+    if (role === 'staff') return; // Staff don't approve anything
+    
+    // Count pending items
+    let pendingCount = 0;
+    
+    if (role === 'budgetOwner' || role === 'ed' || role === 'procurement') {
+        pendingCount += this.data.conceptNotes.filter(cn => {
+            if (cn.status !== 'pending') return false;
+            if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
+            if (role === 'ed' && cn.currentApprover === 'ed') return true;
+            if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
+            return false;
+        }).length;
+    }
+    
+    if (role === 'finance') {
+        pendingCount += this.data.payments.filter(p => p.status === 'pending').length;
+        pendingCount += this.data.retirements.filter(r => r.status === 'pending').length;
+    }
+    
+    // Show notification if there are pending items
+    if (pendingCount > 0 && Notification.permission === 'granted') {
+        const lastNotified = localStorage.getItem('lastNotificationCount');
+        if (lastNotified !== pendingCount.toString()) {
+            new Notification('RAHAMA FMS - Pending Approvals', {
+                body: `You have ${pendingCount} item(s) requiring your approval`,
+                icon: 'RAHAMA Empowerment Logo Design (3).png',
+                tag: 'approval-notification'
+            });
+            localStorage.setItem('lastNotificationCount', pendingCount);
+        }
+    }
+    
+    // Check every 5 minutes
+    setTimeout(() => this.checkForNewApprovals(), 5 * 60 * 1000);
+},
             getUserRole() {
                 return this.data.roles[this.currentUser] || 'staff';
             },
