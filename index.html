@@ -963,7 +963,7 @@
                         );
                         
                         // Load pending items for this role
-                        if (role === 'budgetOwner' || role === 'ed' || role === 'procurement') {
+                        if (role === 'budgetOwner' || role === 'ed' || role === 'procurement' role === 'finance') {
                             queries.push(
                                 supabaseClient
                                     .from('concept_notes')
