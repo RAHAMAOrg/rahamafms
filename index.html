@@ -2162,7 +2162,7 @@ projectCode: conceptNote?.projectCode,
                     if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
                     if (role === 'ed' && cn.currentApprover === 'ed') return true;
                     if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
-                    
+                    if (role === 'finance' && cn.status === 'approved') return true;
                     return false;
                 });
                 
@@ -2268,6 +2268,11 @@ projectCode: conceptNote?.projectCode,
                                             <td>${p.paymentMethod}</td>
                                             <td>${new Date(p.requestDate).toLocaleDateString()}</td>
                                             <td>
+                                            <button class="action-btn"
+        onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')"
+        style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
+        📄 View Concept Note
+    </button><br>
                                                 ${p.beneficiaryFileUrl ? `
                                                     <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">
                                                         📎 Download Beneficiaries
