@@ -2812,6 +2812,8 @@ if (payment.beneficiaryFileUrl) {
         }
 
         cn = data;
+          // ✅ ADD THIS LINE
+    this.data.conceptNotes.push(cn);
     }
 
     const content = document.getElementById('mainContent');
