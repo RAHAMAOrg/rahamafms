@@ -1006,39 +1006,29 @@
 
     const results = await Promise.all(queries);
 
-    const allConceptNotes = [];
-    const allPayments = [];
-    const allRetirements = [];
-    const seenCN = new Set();
-    const seenPay = new Set();
-    const seenRet = new Set();
+   let conceptNotes = [];
+let payments = [];
+let retirements = [];
 
-    results.forEach(result => {
-        if (!result.data) return;
+results.forEach(result => {
+    if (!result.data) return;
 
-        result.data.forEach(item => {
-            if (item.refNumber?.startsWith('CN')) {
-                if (!seenCN.has(item.refNumber)) {
-                    seenCN.add(item.refNumber);
-                    allConceptNotes.push(item);
-                }
-            } else if (item.refNumber?.startsWith('PAY')) {
-                if (!seenPay.has(item.refNumber)) {
-                    seenPay.add(item.refNumber);
-                    allPayments.push(item);
-                }
-            } else if (item.refNumber?.startsWith('RET')) {
-                if (!seenRet.has(item.refNumber)) {
-                    seenRet.add(item.refNumber);
-                    allRetirements.push(item);
-                }
-            }
-        });
+    result.data.forEach(item => {
+        if (item.activityTitle) {
+            conceptNotes.push(item);
+        } 
+        else if (item.paymentMethod) {
+            payments.push(item);
+        } 
+        else if (item.expenditureDetails) {
+            retirements.push(item);
+        }
     });
+});
 
-    this.data.conceptNotes = allConceptNotes;
-    this.data.payments = allPayments;
-    this.data.retirements = allRetirements;
+this.data.conceptNotes = conceptNotes;
+this.data.payments = payments;
+this.data.retirements = retirements;
 }
                     // Load ALL payments for leadership & finance (needed for reports & budgets)
 if (['budgetOwner','ed','finance'].includes(role)) {
@@ -1047,9 +1037,14 @@ if (['budgetOwner','ed','finance'].includes(role)) {
         .select('*');
 
     if (allPaymentsForReports) {
-        this.data.payments = allPaymentsForReports;
+        const paymentMap = new Map();
+
+[...this.data.payments, ...allPaymentsForReports].forEach(p => {
+    paymentMap.set(p.refNumber, p);
+});
+
+this.data.payments = Array.from(paymentMap.values());
     }
-}
 
                     // Clear cache when data is reloaded
                     this.clearCache();
@@ -2798,24 +2793,32 @@ if (payment.beneficiaryFileUrl) {
                 }
             },
 
-            viewConceptNoteDetails(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-               if (!cn) {
-    alert('Concept note not loaded. Refreshing data...');
-    this.loadData().then(() => {
-        const retry = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-        if (retry) app.viewConceptNoteDetails(refNumber);
-        else alert('Concept note not found.');
-    });
-    return;
-}
-                
-                const content = document.getElementById('mainContent');
-                content.innerHTML = `
-                    <div class="header">
-                        <h2>Concept Note Details</h2>
-                        <p>Full information for ${cn.refNumber}</p>
-                    </div>
+            async viewConceptNoteDetails(refNumber) {
+    let cn = this.data.conceptNotes.find(
+        c => c.refNumber === refNumber
+    );
+
+    if (!cn) {
+        const { data, error } = await supabaseClient
+            .from('concept_notes')
+            .select('*')
+            .eq('refNumber', refNumber)
+            .single();
+
+        if (error || !data) {
+            alert('Concept note not found.');
+            return;
+        }
+
+        cn = data;
+    }
+
+    const content = document.getElementById('mainContent');
+    content.innerHTML = `
+        <div class="header">
+            <h2>Concept Note Details</h2>
+            <p>Full information for ${cn.refNumber}</p>
+        </div>
                     
                     <div class="form-grid two-col">
                         <div class="form-group">
