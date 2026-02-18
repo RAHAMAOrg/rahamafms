@@ -974,18 +974,6 @@
         );
     }
 
-    // Finance loads approved + pending concept notes
-    if (role === 'finance') {
-        queries.push(
-            supabaseClient
-                .from('concept_notes')
-                .select('*')
-                .in('status', ['approved', 'pending'])
-                .order('submittedDate', { ascending: false })
-                .limit(100)
-        );
-    }
-
     // Load pending retirements for approvers
     if (['budgetOwner','ed','finance'].includes(role)) {
         queries.push(
