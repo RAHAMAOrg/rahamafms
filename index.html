@@ -953,7 +953,8 @@
                     else {
     const queries = [];
 
-    // Always load user's own concept notes
+    // Always load user's own concept notes (finance loads CNs separately via payment refs only)
+if (role !== 'finance') {
     queries.push(
         supabaseClient
             .from('concept_notes')
@@ -961,7 +962,7 @@
             .eq('staffName', this.currentUser)
             .order('submittedDate', { ascending: false })
     );
-
+}
     // Load pending concept notes for approvers
     if (['budgetOwner','ed','procurement'].includes(role)) {
         queries.push(
