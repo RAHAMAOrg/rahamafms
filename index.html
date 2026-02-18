@@ -951,102 +951,107 @@
                     } 
                     // Strategy 2: If approver, load only pending items for their role + their own
                     else {
-                        const queries = [];
-                        
-                        // Always load user's own items
-                        queries.push(
-                            supabaseClient
-                                .from('concept_notes')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('submittedDate', { ascending: false })
-                        );
-                        
-                        // Load pending items for this role
-                     if (['budgetOwner','ed','procurement'].includes(role)) {
-    queries.push(
-        supabaseClient
-            .from('concept_notes')
-            .select('*')
-            .eq('status', 'pending')
-            .order('submittedDate', { ascending: false })
-            .limit(50)
-    );
-}
+    const queries = [];
 
-if (role === 'finance') {
+    // Always load user's own concept notes
     queries.push(
         supabaseClient
             .from('concept_notes')
             .select('*')
-            .in('status', ['approved', 'pending'])
+            .eq('staffName', this.currentUser)
             .order('submittedDate', { ascending: false })
-            .limit(100)
     );
+
+    // Load pending concept notes for approvers
+    if (['budgetOwner','ed','procurement'].includes(role)) {
+        queries.push(
+            supabaseClient
+                .from('concept_notes')
+                .select('*')
+                .eq('status', 'pending')
+                .order('submittedDate', { ascending: false })
+                .limit(50)
+        );
+    }
+
+    // Finance loads approved + pending concept notes
+    if (role === 'finance') {
+        queries.push(
+            supabaseClient
+                .from('concept_notes')
+                .select('*')
+                .in('status', ['approved', 'pending'])
+                .order('submittedDate', { ascending: false })
+                .limit(100)
+        );
+    }
+
+    // Load pending retirements for approvers
+    if (['budgetOwner','ed','finance'].includes(role)) {
+        queries.push(
+            supabaseClient
+                .from('retirements')
+                .select('*')
+                .eq('status', 'pending')
+                .order('submittedDate', { ascending: false })
+                .limit(50)
+        );
+    }
+
+    // Load user's own payments
+    queries.push(
+        supabaseClient
+            .from('payments')
+            .select('*')
+            .eq('staffName', this.currentUser)
+            .order('requestDate', { ascending: false })
+    );
+
+    // Load user's own retirements
+    queries.push(
+        supabaseClient
+            .from('retirements')
+            .select('*')
+            .eq('staffName', this.currentUser)
+            .order('submittedDate', { ascending: false })
+    );
+
+    const results = await Promise.all(queries);
+
+    const allConceptNotes = [];
+    const allPayments = [];
+    const allRetirements = [];
+    const seenCN = new Set();
+    const seenPay = new Set();
+    const seenRet = new Set();
+
+    results.forEach(result => {
+        if (!result.data) return;
+
+        result.data.forEach(item => {
+            if (item.refNumber?.startsWith('CN')) {
+                if (!seenCN.has(item.refNumber)) {
+                    seenCN.add(item.refNumber);
+                    allConceptNotes.push(item);
+                }
+            } else if (item.refNumber?.startsWith('PAY')) {
+                if (!seenPay.has(item.refNumber)) {
+                    seenPay.add(item.refNumber);
+                    allPayments.push(item);
+                }
+            } else if (item.refNumber?.startsWith('RET')) {
+                if (!seenRet.has(item.refNumber)) {
+                    seenRet.add(item.refNumber);
+                    allRetirements.push(item);
+                }
+            }
+        });
+    });
+
+    this.data.conceptNotes = allConceptNotes;
+    this.data.payments = allPayments;
+    this.data.retirements = allRetirements;
 }
-                            queries.push(
-                                supabaseClient
-                                    .from('retirements')
-                                    .select('*')
-                                    .eq('status', 'pending')
-                                    .order('submittedDate', { ascending: false })
-                                    .limit(50)
-                            );
-                        }
-                        
-                        // Load user's own payments and retirements
-                        queries.push(
-                            supabaseClient
-                                .from('payments')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('requestDate', { ascending: false })
-                        );
-                        queries.push(
-                            supabaseClient
-                                .from('retirements')
-                                .select('*')
-                                .eq('staffName', this.currentUser)
-                                .order('submittedDate', { ascending: false })
-                        );
-                        
-                        const results = await Promise.all(queries);
-                        
-                        // Merge results and deduplicate
-                        const allConceptNotes = [];
-                        const allPayments = [];
-                        const allRetirements = [];
-                        const seenCN = new Set();
-                        const seenPay = new Set();
-                        const seenRet = new Set();
-                        
-                        results.forEach(result => {
-                            if (!result.data) return;
-                            
-                            result.data.forEach(item => {
-                                if (item.refNumber && item.refNumber.startsWith('CN')) {
-                                    if (!seenCN.has(item.refNumber)) {
-                                        seenCN.add(item.refNumber);
-                                        allConceptNotes.push(item);
-                                    }
-                                } else if (item.refNumber && item.refNumber.startsWith('PAY')) {
-                                    if (!seenPay.has(item.refNumber)) {
-                                        seenPay.add(item.refNumber);
-                                        allPayments.push(item);
-                                    }
-                                } else if (item.refNumber && item.refNumber.startsWith('RET')) {
-                                    if (!seenRet.has(item.refNumber)) {
-                                        seenRet.add(item.refNumber);
-                                        allRetirements.push(item);
-                                    }
-                                }
-                            });
-                        });
-                        
-                        this.data.conceptNotes = allConceptNotes;
-                        this.data.payments = allPayments;
-                        this.data.retirements = allRetirements;
-                    }
                     // Load ALL payments for leadership & finance (needed for reports & budgets)
 if (['budgetOwner','ed','finance'].includes(role)) {
     const { data: allPaymentsForReports } = await supabaseClient
@@ -2731,7 +2736,15 @@ projectCode: conceptNote?.projectCode,
 
             viewConceptNoteDetails(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
+               if (!cn) {
+    alert('Concept note not loaded. Refreshing data...');
+    this.loadData().then(() => {
+        const retry = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+        if (retry) app.viewConceptNoteDetails(refNumber);
+        else alert('Concept note not found.');
+    });
+    return;
+}
                 
                 const content = document.getElementById('mainContent');
                 content.innerHTML = `
