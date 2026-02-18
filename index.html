@@ -1059,9 +1059,9 @@ if (role === 'finance') {
             .select('*')
             .in('refNumber', pendingPaymentRefs);
 
-        if (linkedCNs) {
-            this.data.conceptNotes = linkedCNs;
-        }
+if (linkedCNs) {
+    this.data.conceptNotes = linkedCNs;
+}
     } else {
         this.data.conceptNotes = [];
     }
