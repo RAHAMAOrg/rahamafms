@@ -2015,7 +2015,7 @@ projectCode: conceptNote?.projectCode,
                     if (p.status !== 'paid') return false;
                     if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
                     
-                    if (userRole === 'staff' && p.retirementresponsibility === 'staff' && p.staffName === this.currentUser) {
+                    if (userRole === 'staff' && p.staffName === this.currentUser)
                         return true;
                     }
                     
