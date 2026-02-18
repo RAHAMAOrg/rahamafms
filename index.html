@@ -1300,7 +1300,7 @@ if (['budgetOwner','ed','finance'].includes(role)) {
                 const overdueRetirements = unretiredPayments.filter(p => {
                     if (!p.paidDate) return false;
                     const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
-                    return daysSince > 10;
+                    return daysSince > 5;
                 });
                 
                 const isLocked = unretiredPayments.length >= 2 || overdueRetirements.length > 0;
@@ -2012,9 +2012,6 @@ projectCode: conceptNote?.projectCode,
                 const paidPayments = this.data.payments.filter(p => {
                     if (p.status !== 'paid') return false;
                     if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-            
-                    
-                    const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
                     
                     if (userRole === 'staff' && p.retirementresponsibility === 'staff' && p.staffName === this.currentUser) {
                         return true;
@@ -2027,30 +2024,13 @@ projectCode: conceptNote?.projectCode,
                     return false;
                 });
                 
-                const waitingPayments = this.data.payments.filter(p => {
-                    if (p.status !== 'paid') return false;
-                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-                
-                    
-                    const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
-                    
-                    return userRole === 'staff' && 
-                           p.retirementresponsibility === 'staff' && 
-                           p.staffName === this.currentUser && 
-                           daysSincePaid < 5;
-                });
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>Submit Retirement</h2>
                         <p>${userRole === 'procurement' ? 'Retire procured activities' : 'Retire advance payments (available 5 days after payment)'}</p>
                     </div>
-                    
-                    ${waitingPayments.length > 0 && userRole === 'staff' ? `
-                        <div class="alert-badge warning" style="display: block; margin-bottom: 24px;">
-                            ⏳ You have ${waitingPayments.length} payment(s) waiting for the 5-day period before retirement can be submitted
-                        </div>
-                    ` : ''}
+        
                     
                     ${paidPayments.length === 0 ? `
                         <div class="empty-state">
