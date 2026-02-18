@@ -963,26 +963,27 @@
                         );
                         
                         // Load pending items for this role
-                      if (['budgetOwner','ed','procurement','finance'].includes(role)) {
-                            queries.push(
-                                supabaseClient
-                                    .from('concept_notes')
-                                    .select('*')
-                                    .eq('status', 'pending')
-                                    .order('submittedDate', { ascending: false })
-                                    .limit(50)
-                            );
-                        }
-                        
-                        if (role === 'finance') {
-                            queries.push(
-                                supabaseClient
-                                    .from('payments')
-                                    .select('*')
-                                    .eq('status', 'pending')
-                                    .order('requestDate', { ascending: false })
-                                    .limit(50)
-                            );
+                     if (['budgetOwner','ed','procurement'].includes(role)) {
+    queries.push(
+        supabaseClient
+            .from('concept_notes')
+            .select('*')
+            .eq('status', 'pending')
+            .order('submittedDate', { ascending: false })
+            .limit(50)
+    );
+}
+
+if (role === 'finance') {
+    queries.push(
+        supabaseClient
+            .from('concept_notes')
+            .select('*')
+            .in('status', ['approved', 'pending'])
+            .order('submittedDate', { ascending: false })
+            .limit(100)
+    );
+}
                             queries.push(
                                 supabaseClient
                                     .from('retirements')
