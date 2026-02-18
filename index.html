@@ -2011,20 +2011,32 @@ projectCode: conceptNote?.projectCode,
                 const userRole = this.getUserRole();
                 const myPayments = this.getMyPayments();
                 
-                const paidPayments = this.data.payments.filter(p => {
-                    if (p.status !== 'paid') return false;
-                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-                    
-                    if (userRole === 'staff' && p.staffName === this.currentUser) {
-                        return true;
-                    }
-                    
-                    if (userRole === 'procurement' && p.retirementresponsibility === 'procurement') {
-                        return true;
-                    }
-                    
-                    return false;
-                });
+               const paidPayments = this.data.payments.filter(p => {
+
+    // Must be paid
+    if (p.status !== 'paid') return false;
+
+    // Must have been processed (safety check)
+    if (!p.paidDate) return false;
+
+    // Must not already have a retirement
+    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
+
+    // STAFF can only retire their own payments
+    if (userRole === 'staff') {
+        return (
+            p.staffName === this.currentUser &&
+            p.retirementresponsibility === 'staff'
+        );
+    }
+
+    // PROCUREMENT retires procurement payments
+    if (userRole === 'procurement') {
+        return p.retirementresponsibility === 'procurement';
+    }
+
+    return false;
+});
                 
                 
                 content.innerHTML = `
