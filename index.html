@@ -1786,9 +1786,28 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
             },
             
             renderPaymentForm(content) {
-                const approvedNotes = this.data.conceptNotes.filter(cn => 
-                    cn.staffName === this.currentUser && cn.status === 'approved'
-                );
+               const approvedNotes = this.data.conceptNotes.filter(cn => {
+
+    // Must belong to current user
+    if (cn.staffName !== this.currentUser) return false;
+
+    // Must be approved
+    if (cn.status !== 'approved') return false;
+
+    // Check if payment already exists
+    const existingPayment = this.data.payments.find(p => 
+        p.conceptNoteRef === cn.refNumber
+    );
+
+    // If no payment exists → allow
+    if (!existingPayment) return true;
+
+    // If payment exists but NOT paid → allow (maybe rejected or pending)
+    if (existingPayment.status !== 'paid') return true;
+
+    // If paid already → do NOT allow another request
+    return false;
+});
                 
                 content.innerHTML = `
                     <div class="header">
