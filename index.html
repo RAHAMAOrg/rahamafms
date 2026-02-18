@@ -1394,7 +1394,7 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                             <div class="workflow-number">5</div>
                             <div class="workflow-content">
                                 <strong>Staff submits retirement</strong>
-                                <span>Within 10 days of payment receipt</span>
+                                <span>Within 5 days of payment receipt</span>
                             </div>
                         </div>
                     </div>
@@ -2082,10 +2082,13 @@ projectCode: conceptNote?.projectCode,
                             </div>
                             
                             <div class="form-group full-width">
-                                <label>Attachments/Receipts</label>
-                                <input type="text" name="attachments" placeholder="List of attached receipts">
-                                <span class="form-hint">Upload receipts separately and list them here</span>
-                            </div>
+    <label>Upload Receipts <span class="required">*</span></label>
+    <div class="file-upload-area" id="retirementUploadArea" onclick="document.getElementById('retirementFile').click()">
+        <p>📎 Click to upload receipt(s)</p>
+        <span class="form-hint">PDF, JPG, PNG — Max 5MB</span>
+    </div>
+    <input type="file" id="retirementFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleRetirementUpload(this)">
+</div>
                             
                             <div class="btn-group full-width">
                                 <button type="submit" class="btn btn-primary">Submit Retirement</button>
@@ -2120,7 +2123,14 @@ projectCode: conceptNote?.projectCode,
                     this.showError('actualSpent', 'Please enter a valid amount');
                     return;
                 }
-                
+                // Get uploaded receipt file
+const file = document.getElementById('retirementFile').files[0];
+let receiptFileData = null;
+
+// Upload if file exists
+if (file) {
+    receiptFileData = await this.uploadFile(file, 'retirements');
+}
                 try {
                     const retirement = {
                         refNumber: 'RET' + Date.now(),
@@ -2129,7 +2139,8 @@ projectCode: conceptNote?.projectCode,
                         actualSpent: actualSpent,
                         amountReturned: parseFloat(formData.get('amountReturned')) || 0,
                         expenditureDetails: formData.get('expenditureDetails'),
-                        attachments: formData.get('attachments'),
+                        receiptFileUrl: receiptFileData?.url,
+receiptFileName: receiptFileData?.fileName,
                         status: 'pending',
                         submittedDate: new Date().toISOString()
                     };
@@ -2594,6 +2605,28 @@ projectCode: conceptNote?.projectCode,
                     `;
                 }
             },
+            handleRetirementUpload(input) {
+    const area = document.getElementById('retirementUploadArea');
+    const file = input.files[0];
+
+    if (file) {
+
+        // Check file size
+        if (file.size > MAX_FILE_SIZE) {
+            alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+            input.value = '';
+            return;
+        }
+
+        // Update UI
+        area.classList.add('has-file');
+        area.innerHTML = `
+            <p>✓ ${file.name}</p>
+            <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
+        `;
+    }
+}
+            ,
 
             async completeProcurementWithDocs(event, refNumber) {
                 event.preventDefault();
