@@ -2333,71 +2333,132 @@ projectCode: conceptNote?.projectCode,
                 `;
             },
             
-            async approveConceptNote(refNumber, action) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
-                
-                let updates = {};
-                
-                switch(action) {
-                    case 'approve_under_1m':
-                        if (cn.requiresProcurement === 'yes') {
-                            updates = {
-                                currentApprover: 'procurement',
-                                sentToProcurement: new Date().toISOString(),
-                                retirementresponsibility: 'procurement'
-                            };
-                        } else {
-                            updates = {
-                                status: 'approved',
-                                approvedDate: new Date().toISOString(),
-                                approvedBy: this.currentUser,
-                                retirementresponsibility: 'staff'
-                            };
-                        }
-                        break;
-                    case 'forward_to_ed':
-                        updates = {
-                            currentApprover: 'ed',
-                            forwardedToED: new Date().toISOString()
-                        };
-                        break;
-                    case 'ed_approve':
-                        if (cn.requiresProcurement === 'yes') {
-                            updates = {
-                                currentApprover: 'procurement',
-                                sentToProcurement: new Date().toISOString(),
-                                retirementresponsibility: 'procurement'
-                            };
-                        } else {
-                            updates = {
-                                status: 'approved',
-                                approvedDate: new Date().toISOString(),
-                                approvedBy: this.currentUser,
-                                retirementresponsibility: 'staff'
-                            };
-                        }
-                        break;
-                }
-                
-                try {
-                    const { error } = await supabaseClient
-                        .from('concept_notes')
-                        .update(updates)
-                        .eq('refNumber', refNumber);
-                    
-                    if (error) throw error;
-                    
-                    Object.assign(cn, updates);
-                    this.clearCache();
-                    
-                    alert('Concept note processed successfully!');
-                    this.showView('approvals');
-                } catch (error) {
-                    console.error('Approval error:', error);
-                    alert('Error updating concept note: ' + error.message);
-                }
-            },
+           async approveConceptNote(refNumber, action) {
+
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) return;
+
+    let updates = {};
+    let autoCreatePayment = false;
+
+    switch(action) {
+
+        case 'approve_under_1m':
+
+            if (cn.requiresProcurement === 'yes') {
+
+                updates = {
+                    currentApprover: 'procurement',
+                    sentToProcurement: new Date().toISOString(),
+                    retirementresponsibility: 'procurement'
+                };
+
+            } else {
+
+                updates = {
+                    status: 'approved',
+                    approvedDate: new Date().toISOString(),
+                    approvedBy: this.currentUser,
+                    retirementresponsibility: 'staff'
+                };
+
+                autoCreatePayment = true;
+            }
+
+            break;
+
+
+        case 'forward_to_ed':
+
+            updates = {
+                currentApprover: 'ed',
+                forwardedToED: new Date().toISOString()
+            };
+
+            break;
+
+
+        case 'ed_approve':
+
+            if (cn.requiresProcurement === 'yes') {
+
+                updates = {
+                    currentApprover: 'procurement',
+                    sentToProcurement: new Date().toISOString(),
+                    retirementresponsibility: 'procurement'
+                };
+
+            } else {
+
+                updates = {
+                    status: 'approved',
+                    approvedDate: new Date().toISOString(),
+                    approvedBy: this.currentUser,
+                    retirementresponsibility: 'staff'
+                };
+
+                autoCreatePayment = true;
+            }
+
+            break;
+    }
+
+    try {
+
+        // 1️⃣ Update concept note first
+        const { error } = await supabaseClient
+            .from('concept_notes')
+            .update(updates)
+            .eq('refNumber', refNumber);
+
+        if (error) throw error;
+
+
+        // 2️⃣ If approval is final and no procurement → create payment
+        if (autoCreatePayment) {
+
+            // Optional protection: prevent duplicate payment
+            const { data: existingPayment } = await supabaseClient
+                .from('payments')
+                .select('id')
+                .eq('conceptNoteRef', cn.refNumber)
+                .maybeSingle();
+
+            if (!existingPayment) {
+
+                const { error: payError } = await supabaseClient
+                    .from('payments')
+                    .insert([{
+                        refNumber: 'PAY' + Date.now(),
+                        conceptNoteId: cn.id,
+                        conceptNoteRef: cn.refNumber,
+                        projectCode: cn.projectCode,
+                        staffName: cn.staffName,
+                        amount: cn.estimatedCost,
+                        status: 'pending',
+                        requestDate: new Date().toISOString(),
+                        paymentMethod: 'bank_transfer',
+                        retirementresponsibility: 'staff'
+                    }]);
+
+                if (payError) throw payError;
+            }
+        }
+
+        Object.assign(cn, updates);
+        this.clearCache();
+
+        alert('Concept note processed successfully!');
+        await this.loadData();
+        this.showView('approvals');
+
+    } catch (error) {
+
+        console.error('Approval error:', error);
+        alert('Error processing concept note: ' + error.message);
+    }
+}
+                },
             
             async rejectConceptNote(refNumber) {
                 const reason = prompt('Please provide a reason for rejection:');
