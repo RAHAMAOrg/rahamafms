@@ -2328,13 +2328,24 @@ receiptFileName: receiptFileData?.fileName,
                                             <td>₦${r.amountReturned.toLocaleString()}</td>
                                             <td>${new Date(r.submittedDate).toLocaleDateString()}</td>
                                             <td>
-                                                <button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">
-                                                    ✓ Approve Retirement
-                                                </button>
-                                                <button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">
-                                                    ✗ Reject
-                                                </button>
-                                            </td>
+    ${r.receiptFileUrl ? `
+        <button class="action-btn"
+            onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')"
+            style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
+            📎 Download Receipt
+        </button><br>
+    ` : ''}
+
+    <button class="action-btn approve"
+        onclick="app.approveRetirement('${r.refNumber}')">
+        ✓ Approve Retirement
+    </button>
+
+    <button class="action-btn reject"
+        onclick="app.rejectRetirement('${r.refNumber}')">
+        ✗ Reject
+    </button>
+</td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
