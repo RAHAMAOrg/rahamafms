@@ -1570,6 +1570,15 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
             showConceptNoteTracking(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
+                // Get linked payments
+const payments = this.data.payments.filter(
+    p => p.conceptNoteRef === cn.refNumber
+);
+
+// Get linked retirements (through payments)
+const retirements = this.data.retirements.filter(r =>
+    payments.find(p => p.refNumber === r.paymentRef)
+);
                 
                 const progress = this.getConceptNoteProgress(cn);
                 const content = document.getElementById('mainContent');
@@ -3202,9 +3211,10 @@ if (payment.beneficiaryFileUrl) {
 
     const content = `
 RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE
-------------------------------------------------
+================================================
 
-CONCEPT NOTE RECORD
+FULL CONCEPT NOTE HISTORY RECORD
+------------------------------------------------
 
 Reference Number: ${cn.refNumber}
 Staff Name: ${cn.staffName}
@@ -3212,6 +3222,10 @@ Project Code: ${cn.projectCode}
 Estimated Cost: ₦${cn.estimatedCost.toLocaleString()}
 Submitted Date: ${new Date(cn.submittedDate).toLocaleString()}
 Status: ${cn.status}
+
+================================================
+CONCEPT NOTE DETAILS
+================================================
 
 Activity Title:
 ${cn.activityTitle}
@@ -3224,6 +3238,43 @@ ${cn.description}
 
 Requires Procurement:
 ${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}
+
+================================================
+APPROVAL HISTORY
+================================================
+
+Approved By: ${cn.approvedBy || 'N/A'}
+Approved Date: ${cn.approvedDate ? new Date(cn.approvedDate).toLocaleString() : 'N/A'}
+Forwarded To ED: ${cn.forwardedToED ? new Date(cn.forwardedToED).toLocaleString() : 'N/A'}
+Sent To Procurement: ${cn.sentToProcurement ? new Date(cn.sentToProcurement).toLocaleString() : 'N/A'}
+
+================================================
+PAYMENT HISTORY
+================================================
+${payments.length === 0 ? 'No payment records found.\n' :
+payments.map(p => `
+Payment Ref: ${p.refNumber}
+Amount: ₦${p.amount.toLocaleString()}
+Status: ${p.status}
+Requested: ${p.requestDate ? new Date(p.requestDate).toLocaleString() : 'N/A'}
+Paid: ${p.paidDate ? new Date(p.paidDate).toLocaleString() : 'N/A'}
+Processed By: ${p.processedBy || 'N/A'}
+------------------------------------------------
+`).join('')}
+
+================================================
+RETIREMENT HISTORY
+================================================
+${retirements.length === 0 ? 'No retirement records found.\n' :
+retirements.map(r => `
+Retirement Ref: ${r.refNumber}
+Actual Spent: ₦${r.actualSpent.toLocaleString()}
+Returned: ₦${r.amountReturned.toLocaleString()}
+Status: ${r.status}
+Submitted: ${r.submittedDate ? new Date(r.submittedDate).toLocaleString() : 'N/A'}
+Approved By: ${r.approvedBy || 'N/A'}
+------------------------------------------------
+`).join('')}
 `;
 
     const blob = new Blob([content], { type: 'text/plain' });
