@@ -2189,7 +2189,6 @@ receiptFileName: receiptFileData?.fileName,
                     if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
                     if (role === 'ed' && cn.currentApprover === 'ed') return true;
                     if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
-                    if (role === 'finance' && cn.status === 'approved') return true;
                     return false;
                 });
                 
@@ -3208,6 +3207,14 @@ if (payment.beneficiaryFileUrl) {
         alert('Concept note not found.');
         return;
     }
+    // ✅ ADD THESE TWO LINES RIGHT HERE
+    const payments = this.data.payments.filter(
+        p => p.conceptNoteRef === cn.refNumber
+    );
+
+    const retirements = this.data.retirements.filter(r =>
+        payments.find(p => p.refNumber === r.paymentRef)
+    );
 
     const content = `
 RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE
