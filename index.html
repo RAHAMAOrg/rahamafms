@@ -1303,7 +1303,9 @@ if (['budgetOwner','ed','finance'].includes(role)) {
                     return daysSince > 5;
                 });
                 
-                const isLocked = unretiredPayments.length >= 2 || overdueRetirements.length > 0;
+                const activeUnretired = unretiredPayments.filter(p => p.paidDate);
+
+const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                 
                 // Get current time for greeting
                 const hour = new Date().getHours();
