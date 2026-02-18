@@ -2017,7 +2017,7 @@ projectCode: conceptNote?.projectCode,
                     const daysSincePaid = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
                     
                     if (userRole === 'staff' && p.retirementresponsibility === 'staff' && p.staffName === this.currentUser) {
-                        return daysSincePaid >= 5;
+                        return true;
                     }
                     
                     if (userRole === 'procurement' && p.retirementresponsibility === 'procurement') {
