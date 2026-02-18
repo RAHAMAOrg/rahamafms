@@ -1046,6 +1046,25 @@ if (['budgetOwner','ed','finance'].includes(role)) {
 this.data.payments = Array.from(paymentMap.values());
     }
 }
+// ADD RIGHT HERE ↓
+if (role === 'finance') {
+    const pendingPaymentRefs = this.data.payments
+        .filter(p => p.status === 'pending' && p.conceptNoteRef)
+        .map(p => p.conceptNoteRef);
+
+    if (pendingPaymentRefs.length > 0) {
+        const { data: linkedCNs } = await supabaseClient
+            .from('concept_notes')
+            .select('*')
+            .in('refNumber', pendingPaymentRefs);
+
+        if (linkedCNs) {
+            this.data.conceptNotes = linkedCNs;
+        }
+    } else {
+        this.data.conceptNotes = [];
+    }
+}
 
                     // Clear cache when data is reloaded
                     this.clearCache();
