@@ -2879,10 +2879,15 @@ if (payment.beneficiaryFileUrl) {
                         ` : ''}
                         
                         <div class="btn-group full-width">
-                            <button class="btn btn-primary" onclick="app.showView('approvals')">
-                                ← Back to Approvals
-                            </button>
-                        </div>
+    <button class="btn btn-primary" onclick="app.showView('approvals')">
+        ← Back to Approvals
+    </button>
+
+    <button class="btn btn-secondary"
+        onclick="app.downloadConceptNoteFile('${cn.refNumber}')">
+        ⬇ Download Concept Note
+    </button>
+</div>
                     </div>
                 `;
             },
@@ -3175,6 +3180,51 @@ if (payment.beneficiaryFileUrl) {
     const link = document.createElement('a');
     link.href = url;
     link.download = 'rahama_payments_report.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(url);
+},
+            downloadConceptNoteFile(refNumber) {
+    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+    if (!cn) {
+        alert('Concept note not found.');
+        return;
+    }
+
+    const content = `
+RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE
+------------------------------------------------
+
+CONCEPT NOTE RECORD
+
+Reference Number: ${cn.refNumber}
+Staff Name: ${cn.staffName}
+Project Code: ${cn.projectCode}
+Estimated Cost: ₦${cn.estimatedCost.toLocaleString()}
+Submitted Date: ${new Date(cn.submittedDate).toLocaleString()}
+Status: ${cn.status}
+
+Activity Title:
+${cn.activityTitle}
+
+Objective:
+${cn.objective}
+
+Description:
+${cn.description}
+
+Requires Procurement:
+${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}
+`;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${cn.refNumber}_Concept_Note.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
