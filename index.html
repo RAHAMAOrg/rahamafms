@@ -2728,11 +2728,13 @@ receiptFileName: receiptFileData?.fileName,
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 if (!payment) return;
                 
-                if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
-                    alert('Error: Account details not provided by staff member. Please contact the staff to update their payment request with bank details.');
-                    return;
-                }
-                
+                // If no beneficiary file, require bank details
+if (!payment.beneficiaryFileUrl && 
+    (!payment.accountName || !payment.accountNumber || !payment.bankName)) {
+    
+    alert('Error: Account details not provided by staff member. Please contact the staff to update their payment request with bank details.');
+    return;
+}
                 if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
                     return;
                 }
