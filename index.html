@@ -2023,7 +2023,7 @@ projectCode: conceptNote?.projectCode,
     if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
 
     // STAFF can only retire their own payments
-    if (userRole === 'staff') {
+    if (p.staffName === this.currentUser) {
         return (
             p.staffName === this.currentUser &&
             p.retirementresponsibility === 'staff'
