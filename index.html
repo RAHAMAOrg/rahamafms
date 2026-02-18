@@ -2728,16 +2728,25 @@ receiptFileName: receiptFileData?.fileName,
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 if (!payment) return;
                 
-                // If no beneficiary file, require bank details
-if (!payment.beneficiaryFileUrl && 
-    (!payment.accountName || !payment.accountNumber || !payment.bankName)) {
-    
-    alert('Error: Account details not provided by staff member. Please contact the staff to update their payment request with bank details.');
-    return;
+              // If beneficiary file exists → batch payment (no bank confirmation needed)
+if (payment.beneficiaryFileUrl) {
+
+    if (!confirm(`Process batch payment of ₦${payment.amount.toLocaleString()}?\n\nBeneficiary file attached.\n\nConfirm payment?`)) {
+        return;
+    }
+
+} else {
+
+    // Single payment must have bank details
+    if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
+        alert('Error: Account details not provided by staff member.');
+        return;
+    }
+
+    if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
+        return;
+    }
 }
-                if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
-                    return;
-                }
                 
                 try {
                     const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
