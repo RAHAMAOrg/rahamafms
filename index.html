@@ -425,30 +425,11 @@
             letter-spacing: 0.5px;
         }
         
-        .status-pending {
-            background: #FFF3E0;
-            color: var(--warning);
-        }
-        
-        .status-approved {
-            background: #E8F5E9;
-            color: var(--success);
-        }
-        
-        .status-paid {
-            background: #E3F2FD;
-            color: #1976D2;
-        }
-        
-        .status-retired {
-            background: #F3E5F5;
-            color: #7B1FA2;
-        }
-        
-        .status-rejected {
-            background: #FFEBEE;
-            color: var(--danger);
-        }
+        .status-pending { background: #FFF3E0; color: var(--warning); }
+        .status-approved { background: #E8F5E9; color: var(--success); }
+        .status-paid { background: #E3F2FD; color: #1976D2; }
+        .status-retired { background: #F3E5F5; color: #7B1FA2; }
+        .status-rejected { background: #FFEBEE; color: var(--danger); }
         
         /* Stats grid */
         .stats-grid {
@@ -483,22 +464,10 @@
             margin-bottom: 8px;
         }
         
-        .stat-label {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-        
-        .stat-card.danger .stat-value {
-            color: var(--danger);
-        }
-        
-        .stat-card.warning .stat-value {
-            color: var(--warning);
-        }
-        
-        .stat-card.success .stat-value {
-            color: var(--success);
-        }
+        .stat-label { font-size: 13px; color: var(--text-muted); }
+        .stat-card.danger .stat-value { color: var(--danger); }
+        .stat-card.warning .stat-value { color: var(--warning); }
+        .stat-card.success .stat-value { color: var(--success); }
         
         /* Budget bars */
         .budget-bar {
@@ -515,13 +484,8 @@
             transition: width 0.3s;
         }
         
-        .budget-fill.warning {
-            background: var(--warning);
-        }
-        
-        .budget-fill.danger {
-            background: var(--danger);
-        }
+        .budget-fill.warning { background: var(--warning); }
+        .budget-fill.danger { background: var(--danger); }
         
         /* Action buttons in table */
         .action-btn {
@@ -537,29 +501,11 @@
             min-width: 180px;
         }
         
-        .action-btn:hover {
-            background: var(--bg);
-        }
-        
-        .action-btn.approve {
-            border-color: var(--success);
-            color: var(--success);
-        }
-        
-        .action-btn.approve:hover {
-            background: var(--success);
-            color: white;
-        }
-        
-        .action-btn.reject {
-            border-color: var(--danger);
-            color: var(--danger);
-        }
-        
-        .action-btn.reject:hover {
-            background: var(--danger);
-            color: white;
-        }
+        .action-btn:hover { background: var(--bg); }
+        .action-btn.approve { border-color: var(--success); color: var(--success); }
+        .action-btn.approve:hover { background: var(--success); color: white; }
+        .action-btn.reject { border-color: var(--danger); color: var(--danger); }
+        .action-btn.reject:hover { background: var(--danger); color: white; }
         
         .empty-state {
             text-align: center;
@@ -599,20 +545,9 @@
             flex-shrink: 0;
         }
         
-        .workflow-content {
-            flex: 1;
-        }
-        
-        .workflow-content strong {
-            display: block;
-            margin-bottom: 4px;
-            color: var(--text);
-        }
-        
-        .workflow-content span {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+        .workflow-content { flex: 1; }
+        .workflow-content strong { display: block; margin-bottom: 4px; color: var(--text); }
+        .workflow-content span { font-size: 13px; color: var(--text-muted); }
         
         /* Progress Tracker */
         .progress-tracker {
@@ -698,12 +633,8 @@
         }
         
         @keyframes pulse {
-            0%, 100% {
-                box-shadow: 0 0 0 0 rgba(5,150,105,0.4);
-            }
-            50% {
-                box-shadow: 0 0 0 8px rgba(5,150,105,0);
-            }
+            0%, 100% { box-shadow: 0 0 0 0 rgba(5,150,105,0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(5,150,105,0); }
         }
         
         .progress-label {
@@ -715,19 +646,10 @@
         }
         
         .progress-step.completed .progress-label,
-        .progress-step.active .progress-label {
-            color: var(--text);
-        }
+        .progress-step.active .progress-label { color: var(--text); }
+        .progress-step.rejected .progress-label { color: var(--danger); }
         
-        .progress-step.rejected .progress-label {
-            color: var(--danger);
-        }
-        
-        .progress-date {
-            font-size: 10px;
-            color: var(--text-muted);
-            margin-top: 4px;
-        }
+        .progress-date { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
         
         .progress-note {
             background: var(--bg);
@@ -737,15 +659,8 @@
             margin-top: 16px;
         }
         
-        .progress-note.warning {
-            border-left-color: var(--warning);
-            background: #FFF3E0;
-        }
-        
-        .progress-note.danger {
-            border-left-color: var(--danger);
-            background: #FFEBEE;
-        }
+        .progress-note.warning { border-left-color: var(--warning); background: #FFF3E0; }
+        .progress-note.danger { border-left-color: var(--danger); background: #FFEBEE; }
         
         .tracking-card {
             background: var(--surface);
@@ -769,27 +684,20 @@
             margin-bottom: 8px;
         }
         
-        .tracking-ref {
-            font-weight: 700;
-            color: #059669;
-        }
-        
-        .tracking-amount {
-            font-weight: 700;
-            color: var(--text);
-        }
+        .tracking-ref { font-weight: 700; color: #059669; }
+        .tracking-amount { font-weight: 700; color: var(--text); }
     </style>
 </head>
 <body>
     <div class="app">
         <div class="sidebar">
             <div class="logo">
-    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width: 80px; height: 80px; object-fit: contain; margin: 0 auto 12px; display: block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-    <div style="display: none;">
-        <h1>Rahama FMS</h1>
-    </div>
-    <p style="text-align: center;">Financial Management System</p>
-</div>
+                <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width: 80px; height: 80px; object-fit: contain; margin: 0 auto 12px; display: block;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <div style="display: none;">
+                    <h1>Rahama FMS</h1>
+                </div>
+                <p style="text-align: center;">Financial Management System</p>
+            </div>
             <div class="user-info">
                 <label>Signed in as</label>
                 <div id="loggedInUser" style="font-weight:600;"></div>
@@ -818,8 +726,8 @@
     <script>
         const SUPABASE_URL = "https://sqygmoxpegbfxddglhbx.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8";
-        const STORAGE_BUCKET = 'fms-documents';  // Supabase Storage bucket name
-        const MAX_FILE_SIZE = 5 * 1024 * 1024;  // 5MB limit
+        const STORAGE_BUCKET = 'fms-documents';
+        const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
@@ -831,6 +739,7 @@
                 myRetirements: null
             },
             data: {
+                notifications: [], 
                 conceptNotes: [],
                 payments: [],
                 retirements: [],
@@ -873,7 +782,6 @@
             async init() {
                 this.loadStartTime = Date.now();
                 
-                // URL takes priority
                 const params = new URLSearchParams(window.location.search);
                 const urlSession = params.get('session');
 
@@ -890,7 +798,6 @@
                     const el = document.getElementById('loggedInUser');
                     if (el) el.innerText = user.name;
 
-                    // Hide Reports if not authorized
                     const role = this.getUserRole();
                     const btn = document.getElementById('reportsBtn');
 
@@ -899,10 +806,8 @@
                     }
                 }
 
-                // Show dashboard immediately, load data in background
                 this.showView('dashboard');
                 
-                // Load data asynchronously (non-blocking)
                 this.loadData().catch(error => {
                     console.error('Background data load error:', error);
                 });
@@ -925,7 +830,6 @@
                 try {
                     const role = this.getUserRole();
                     
-                    // Strategy 1: If staff, load only their data
                     if (role === 'staff') {
                         const [cnResult, payResult, retResult] = await Promise.all([
                             supabaseClient
@@ -948,136 +852,133 @@
                         this.data.conceptNotes = cnResult.data || [];
                         this.data.payments = payResult.data || [];
                         this.data.retirements = retResult.data || [];
-                    } 
-                    // Strategy 2: If approver, load only pending items for their role + their own
-                    else {
-    const queries = [];
+                    } else {
+                        const queries = [];
 
-    // Always load user's own concept notes (finance loads CNs separately via payment refs only)
-if (role !== 'finance') {
-    queries.push(
-        supabaseClient
-            .from('concept_notes')
-            .select('*')
-            .eq('staffName', this.currentUser)
-            .order('submittedDate', { ascending: false })
-    );
-}
-    // Load pending concept notes for approvers
-    if (['budgetOwner','ed','procurement'].includes(role)) {
-        queries.push(
-            supabaseClient
-                .from('concept_notes')
-                .select('*')
-                .eq('status', 'pending')
-                .order('submittedDate', { ascending: false })
-                .limit(50)
-        );
-    }
+                        if (role !== 'finance') {
+                            queries.push(
+                                supabaseClient
+                                    .from('concept_notes')
+                                    .select('*')
+                                    .eq('staffName', this.currentUser)
+                                    .order('submittedDate', { ascending: false })
+                            );
+                        }
 
-    // Load pending retirements for approvers
-    if (['budgetOwner','ed','finance'].includes(role)) {
-        queries.push(
-            supabaseClient
-                .from('retirements')
-                .select('*')
-                .eq('status', 'pending')
-                .order('submittedDate', { ascending: false })
-                .limit(50)
-        );
-    }
+                        if (['budgetOwner','ed','procurement'].includes(role)) {
+                            queries.push(
+                                supabaseClient
+                                    .from('concept_notes')
+                                    .select('*')
+                                    .eq('status', 'pending')
+                                    .order('submittedDate', { ascending: false })
+                                    .limit(50)
+                            );
+                        }
 
-    // Load user's own payments
-    queries.push(
-        supabaseClient
-            .from('payments')
-            .select('*')
-            .eq('staffName', this.currentUser)
-            .order('requestDate', { ascending: false })
-    );
+                        if (['budgetOwner','ed','finance'].includes(role)) {
+                            queries.push(
+                                supabaseClient
+                                    .from('retirements')
+                                    .select('*')
+                                    .eq('status', 'pending')
+                                    .order('submittedDate', { ascending: false })
+                                    .limit(50)
+                            );
+                        }
 
-    // Load user's own retirements
-    queries.push(
-        supabaseClient
-            .from('retirements')
-            .select('*')
-            .eq('staffName', this.currentUser)
-            .order('submittedDate', { ascending: false })
-    );
+                        queries.push(
+                            supabaseClient
+                                .from('payments')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('requestDate', { ascending: false })
+                        );
 
-    const results = await Promise.all(queries);
+                        queries.push(
+                            supabaseClient
+                                .from('retirements')
+                                .select('*')
+                                .eq('staffName', this.currentUser)
+                                .order('submittedDate', { ascending: false })
+                        );
 
-   let conceptNotes = [];
-let payments = [];
-let retirements = [];
+                        const results = await Promise.all(queries);
 
-results.forEach(result => {
-    if (!result.data) return;
+                        let conceptNotes = [];
+                        let payments = [];
+                        let retirements = [];
 
-    result.data.forEach(item => {
-        if (item.activityTitle) {
-            conceptNotes.push(item);
-        } 
-        else if (item.paymentMethod) {
-            payments.push(item);
-        } 
-        else if (item.expenditureDetails) {
-            retirements.push(item);
-        }
-    });
-});
+                        results.forEach(result => {
+                            if (!result.data) return;
 
-this.data.conceptNotes = conceptNotes;
-this.data.payments = payments;
-this.data.retirements = retirements;
-}
-                    // Load ALL payments for leadership & finance (needed for reports & budgets)
-if (['budgetOwner','ed','finance'].includes(role)) {
-    const { data: allPaymentsForReports } = await supabaseClient
-        .from('payments')
-        .select('*');
+                            result.data.forEach(item => {
+                                if (item.activityTitle) {
+                                    conceptNotes.push(item);
+                                } else if (item.paymentMethod) {
+                                    payments.push(item);
+                                } else if (item.expenditureDetails) {
+                                    retirements.push(item);
+                                }
+                            });
+                        });
 
-    if (allPaymentsForReports) {
-        const paymentMap = new Map();
+                        this.data.conceptNotes = conceptNotes;
+                        this.data.payments = payments;
+                        this.data.retirements = retirements;
+                    }
 
-[...this.data.payments, ...allPaymentsForReports].forEach(p => {
-    paymentMap.set(p.refNumber, p);
-});
+                    if (['budgetOwner','ed','finance'].includes(this.getUserRole())) {
+                        const { data: allPaymentsForReports } = await supabaseClient
+                            .from('payments')
+                            .select('*');
 
-this.data.payments = Array.from(paymentMap.values());
-    }
-}
-// ADD RIGHT HERE ↓
-if (role === 'finance') {
-    const pendingPaymentRefs = this.data.payments
-        .filter(p => p.status === 'pending' && p.conceptNoteRef)
-        .map(p => p.conceptNoteRef);
+                        if (allPaymentsForReports) {
+                            const paymentMap = new Map();
+                            [...this.data.payments, ...allPaymentsForReports].forEach(p => {
+                                paymentMap.set(p.refNumber, p);
+                            });
+                            this.data.payments = Array.from(paymentMap.values());
+                        }
+                    }
 
-    if (pendingPaymentRefs.length > 0) {
-        const { data: linkedCNs } = await supabaseClient
-            .from('concept_notes')
-            .select('*')
-            .in('refNumber', pendingPaymentRefs);
+                    if (this.getUserRole() === 'finance') {
+                        const pendingPaymentRefs = this.data.payments
+                            .filter(p => p.status === 'pending' && p.conceptNoteRef)
+                            .map(p => p.conceptNoteRef);
 
-if (linkedCNs) {
-    this.data.conceptNotes = linkedCNs;
-}
-    } else {
-        this.data.conceptNotes = [];
-    }
-}
+                        if (pendingPaymentRefs.length > 0) {
+                            const { data: linkedCNs } = await supabaseClient
+                                .from('concept_notes')
+                                .select('*')
+                                .in('refNumber', pendingPaymentRefs);
 
-                    // Clear cache when data is reloaded
+                            if (linkedCNs) {
+                                this.data.conceptNotes = linkedCNs;
+                            }
+                        } else {
+                            this.data.conceptNotes = [];
+                        }
+                    }
+
+                    const { data: notifs } = await supabaseClient
+                        .from('notifications')
+                        .select('*')
+                        .eq('recipientName', this.currentUser)
+                        .eq('isRead', false)
+                        .order('createdAt', { ascending: false });
+
+                    this.data.notifications = notifs || [];
+                    this.renderNotificationBadge();
+
                     this.clearCache();
                     
-                    // Refresh current view if dashboard
                     if (document.querySelector('.nav button[data-view="dashboard"]')?.classList.contains('active')) {
                         this.renderDashboard(document.getElementById('mainContent'));
                     }
 
                 } catch (error) {
                     console.error('Data load error:', error);
-                    // Don't show error to user on background load
                     if (this.data.conceptNotes.length === 0) {
                         alert('Error loading data. Please refresh the page.');
                     }
@@ -1145,29 +1046,24 @@ if (linkedCNs) {
                     .reduce((sum, p) => sum + (p.amount || 0), 0);
             },
             
-            // FILE UPLOAD HELPERS with Supabase Storage
             async uploadFile(file, type = 'general') {
                 if (!file) return null;
                 
-                // Validate file size
                 if (file.size > MAX_FILE_SIZE) {
                     throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
                 }
                 
-                // Create unique filename
                 const timestamp = Date.now();
                 const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const fileName = `${type}/${timestamp}_${sanitizedName}`;
                 
                 try {
-                    // Upload to Supabase Storage
                     const { data, error } = await supabaseClient.storage
                         .from(STORAGE_BUCKET)
                         .upload(fileName, file);
                     
                     if (error) throw error;
                     
-                    // Get public URL
                     const { data: urlData } = supabaseClient.storage
                         .from(STORAGE_BUCKET)
                         .getPublicUrl(fileName);
@@ -1203,7 +1099,6 @@ if (linkedCNs) {
                 }
             },
             
-            // INPUT VALIDATION
             validateAccountNumber(accountNumber) {
                 return /^\d{10}$/.test(accountNumber);
             },
@@ -1229,7 +1124,6 @@ if (linkedCNs) {
             },
             
             showView(viewName) {
-                // Update active nav
                 document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
                 const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
                 if (targetBtn) targetBtn.classList.add('active');
@@ -1246,10 +1140,8 @@ if (linkedCNs) {
                     return;
                 }
                 
-                // Show loading first
                 this.showLoading();
                 
-                // Render after short delay to show loading
                 setTimeout(() => {
                     switch(viewName) {
                         case 'dashboard': this.renderDashboard(content); break;
@@ -1262,13 +1154,51 @@ if (linkedCNs) {
                     }
                 }, 100);
             },
+
+            // ─── STEP 5: Notification badge on sidebar ───────────────────────
+            renderNotificationBadge() {
+                const count = this.data.notifications.length;
+                const existing = document.getElementById('notifBadge');
+                if (existing) existing.remove();
+
+                if (count === 0) return;
+
+                const btn = document.querySelector('.nav button[data-view="dashboard"]');
+                if (!btn) return;
+
+                const badge = document.createElement('span');
+                badge.id = 'notifBadge';
+                badge.textContent = count;
+                badge.style.cssText = `
+                    background: var(--danger);
+                    color: white;
+                    border-radius: 12px;
+                    padding: 2px 8px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    float: right;
+                    margin-top: 2px;
+                `;
+                btn.appendChild(badge);
+            },
+
+            // ─── STEP 7: Dismiss a notification ──────────────────────────────
+            async dismissNotification(id, refNumber) {
+                await supabaseClient
+                    .from('notifications')
+                    .update({ isRead: true })
+                    .eq('id', id);
+
+                this.data.notifications = this.data.notifications.filter(n => n.id !== id);
+                this.renderNotificationBadge();
+                this.renderDashboard(document.getElementById('mainContent'));
+            },
             
             renderDashboard(content) {
                 const myConceptNotes = this.getMyConceptNotes();
                 const myPayments = this.getMyPayments();
                 const myRetirements = this.getMyRetirements();
                 
-                // Show skeleton if data is still loading
                 if (myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0) {
                     const loadingTime = Date.now() - (this.loadStartTime || Date.now());
                     if (loadingTime < 2000) {
@@ -1290,8 +1220,6 @@ if (linkedCNs) {
                                 <p style="margin-top: 16px; color: var(--text-muted);">Loading your data...</p>
                             </div>
                         `;
-                        
-                        // Try again in 500ms
                         setTimeout(() => this.renderDashboard(content), 500);
                         return;
                     }
@@ -1308,10 +1236,8 @@ if (linkedCNs) {
                 });
                 
                 const activeUnretired = unretiredPayments.filter(p => p.paidDate);
-
-const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
+                const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                 
-                // Get current time for greeting
                 const hour = new Date().getHours();
                 const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
                 
@@ -1320,6 +1246,22 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                         <h2>Dashboard</h2>
                         <p>${greeting}, ${this.currentUser.split(' ')[0]} • <span style="color: var(--success);">● System Online</span></p>
                     </div>
+
+                    ${/* ─── STEP 6: Notification alerts at top of dashboard ─── */''}
+                    ${this.data.notifications.length > 0 ? `
+                        <div style="margin-bottom: 24px;">
+                            ${this.data.notifications.map(n => `
+                                <div class="alert-badge ${n.type === 'danger' ? 'danger' : n.type === 'success' ? '' : 'warning'}"
+                                     style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;"
+                                     onclick="app.dismissNotification(${n.id}, '${n.refNumber}')">
+                                    <span>
+                                        ${n.type === 'danger' ? '❌' : n.type === 'success' ? '✅' : 'ℹ️'} ${n.message}
+                                    </span>
+                                    <span style="font-size: 11px; opacity: 0.7; margin-left: 16px;">Tap to dismiss</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
                     
                     ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `
                         <div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;">
@@ -1473,33 +1415,15 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                 const myRetirements = this.getMyRetirements();
                 
                 myConceptNotes.forEach(cn => {
-                    activity.push({
-                        date: cn.submittedDate,
-                        type: 'Concept Note',
-                        ref: cn.refNumber,
-                        amount: cn.estimatedCost,
-                        status: cn.status
-                    });
+                    activity.push({ date: cn.submittedDate, type: 'Concept Note', ref: cn.refNumber, amount: cn.estimatedCost, status: cn.status });
                 });
                 
                 myPayments.forEach(p => {
-                    activity.push({
-                        date: p.requestDate,
-                        type: 'Payment',
-                        ref: p.refNumber,
-                        amount: p.amount,
-                        status: p.status
-                    });
+                    activity.push({ date: p.requestDate, type: 'Payment', ref: p.refNumber, amount: p.amount, status: p.status });
                 });
                 
                 myRetirements.forEach(r => {
-                    activity.push({
-                        date: r.submittedDate,
-                        type: 'Retirement',
-                        ref: r.refNumber,
-                        amount: r.actualSpent,
-                        status: r.status
-                    });
+                    activity.push({ date: r.submittedDate, type: 'Retirement', ref: r.refNumber, amount: r.actualSpent, status: r.status });
                 });
                 
                 return activity.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
@@ -1514,52 +1438,35 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                     { id: 'approved', label: 'Approved', icon: '✓', date: cn.approvedDate }
                 ];
                 
-                let progress = {
-                    steps: [],
-                    currentStep: '',
-                    percentComplete: 0,
-                    message: ''
-                };
+                let progress = { steps: [], currentStep: '', percentComplete: 0, message: '' };
+                let activeSteps = [steps[0]];
                 
-                // Filter out skipped steps
-                let activeSteps = [steps[0]]; // Always include submitted
-                
-                // Check if it went through budget owner
                 if (cn.status === 'pending' && cn.currentApprover === 'budgetOwner') {
                     activeSteps.push({ ...steps[1], status: 'active' });
                     progress.currentStep = 'Budget Owner Review';
                     progress.message = 'Awaiting Budget Owner approval';
                 }
                 
-                // Check if forwarded to ED
                 if (cn.forwardedToED || (cn.status === 'pending' && cn.currentApprover === 'ed')) {
                     activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
-                    activeSteps.push({ 
-                        ...steps[2], 
-                        status: cn.currentApprover === 'ed' ? 'active' : 'completed' 
-                    });
+                    activeSteps.push({ ...steps[2], status: cn.currentApprover === 'ed' ? 'active' : 'completed' });
                     if (cn.currentApprover === 'ed') {
                         progress.currentStep = 'Executive Director Review';
                         progress.message = 'Awaiting ED approval';
                     }
                 }
                 
-                // Check if sent to procurement
                 if (cn.sentToProcurement || (cn.status === 'pending' && cn.currentApprover === 'procurement')) {
                     if (!cn.forwardedToED) {
                         activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
                     }
-                    activeSteps.push({ 
-                        ...steps[3], 
-                        status: cn.currentApprover === 'procurement' ? 'active' : 'completed' 
-                    });
+                    activeSteps.push({ ...steps[3], status: cn.currentApprover === 'procurement' ? 'active' : 'completed' });
                     if (cn.currentApprover === 'procurement') {
                         progress.currentStep = 'Procurement Processing';
                         progress.message = 'Items being procured';
                     }
                 }
                 
-                // Check if approved
                 if (cn.status === 'approved') {
                     if (!cn.sentToProcurement && !cn.forwardedToED) {
                         activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate });
@@ -1569,7 +1476,6 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
                     progress.message = '✓ Concept note approved! Payment can be requested.';
                 }
                 
-                // Check if rejected
                 if (cn.status === 'rejected') {
                     const lastStep = activeSteps[activeSteps.length - 1];
                     lastStep.status = 'rejected';
@@ -1586,15 +1492,9 @@ const isLocked = activeUnretired.length >= 2 || overdueRetirements.length > 0;
             showConceptNoteTracking(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
-                // Get linked payments
-const payments = this.data.payments.filter(
-    p => p.conceptNoteRef === cn.refNumber
-);
 
-// Get linked retirements (through payments)
-const retirements = this.data.retirements.filter(r =>
-    payments.find(p => p.refNumber === r.paymentRef)
-);
+                const payments = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber);
+                const retirements = this.data.retirements.filter(r => payments.find(p => p.refNumber === r.paymentRef));
                 
                 const progress = this.getConceptNoteProgress(cn);
                 const content = document.getElementById('mainContent');
@@ -1621,9 +1521,7 @@ const retirements = this.data.retirements.filter(r =>
                             ${progress.steps.map((step, index) => `
                                 <div class="progress-step ${step.status || ''}">
                                     <div class="progress-icon">
-                                        ${step.status === 'completed' ? '✓' : 
-                                          step.status === 'rejected' ? '✗' : 
-                                          step.icon || (index + 1)}
+                                        ${step.status === 'completed' ? '✓' : step.status === 'rejected' ? '✗' : step.icon || (index + 1)}
                                     </div>
                                     <div class="progress-label">
                                         ${step.label}
@@ -1674,7 +1572,12 @@ const retirements = this.data.retirements.filter(r =>
                                 <textarea rows="2" readonly>${cn.procurementNotes}</textarea>
                             </div>
                         ` : ''}
-                        
+                        ${cn.budgetOwnerNote ? `
+                            <div class="form-group full-width">
+                                <label style="color: var(--success);">Budget Owner Note</label>
+                                <textarea rows="2" readonly style="border-color: var(--success);">${cn.budgetOwnerNote}</textarea>
+                            </div>
+                        ` : ''}
                         ${cn.rejectionReason ? `
                             <div class="form-group full-width">
                                 <label style="color: var(--danger);">Rejection Reason</label>
@@ -1730,7 +1633,7 @@ const retirements = this.data.retirements.filter(r =>
                         </div>
                         <div class="form-group">
                             <label>Implementation Date <span class="required">*</span></label>
-                            <input type="date" name="ImplementationDate" id="ImplementationDate" required placeholder="e.g., when is your activity">
+                            <input type="date" name="ImplementationDate" id="ImplementationDate" required>
                         </div>
                         
                         <div class="form-group full-width">
@@ -1757,7 +1660,6 @@ const retirements = this.data.retirements.filter(r =>
                 const form = event.target;
                 const formData = new FormData(form);
                 
-                // Validate
                 const amount = parseFloat(formData.get('estimatedCost'));
                 if (!this.validateAmount(amount)) {
                     this.showError('estimatedCost', 'Please enter a valid amount');
@@ -1786,7 +1688,6 @@ const retirements = this.data.retirements.filter(r =>
                     
                     if (error) throw error;
                     
-                    // Update local data without full reload
                     this.data.conceptNotes.unshift(data[0]);
                     this.clearCache();
                     
@@ -1799,28 +1700,14 @@ const retirements = this.data.retirements.filter(r =>
             },
             
             renderPaymentForm(content) {
-               const approvedNotes = this.data.conceptNotes.filter(cn => {
-
-    // Must belong to current user
-    if (cn.staffName !== this.currentUser) return false;
-
-    // Must be approved
-    if (cn.status !== 'approved') return false;
-
-    // Check if payment already exists
-    const existingPayment = this.data.payments.find(p => 
-        p.conceptNoteRef === cn.refNumber
-    );
-
-    // If no payment exists → allow
-    if (!existingPayment) return true;
-
-    // If payment exists but NOT paid → allow (maybe rejected or pending)
-    if (existingPayment.status !== 'paid') return true;
-
-    // If paid already → do NOT allow another request
-    return false;
-});
+                const approvedNotes = this.data.conceptNotes.filter(cn => {
+                    if (cn.staffName !== this.currentUser) return false;
+                    if (cn.status !== 'approved') return false;
+                    const existingPayment = this.data.payments.find(p => p.conceptNoteRef === cn.refNumber);
+                    if (!existingPayment) return true;
+                    if (existingPayment.status !== 'paid') return true;
+                    return false;
+                });
                 
                 content.innerHTML = `
                     <div class="header">
@@ -1873,36 +1760,34 @@ const retirements = this.data.retirements.filter(r =>
                             <input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)">
                         </div>
                         <div id="bankDetailsSection">
-                        <div class="form-group">
-                            <label>Account Name <span class="required">*</span></label>
-                            <input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account">
-                        </div>
-
-                        <div class="form-group">
-                            <label>Account Number <span class="required">*</span></label>
-                            <input type="text" name="accountNumber" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
-                        </div>
-
-                        <div class="form-group full-width">
-                            <label>Bank Name <span class="required">*</span></label>
-                            <select name="bankName" id="bankName" required>
-                                <option value="">Select Bank</option>
-                                <option value="Access Bank">Access Bank</option>
-                                <option value="Fidelity Bank">Fidelity Bank</option>
-                                <option value="First Bank">First Bank</option>
-                                <option value="FCMB">FCMB</option>
-                                <option value="GTBank">GTBank</option>
-                                <option value="Jaiz Bank">Jaiz Bank</option>
-                                <option value="Keystone Bank">Keystone Bank</option>
-                                <option value="Polaris Bank">Polaris Bank</option>
-                                <option value="Stanbic IBTC">Stanbic IBTC</option>
-                                <option value="UBA">UBA</option>
-                                <option value="Union Bank">Union Bank</option>
-                                <option value="Unity Bank">Unity Bank</option>
-                                <option value="Wema Bank">Wema Bank</option>
-                                <option value="Zenith Bank">Zenith Bank</option>
-                            </select>
-                        </div>
+                            <div class="form-group">
+                                <label>Account Name <span class="required">*</span></label>
+                                <input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account">
+                            </div>
+                            <div class="form-group">
+                                <label>Account Number <span class="required">*</span></label>
+                                <input type="text" name="accountNumber" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Bank Name <span class="required">*</span></label>
+                                <select name="bankName" id="bankName" required>
+                                    <option value="">Select Bank</option>
+                                    <option value="Access Bank">Access Bank</option>
+                                    <option value="Fidelity Bank">Fidelity Bank</option>
+                                    <option value="First Bank">First Bank</option>
+                                    <option value="FCMB">FCMB</option>
+                                    <option value="GTBank">GTBank</option>
+                                    <option value="Jaiz Bank">Jaiz Bank</option>
+                                    <option value="Keystone Bank">Keystone Bank</option>
+                                    <option value="Polaris Bank">Polaris Bank</option>
+                                    <option value="Stanbic IBTC">Stanbic IBTC</option>
+                                    <option value="UBA">UBA</option>
+                                    <option value="Union Bank">Union Bank</option>
+                                    <option value="Unity Bank">Unity Bank</option>
+                                    <option value="Wema Bank">Wema Bank</option>
+                                    <option value="Zenith Bank">Zenith Bank</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="btn-group full-width">
@@ -1913,42 +1798,40 @@ const retirements = this.data.retirements.filter(r =>
                 `;
             },
             
-          handleBeneficiaryUpload(input) {
-    const area = document.getElementById('beneficiaryUploadArea');
-    const file = input.files[0];
-    const bankSection = document.getElementById('bankDetailsSection');
-    
-    if (file) {
-        if (file.size > MAX_FILE_SIZE) {
-            alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-            input.value = '';
-            return;
-        }
-        
-        area.classList.add('has-file');
-        area.innerHTML = `
-            <p>✓ ${file.name}</p>
-            <span class="form-hint">${(file.size / 1024).toFixed(1)} KB — Bank details not needed for batch payments</span>
-        `;
-        
-        // Hide bank details and remove required
-        if (bankSection) {
-            bankSection.style.display = 'none';
-            bankSection.querySelectorAll('[required]').forEach(el => {
-                el.removeAttribute('required');
-                el.value = '';
-            });
-        }
-    } else {
-        // Show bank details again if file removed
-        if (bankSection) {
-            bankSection.style.display = '';
-            document.getElementById('accountName').setAttribute('required', '');
-            document.getElementById('accountNumber').setAttribute('required', '');
-            document.getElementById('bankName').setAttribute('required', '');
-        }
-    }
-},
+            handleBeneficiaryUpload(input) {
+                const area = document.getElementById('beneficiaryUploadArea');
+                const file = input.files[0];
+                const bankSection = document.getElementById('bankDetailsSection');
+                
+                if (file) {
+                    if (file.size > MAX_FILE_SIZE) {
+                        alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+                        input.value = '';
+                        return;
+                    }
+                    
+                    area.classList.add('has-file');
+                    area.innerHTML = `
+                        <p>✓ ${file.name}</p>
+                        <span class="form-hint">${(file.size / 1024).toFixed(1)} KB — Bank details not needed for batch payments</span>
+                    `;
+                    
+                    if (bankSection) {
+                        bankSection.style.display = 'none';
+                        bankSection.querySelectorAll('[required]').forEach(el => {
+                            el.removeAttribute('required');
+                            el.value = '';
+                        });
+                    }
+                } else {
+                    if (bankSection) {
+                        bankSection.style.display = '';
+                        document.getElementById('accountName').setAttribute('required', '');
+                        document.getElementById('accountNumber').setAttribute('required', '');
+                        document.getElementById('bankName').setAttribute('required', '');
+                    }
+                }
+            },
             
             loadConceptNoteDetails(id) {
                 const cn = this.data.conceptNotes.find(c => c.id == id);
@@ -1971,28 +1854,24 @@ const retirements = this.data.retirements.filter(r =>
                 
                 const form = event.target;
                 const formData = new FormData(form);
-                const conceptNote = this.data.conceptNotes.find(
-    c => c.id == formData.get('conceptNoteId')
-        );
+                const conceptNote = this.data.conceptNotes.find(c => c.id == formData.get('conceptNoteId'));
                 const submitBtn = document.getElementById('submitPaymentBtn');
                 
-                // Validate
                 const amount = parseFloat(formData.get('amount'));
                 if (!this.validateAmount(amount)) {
                     this.showError('amount', 'Please enter a valid amount');
                     return;
                 }
                 const accountNumber = formData.get('accountNumber');
-const hasBeneficiaryFile = document.getElementById('beneficiaryFile').files.length > 0;
-if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
-    this.showError('accountNumber', 'Account number must be exactly 10 digits');
-    return;
-}
+                const hasBeneficiaryFile = document.getElementById('beneficiaryFile').files.length > 0;
+                if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
+                    this.showError('accountNumber', 'Account number must be exactly 10 digits');
+                    return;
+                }
                 try {
                     submitBtn.disabled = true;
                     submitBtn.textContent = 'Uploading...';
                     
-                    // Upload beneficiary file if provided
                     const file = document.getElementById('beneficiaryFile').files[0];
                     let beneficiaryFileData = null;
                     
@@ -2015,7 +1894,7 @@ if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) {
                         status: 'pending',
                         requestDate: new Date().toISOString(),
                         conceptNoteRef: conceptNote?.refNumber,
-projectCode: conceptNote?.projectCode,
+                        projectCode: conceptNote?.projectCode,
                     };
                     
                     const { data, error } = await supabaseClient
@@ -2025,7 +1904,6 @@ projectCode: conceptNote?.projectCode,
                     
                     if (error) throw error;
                     
-                    // Update local data
                     this.data.payments.unshift(data[0]);
                     this.clearCache();
                     
@@ -2044,40 +1922,30 @@ projectCode: conceptNote?.projectCode,
                 const userRole = this.getUserRole();
                 const myPayments = this.getMyPayments();
                 
-               const paidPayments = this.data.payments.filter(p => {
+                const paidPayments = this.data.payments.filter(p => {
+                    if (p.status !== 'paid') return false;
+                    if (!p.paidDate) return false;
+                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
 
-    // Must be paid
-    if (p.status !== 'paid') return false;
+                    if (p.staffName === this.currentUser) {
+                        return (
+                            p.staffName === this.currentUser &&
+                            p.retirementresponsibility === 'staff'
+                        );
+                    }
 
-    // Must have been processed (safety check)
-    if (!p.paidDate) return false;
+                    if (userRole === 'procurement') {
+                        return p.retirementresponsibility === 'procurement';
+                    }
 
-    // Must not already have a retirement
-    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
-
-    // STAFF can only retire their own payments
-    if (p.staffName === this.currentUser) {
-        return (
-            p.staffName === this.currentUser &&
-            p.retirementresponsibility === 'staff'
-        );
-    }
-
-    // PROCUREMENT retires procurement payments
-    if (userRole === 'procurement') {
-        return p.retirementresponsibility === 'procurement';
-    }
-
-    return false;
-});
-                
+                    return false;
+                });
                 
                 content.innerHTML = `
                     <div class="header">
                         <h2>Submit Retirement</h2>
                         <p>${userRole === 'procurement' ? 'Retire procured activities' : 'Retire advance payments (available 5 days after payment)'}</p>
                     </div>
-        
                     
                     ${paidPayments.length === 0 ? `
                         <div class="empty-state">
@@ -2115,13 +1983,13 @@ projectCode: conceptNote?.projectCode,
                             </div>
                             
                             <div class="form-group full-width">
-    <label>Upload Receipts <span class="required">*</span></label>
-    <div class="file-upload-area" id="retirementUploadArea" onclick="document.getElementById('retirementFile').click()">
-        <p>📎 Click to upload receipt(s)</p>
-        <span class="form-hint">PDF, JPG, PNG — Max 5MB</span>
-    </div>
-    <input type="file" id="retirementFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleRetirementUpload(this)">
-</div>
+                                <label>Upload Receipts <span class="required">*</span></label>
+                                <div class="file-upload-area" id="retirementUploadArea" onclick="document.getElementById('retirementFile').click()">
+                                    <p>📎 Click to upload receipt(s)</p>
+                                    <span class="form-hint">PDF, JPG, PNG — Max 5MB</span>
+                                </div>
+                                <input type="file" id="retirementFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleRetirementUpload(this)">
+                            </div>
                             
                             <div class="btn-group full-width">
                                 <button type="submit" class="btn btn-primary">Submit Retirement</button>
@@ -2150,20 +2018,19 @@ projectCode: conceptNote?.projectCode,
                 const form = event.target;
                 const formData = new FormData(form);
                 
-                // Validate
                 const actualSpent = parseFloat(formData.get('actualSpent'));
                 if (!this.validateAmount(actualSpent)) {
                     this.showError('actualSpent', 'Please enter a valid amount');
                     return;
                 }
-                // Get uploaded receipt file
-const file = document.getElementById('retirementFile').files[0];
-let receiptFileData = null;
 
-// Upload if file exists
-if (file) {
-    receiptFileData = await this.uploadFile(file, 'retirements');
-}
+                const file = document.getElementById('retirementFile').files[0];
+                let receiptFileData = null;
+
+                if (file) {
+                    receiptFileData = await this.uploadFile(file, 'retirements');
+                }
+
                 try {
                     const retirement = {
                         refNumber: 'RET' + Date.now(),
@@ -2173,7 +2040,7 @@ if (file) {
                         amountReturned: parseFloat(formData.get('amountReturned')) || 0,
                         expenditureDetails: formData.get('expenditureDetails'),
                         receiptFileUrl: receiptFileData?.url,
-receiptFileName: receiptFileData?.fileName,
+                        receiptFileName: receiptFileData?.fileName,
                         status: 'pending',
                         submittedDate: new Date().toISOString()
                     };
@@ -2185,7 +2052,6 @@ receiptFileName: receiptFileData?.fileName,
                     
                     if (error) throw error;
                     
-                    // Update local data
                     this.data.retirements.unshift(data[0]);
                     this.clearCache();
                     
@@ -2202,7 +2068,6 @@ receiptFileName: receiptFileData?.fileName,
                 
                 const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
                     if (cn.status !== 'pending') return false;
-                    
                     if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
                     if (role === 'ed' && cn.currentApprover === 'ed') return true;
                     if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
@@ -2263,6 +2128,9 @@ receiptFileName: receiptFileData?.fileName,
                                                         <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">
                                                             ✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}
                                                         </button>
+                                                        <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">
+                                                            ✓ Approve with Note
+                                                        </button>
                                                     ` : `
                                                         <button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">
                                                             → Forward to ED (>₦1M)
@@ -2311,11 +2179,9 @@ receiptFileName: receiptFileData?.fileName,
                                             <td>${p.paymentMethod}</td>
                                             <td>${new Date(p.requestDate).toLocaleDateString()}</td>
                                             <td>
-                                            <button class="action-btn"
-        onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')"
-        style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
-        📄 View Concept Note
-    </button><br>
+                                                <button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
+                                                    📄 View Concept Note
+                                                </button><br>
                                                 ${p.beneficiaryFileUrl ? `
                                                     <button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">
                                                         📎 Download Beneficiaries
@@ -2360,24 +2226,18 @@ receiptFileName: receiptFileData?.fileName,
                                             <td>₦${r.amountReturned.toLocaleString()}</td>
                                             <td>${new Date(r.submittedDate).toLocaleDateString()}</td>
                                             <td>
-    ${r.receiptFileUrl ? `
-        <button class="action-btn"
-            onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')"
-            style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
-            📎 Download Receipt
-        </button><br>
-    ` : ''}
-
-    <button class="action-btn approve"
-        onclick="app.approveRetirement('${r.refNumber}')">
-        ✓ Approve Retirement
-    </button>
-
-    <button class="action-btn reject"
-        onclick="app.rejectRetirement('${r.refNumber}')">
-        ✗ Reject
-    </button>
-</td>
+                                                ${r.receiptFileUrl ? `
+                                                    <button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">
+                                                        📎 Download Receipt
+                                                    </button><br>
+                                                ` : ''}
+                                                <button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">
+                                                    ✓ Approve Retirement
+                                                </button>
+                                                <button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">
+                                                    ✗ Reject
+                                                </button>
+                                            </td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -2387,100 +2247,111 @@ receiptFileName: receiptFileData?.fileName,
                 `;
             },
             
-           async approveConceptNote(refNumber, action) {
+            async approveConceptNote(refNumber, action) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
 
-    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-    if (!cn) return;
+                let updates = {};
 
-    let updates = {};
+                switch(action) {
+                    case 'approve_under_1m':
+                        if (cn.requiresProcurement === 'yes') {
+                            updates = {
+                                currentApprover: 'procurement',
+                                sentToProcurement: new Date().toISOString(),
+                                retirementresponsibility: 'procurement'
+                            };
+                        } else {
+                            updates = {
+                                status: 'approved',
+                                approvedDate: new Date().toISOString(),
+                                approvedBy: this.currentUser,
+                                retirementresponsibility: 'staff'
+                            };
+                        }
+                        break;
 
+                    case 'approve_with_note':
+                        const approvalNote = prompt('Enter your approval note:');
+                        if (!approvalNote) return;
+                        if (cn.requiresProcurement === 'yes') {
+                            updates = {
+                                currentApprover: 'procurement',
+                                sentToProcurement: new Date().toISOString(),
+                                retirementresponsibility: 'procurement',
+                                budgetOwnerNote: approvalNote
+                            };
+                        } else {
+                            updates = {
+                                status: 'approved',
+                                approvedDate: new Date().toISOString(),
+                                approvedBy: this.currentUser,
+                                retirementresponsibility: 'staff',
+                                budgetOwnerNote: approvalNote
+                            };
+                        }
+                        break;
 
-    switch(action) {
+                    case 'forward_to_ed':
+                        updates = {
+                            currentApprover: 'ed',
+                            forwardedToED: new Date().toISOString()
+                        };
+                        break;
 
-        case 'approve_under_1m':
+                    case 'ed_approve':
+                        if (cn.requiresProcurement === 'yes') {
+                            updates = {
+                                currentApprover: 'procurement',
+                                sentToProcurement: new Date().toISOString(),
+                                retirementresponsibility: 'procurement'
+                            };
+                        } else {
+                            updates = {
+                                status: 'approved',
+                                approvedDate: new Date().toISOString(),
+                                approvedBy: this.currentUser,
+                                retirementresponsibility: 'staff'
+                            };
+                        }
+                        break;
+                }
 
-            if (cn.requiresProcurement === 'yes') {
+                try {
+                    const { error } = await supabaseClient
+                        .from('concept_notes')
+                        .update(updates)
+                        .eq('refNumber', refNumber);
 
-                updates = {
-                    currentApprover: 'procurement',
-                    sentToProcurement: new Date().toISOString(),
-                    retirementresponsibility: 'procurement'
-                };
+                    if (error) throw error;
 
-            } else {
+                    Object.assign(cn, updates);
+                    this.clearCache();
 
-                updates = {
-                    status: 'approved',
-                    approvedDate: new Date().toISOString(),
-                    approvedBy: this.currentUser,
-                    retirementresponsibility: 'staff'
-                };
-            }
+                    const isFullyApproved = updates.status === 'approved';
+                    await this.createNotification(
+                        cn.staffName,
+                        isFullyApproved
+                            ? `Your concept note ${refNumber} has been approved!`
+                            : `Your concept note ${refNumber} has been forwarded to the next approver.`,
+                        isFullyApproved ? 'success' : 'info',
+                        refNumber
+                    );
 
-            break;
+                    alert('Concept note processed successfully!');
+                    await this.loadData();
+                    this.showView('approvals');
 
-
-        case 'forward_to_ed':
-
-            updates = {
-                currentApprover: 'ed',
-                forwardedToED: new Date().toISOString()
-            };
-
-            break;
-
-
-        case 'ed_approve':
-
-            if (cn.requiresProcurement === 'yes') {
-
-                updates = {
-                    currentApprover: 'procurement',
-                    sentToProcurement: new Date().toISOString(),
-                    retirementresponsibility: 'procurement'
-                };
-
-            } else {
-
-                updates = {
-                    status: 'approved',
-                    approvedDate: new Date().toISOString(),
-                    approvedBy: this.currentUser,
-                    retirementresponsibility: 'staff'
-                };
-            }
-
-            break;
-    }
-
-    try {
-
-        // 1️⃣ Update concept note first
-        const { error } = await supabaseClient
-            .from('concept_notes')
-            .update(updates)
-            .eq('refNumber', refNumber);
-
-        if (error) throw error;
-
-        Object.assign(cn, updates);
-        this.clearCache();
-
-        alert('Concept note processed successfully!');
-        await this.loadData();
-        this.showView('approvals');
-
-    } catch (error) {
-
-        console.error('Approval error:', error);
-        alert('Error processing concept note: ' + error.message);
-    }
-                },
+                } catch (error) {
+                    console.error('Approval error:', error);
+                    alert('Error processing concept note: ' + error.message);
+                }
+            },
             
             async rejectConceptNote(refNumber) {
                 const reason = prompt('Please provide a reason for rejection:');
                 if (!reason) return;
-                
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 try {
                     const { error } = await supabaseClient
                         .from('concept_notes')
@@ -2493,7 +2364,12 @@ receiptFileName: receiptFileData?.fileName,
                         .eq('refNumber', refNumber);
                     
                     if (error) throw error;
-                    
+                    await this.createNotification(
+                        cn.staffName,
+                        `Your concept note ${refNumber} was rejected: "${reason}"`,
+                        'danger',
+                        refNumber
+                    );
                     await this.loadData();
                     alert('Concept note rejected.');
                     this.showView('approvals');
@@ -2598,13 +2474,11 @@ receiptFileName: receiptFileData?.fileName,
                 const file = input.files[0];
                 
                 if (file) {
-                    // Validate size
                     if (file.size > MAX_FILE_SIZE) {
                         alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
                         input.value = '';
                         return;
                     }
-                    
                     area.classList.add('has-file');
                     area.innerHTML = `
                         <p>✓ ${file.name}</p>
@@ -2612,28 +2486,24 @@ receiptFileName: receiptFileData?.fileName,
                     `;
                 }
             },
+
             handleRetirementUpload(input) {
-    const area = document.getElementById('retirementUploadArea');
-    const file = input.files[0];
+                const area = document.getElementById('retirementUploadArea');
+                const file = input.files[0];
 
-    if (file) {
-
-        // Check file size
-        if (file.size > MAX_FILE_SIZE) {
-            alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-            input.value = '';
-            return;
-        }
-
-        // Update UI
-        area.classList.add('has-file');
-        area.innerHTML = `
-            <p>✓ ${file.name}</p>
-            <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
-        `;
-    }
-}
-            ,
+                if (file) {
+                    if (file.size > MAX_FILE_SIZE) {
+                        alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+                        input.value = '';
+                        return;
+                    }
+                    area.classList.add('has-file');
+                    area.innerHTML = `
+                        <p>✓ ${file.name}</p>
+                        <span class="form-hint">${(file.size / 1024).toFixed(1)} KB</span>
+                    `;
+                }
+            },
 
             async completeProcurementWithDocs(event, refNumber) {
                 event.preventDefault();
@@ -2668,12 +2538,10 @@ receiptFileName: receiptFileData?.fileName,
                     submitBtn.disabled = true;
                     submitBtn.textContent = 'Uploading documents...';
                     
-                    // Upload files to Supabase Storage
                     const grrData = await this.uploadFile(grrFile, 'grr');
                     submitBtn.textContent = 'Processing...';
                     const poData = await this.uploadFile(poFile, 'po');
                     
-                    // Update concept note
                     const { error: cnError } = await supabaseClient
                         .from('concept_notes')
                         .update({
@@ -2692,7 +2560,6 @@ receiptFileName: receiptFileData?.fileName,
                     
                     if (cnError) throw cnError;
                     
-                    // AUTO-CREATE PAYMENT REQUEST for Finance
                     const payment = {
                         refNumber: 'PAY' + Date.now(),
                         conceptNoteId: cn.id,
@@ -2735,25 +2602,19 @@ receiptFileName: receiptFileData?.fileName,
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 if (!payment) return;
                 
-              // If beneficiary file exists → batch payment (no bank confirmation needed)
-if (payment.beneficiaryFileUrl) {
-
-    if (!confirm(`Process batch payment of ₦${payment.amount.toLocaleString()}?\n\nBeneficiary file attached.\n\nConfirm payment?`)) {
-        return;
-    }
-
-} else {
-
-    // Single payment must have bank details
-    if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
-        alert('Error: Account details not provided by staff member.');
-        return;
-    }
-
-    if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
-        return;
-    }
-}
+                if (payment.beneficiaryFileUrl) {
+                    if (!confirm(`Process batch payment of ₦${payment.amount.toLocaleString()}?\n\nBeneficiary file attached.\n\nConfirm payment?`)) {
+                        return;
+                    }
+                } else {
+                    if (!payment.accountName || !payment.accountNumber || !payment.bankName) {
+                        alert('Error: Account details not provided by staff member.');
+                        return;
+                    }
+                    if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) {
+                        return;
+                    }
+                }
                 
                 try {
                     const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
@@ -2769,7 +2630,14 @@ if (payment.beneficiaryFileUrl) {
                         .eq('refNumber', refNumber);
                     
                     if (error) throw error;
-                    
+
+                    await this.createNotification(
+                        payment.staffName,
+                        `Your payment of ₦${payment.amount.toLocaleString()} (${refNumber}) has been processed!`,
+                        'success',
+                        refNumber
+                    );
+
                     alert(`Payment of ₦${payment.amount.toLocaleString()} processed successfully!`);
                     await this.loadData();
                     this.showView('approvals');
@@ -2780,33 +2648,30 @@ if (payment.beneficiaryFileUrl) {
             },
 
             async viewConceptNoteDetails(refNumber) {
-    let cn = this.data.conceptNotes.find(
-        c => c.refNumber === refNumber
-    );
+                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
 
-    if (!cn) {
-        const { data, error } = await supabaseClient
-            .from('concept_notes')
-            .select('*')
-            .eq('refNumber', refNumber)
-            .single();
+                if (!cn) {
+                    const { data, error } = await supabaseClient
+                        .from('concept_notes')
+                        .select('*')
+                        .eq('refNumber', refNumber)
+                        .single();
 
-        if (error || !data) {
-            alert('Concept note not found.');
-            return;
-        }
+                    if (error || !data) {
+                        alert('Concept note not found.');
+                        return;
+                    }
 
-        cn = data;
-          // ✅ ADD THIS LINE
-    this.data.conceptNotes.push(cn);
-    }
+                    cn = data;
+                    this.data.conceptNotes.push(cn);
+                }
 
-    const content = document.getElementById('mainContent');
-    content.innerHTML = `
-        <div class="header">
-            <h2>Concept Note Details</h2>
-            <p>Full information for ${cn.refNumber}</p>
-        </div>
+                const content = document.getElementById('mainContent');
+                content.innerHTML = `
+                    <div class="header">
+                        <h2>Concept Note Details</h2>
+                        <p>Full information for ${cn.refNumber}</p>
+                    </div>
                     
                     <div class="form-grid two-col">
                         <div class="form-group">
@@ -2885,15 +2750,13 @@ if (payment.beneficiaryFileUrl) {
                         ` : ''}
                         
                         <div class="btn-group full-width">
-    <button class="btn btn-primary" onclick="app.showView('approvals')">
-        ← Back to Approvals
-    </button>
-
-    <button class="btn btn-secondary"
-        onclick="app.downloadConceptNoteFile('${cn.refNumber}')">
-        ⬇ Download Concept Note
-    </button>
-</div>
+                            <button class="btn btn-primary" onclick="app.showView('approvals')">
+                                ← Back to Approvals
+                            </button>
+                            <button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">
+                                ⬇ Download Concept Note
+                            </button>
+                        </div>
                     </div>
                 `;
             },
@@ -2901,7 +2764,7 @@ if (payment.beneficiaryFileUrl) {
             async rejectPayment(refNumber) {
                 const reason = prompt('Please provide a reason for rejection:');
                 if (!reason) return;
-                
+                const payment = this.data.payments.find(p => p.refNumber === refNumber);
                 try {
                     const { error } = await supabaseClient
                         .from('payments')
@@ -2914,7 +2777,14 @@ if (payment.beneficiaryFileUrl) {
                         .eq('refNumber', refNumber);
                     
                     if (error) throw error;
-                    
+
+                    await this.createNotification(
+                        payment.staffName,
+                        `Your payment request ${refNumber} was rejected: "${reason}"`,
+                        'danger',
+                        refNumber
+                    );
+
                     alert('Payment rejected.');
                     await this.loadData();
                     this.showView('approvals');
@@ -2989,13 +2859,7 @@ if (payment.beneficiaryFileUrl) {
                     const spent = this.getProjectSpent(project.code);
                     const remaining = project.budget - spent;
                     const percentUsed = (spent / project.budget * 100).toFixed(1);
-                    
-                    return {
-                        ...project,
-                        spent,
-                        remaining,
-                        percentUsed
-                    };
+                    return { ...project, spent, remaining, percentUsed };
                 });
                 
                 content.innerHTML = `
@@ -3029,10 +2893,10 @@ if (payment.beneficiaryFileUrl) {
                     
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
                     <div style="margin-bottom:16px;">
-    <button class="btn btn-primary" onclick="app.exportPaymentsReport()">
-        ⬇ Download Payments Report
-    </button>
-</div>
+                        <button class="btn btn-primary" onclick="app.exportPaymentsReport()">
+                            ⬇ Download Payments Report
+                        </button>
+                    </div>
                     <div class="table-container">
                         <table>
                             <thead>
@@ -3141,73 +3005,55 @@ if (payment.beneficiaryFileUrl) {
                     </div>
                 `;
             },
+
             exportPaymentsReport() {
-    const payments = this.data.payments;
+                const payments = this.data.payments;
 
-    if (!payments.length) {
-        alert('No payments available to export.');
-        return;
-    }
+                if (!payments.length) {
+                    alert('No payments available to export.');
+                    return;
+                }
 
-    // CSV headers
-    let csv = [
-        [
-            'Reference',
-            'Concept Note',
-            'Project Code',
-            'Staff Name',
-            'Amount',
-            'Status',
-            'Request Date',
-            'Paid Date',
-            'Processed By'
-        ].join(',')
-    ];
+                let csv = [
+                    ['Reference','Concept Note','Project Code','Staff Name','Amount','Status','Request Date','Paid Date','Processed By'].join(',')
+                ];
 
-    // Rows
-    payments.forEach(p => {
-        csv.push([
-            p.refNumber || '',
-            p.conceptNoteRef || '',
-            p.projectCode || '',
-            p.staffName || '',
-            p.amount || 0,
-            p.status || '',
-            p.requestDate ? new Date(p.requestDate).toLocaleDateString() : '',
-            p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '',
-            p.processedBy || ''
-        ].join(','));
-    });
+                payments.forEach(p => {
+                    csv.push([
+                        p.refNumber || '',
+                        p.conceptNoteRef || '',
+                        p.projectCode || '',
+                        p.staffName || '',
+                        p.amount || 0,
+                        p.status || '',
+                        p.requestDate ? new Date(p.requestDate).toLocaleDateString() : '',
+                        p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '',
+                        p.processedBy || ''
+                    ].join(','));
+                });
 
-    // Create file
-    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
+                const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'rahama_payments_report.csv';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            },
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'rahama_payments_report.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    window.URL.revokeObjectURL(url);
-},
             downloadConceptNoteFile(refNumber) {
-    const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-    if (!cn) {
-        alert('Concept note not found.');
-        return;
-    }
-    // ✅ ADD THESE TWO LINES RIGHT HERE
-    const payments = this.data.payments.filter(
-        p => p.conceptNoteRef === cn.refNumber
-    );
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) {
+                    alert('Concept note not found.');
+                    return;
+                }
 
-    const retirements = this.data.retirements.filter(r =>
-        payments.find(p => p.refNumber === r.paymentRef)
-    );
+                const payments = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber);
+                const retirements = this.data.retirements.filter(r => payments.find(p => p.refNumber === r.paymentRef));
 
-    const content = `
+                const content = `
 RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE
 ================================================
 
@@ -3275,23 +3121,33 @@ Approved By: ${r.approvedBy || 'N/A'}
 `).join('')}
 `;
 
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${cn.refNumber}_Concept_Note.txt`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            },
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${cn.refNumber}_Concept_Note.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+            async createNotification(recipientName, message, type, refNumber) {
+                await supabaseClient.from('notifications').insert([{
+                    recipientName,
+                    message,
+                    type,
+                    refNumber,
+                    isRead: false,
+                    createdAt: new Date().toISOString()
+                }]);
+            },
 
-    window.URL.revokeObjectURL(url);
-},
             logout() {
                 if (confirm('Are you sure you want to logout?')) {
                     localStorage.removeItem('pms_user');
                     window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
-                } 
+                }
             }
         };
         
@@ -3299,30 +3155,14 @@ Approved By: ${r.approvedBy || 'N/A'}
         window.addEventListener('DOMContentLoaded', () => {
             app.init();
             
-            // Add keyboard shortcuts
             document.addEventListener('keydown', (e) => {
                 if (e.altKey) {
                     switch(e.key.toLowerCase()) {
-                        case 'd':
-                            e.preventDefault();
-                            app.showView('dashboard');
-                            break;
-                        case 'c':
-                            e.preventDefault();
-                            app.showView('conceptNote');
-                            break;
-                        case 'a':
-                            e.preventDefault();
-                            app.showView('approvals');
-                            break;
-                        case 'p':
-                            e.preventDefault();
-                            app.showView('payment');
-                            break;
-                        case 'r':
-                            e.preventDefault();
-                            app.showView('retirement');
-                            break;
+                        case 'd': e.preventDefault(); app.showView('dashboard'); break;
+                        case 'c': e.preventDefault(); app.showView('conceptNote'); break;
+                        case 'a': e.preventDefault(); app.showView('approvals'); break;
+                        case 'p': e.preventDefault(); app.showView('payment'); break;
+                        case 'r': e.preventDefault(); app.showView('retirement'); break;
                     }
                 }
             });
@@ -3330,3 +3170,5 @@ Approved By: ${r.approvedBy || 'N/A'}
     </script>
 </body>
 </html>
+ENDOFFILE
+echo "Done"
