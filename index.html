@@ -1148,7 +1148,7 @@
                         case 'conceptNote': this.renderConceptNoteForm(content); break;
                         case 'payment': this.renderPaymentForm(content); break;
                         case 'retirement': this.renderRetirementForm(content); break;
-                        case 'approvals': this.renderApprovals(content); break;
+                        case 'approvals': this.renderApprovals(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
                         case 'settings': this.renderSettings(content); break;
                     }
@@ -2063,7 +2063,7 @@
                 }
             },
             
-            renderApprovals(content) {
+            async renderApprovals(content) {
                 const role = this.getUserRole();
                 
                 const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
@@ -2081,6 +2081,91 @@
                 const pendingRetirements = this.data.retirements.filter(r => 
                     r.status === 'pending' && role === 'finance'
                 );
+
+                // ── HISTORY: fetch records this user previously acted on ──
+                let historyCNs = [];
+                let historyPayments = [];
+                let historyRetirements = [];
+
+                try {
+                    if (['budgetOwner', 'ed'].includes(role)) {
+                        const { data: approved } = await supabaseClient
+                            .from('concept_notes')
+                            .select('*')
+                            .eq('approvedBy', this.currentUser)
+                            .order('approvedDate', { ascending: false })
+                            .limit(50);
+
+                        const { data: rejected } = await supabaseClient
+                            .from('concept_notes')
+                            .select('*')
+                            .eq('rejectedBy', this.currentUser)
+                            .order('rejectedDate', { ascending: false })
+                            .limit(50);
+
+                        const { data: forwarded } = role === 'budgetOwner' ? await supabaseClient
+                            .from('concept_notes')
+                            .select('*')
+                            .not('forwardedToED', 'is', null)
+                            .eq('currentApprover', 'ed')
+                            .order('forwardedToED', { ascending: false })
+                            .limit(50) : { data: [] };
+
+                        const seen = new Set();
+                        [...(approved || []), ...(rejected || []), ...(forwarded || [])].forEach(cn => {
+                            if (!seen.has(cn.refNumber)) {
+                                seen.add(cn.refNumber);
+                                historyCNs.push(cn);
+                            }
+                        });
+                    }
+
+                    if (role === 'procurement') {
+                        const { data: completed } = await supabaseClient
+                            .from('concept_notes')
+                            .select('*')
+                            .eq('approvedBy', this.currentUser)
+                            .not('procurementComplete', 'is', null)
+                            .order('procurementComplete', { ascending: false })
+                            .limit(50);
+                        historyCNs = completed || [];
+                    }
+
+                    if (role === 'finance') {
+                        const { data: processedPay } = await supabaseClient
+                            .from('payments')
+                            .select('*')
+                            .eq('processedBy', this.currentUser)
+                            .order('paidDate', { ascending: false })
+                            .limit(50);
+
+                        const { data: rejectedPay } = await supabaseClient
+                            .from('payments')
+                            .select('*')
+                            .eq('rejectedBy', this.currentUser)
+                            .order('rejectedDate', { ascending: false })
+                            .limit(50);
+
+                        const { data: approvedRet } = await supabaseClient
+                            .from('retirements')
+                            .select('*')
+                            .eq('approvedBy', this.currentUser)
+                            .order('approvedDate', { ascending: false })
+                            .limit(50);
+
+                        const { data: rejectedRet } = await supabaseClient
+                            .from('retirements')
+                            .select('*')
+                            .eq('rejectedBy', this.currentUser)
+                            .order('rejectedDate', { ascending: false })
+                            .limit(50);
+
+                        historyPayments = [...(processedPay || []), ...(rejectedPay || [])];
+                        historyRetirements = [...(approvedRet || []), ...(rejectedRet || [])];
+                    }
+                } catch (e) {
+                    console.error('History load error:', e);
+                }
                 
                 content.innerHTML = `
                     <div class="header">
@@ -2242,6 +2327,135 @@
                                     `).join('')}
                                 </tbody>
                             </table>
+                        </div>
+                    ` : ''}
+
+                    ${/* ── HISTORY SECTION ── */''}
+                    ${historyCNs.length > 0 ? `
+                        <div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;">
+                            <h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">
+                                📋 History — Concept Notes I Acted On
+                            </h3>
+                            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+                                All concept notes you have previously approved, rejected, or forwarded
+                            </p>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Staff</th>
+                                            <th>Activity</th>
+                                            <th>Project</th>
+                                            <th>Amount</th>
+                                            <th>Outcome</th>
+                                            <th>Date</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${historyCNs.map(cn => {
+                                            const outcome = cn.rejectedBy === this.currentUser
+                                                ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' }
+                                                : cn.approvedBy === this.currentUser && cn.procurementComplete
+                                                ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' }
+                                                : cn.approvedBy === this.currentUser
+                                                ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' }
+                                                : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' };
+                                            return `
+                                                <tr>
+                                                    <td>${cn.refNumber}</td>
+                                                    <td>${cn.staffName}</td>
+                                                    <td>${cn.activityTitle}</td>
+                                                    <td>${cn.projectCode}</td>
+                                                    <td>₦${cn.estimatedCost.toLocaleString()}</td>
+                                                    <td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td>
+                                                    <td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td>
+                                                    <td>
+                                                        <button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">
+                                                            📄 View
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${historyPayments.length > 0 ? `
+                        <div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;">
+                            <h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">
+                                📋 History — Payments I Processed
+                            </h3>
+                            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+                                All payments you have previously processed or rejected
+                            </p>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Staff</th>
+                                            <th>Amount</th>
+                                            <th>Project</th>
+                                            <th>Outcome</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${historyPayments.map(p => `
+                                            <tr>
+                                                <td>${p.refNumber}</td>
+                                                <td>${p.staffName}</td>
+                                                <td>₦${p.amount.toLocaleString()}</td>
+                                                <td>${p.projectCode || '-'}</td>
+                                                <td><span class="status-badge ${p.status === 'paid' ? 'status-paid' : 'status-rejected'}">${p.status === 'paid' ? 'Processed' : 'Rejected'}</span></td>
+                                                <td>${p.status === 'paid' ? (p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '-') : (p.rejectedDate ? new Date(p.rejectedDate).toLocaleDateString() : '-')}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${historyRetirements.length > 0 ? `
+                        <div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;">
+                            <h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">
+                                📋 History — Retirements I Reviewed
+                            </h3>
+                            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+                                All retirements you have previously approved or rejected
+                            </p>
+                            <div class="table-container" style="margin-bottom: 32px;">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Ref</th>
+                                            <th>Staff</th>
+                                            <th>Payment Ref</th>
+                                            <th>Amount Spent</th>
+                                            <th>Outcome</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${historyRetirements.map(r => `
+                                            <tr>
+                                                <td>${r.refNumber}</td>
+                                                <td>${r.staffName}</td>
+                                                <td>${r.paymentRef}</td>
+                                                <td>₦${r.actualSpent.toLocaleString()}</td>
+                                                <td><span class="status-badge ${r.status === 'approved' ? 'status-approved' : 'status-rejected'}">${r.status === 'approved' ? 'Approved' : 'Rejected'}</span></td>
+                                                <td>${r.status === 'approved' ? (r.approvedDate ? new Date(r.approvedDate).toLocaleDateString() : '-') : (r.rejectedDate ? new Date(r.rejectedDate).toLocaleDateString() : '-')}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     ` : ''}
                 `;
@@ -3170,5 +3384,3 @@ Approved By: ${r.approvedBy || 'N/A'}
     </script>
 </body>
 </html>
-ENDOFFILE
-echo "Done"
