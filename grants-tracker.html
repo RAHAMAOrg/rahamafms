@@ -36,7 +36,6 @@
             line-height: 1.6;
         }
 
-        /* ── LAYOUT ── */
         .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
 
         .sidebar {
@@ -70,7 +69,7 @@
             font-size: 13px;
         }
         .user-card .name { font-weight: 700; color: var(--text); }
-        .user-card .role-badge {
+        .role-badge {
             display: inline-block;
             margin-top: 4px;
             padding: 2px 10px;
@@ -133,12 +132,10 @@
             overflow-x: auto;
         }
 
-        /* ── HEADER ── */
         .page-header { margin-bottom: 28px; }
         .page-header h2 { font-family: 'Archivo', sans-serif; font-size: 26px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
         .page-header p { color: var(--text-muted); font-size: 14px; }
 
-        /* ── ALERT BANNER ── */
         .alert-banner {
             padding: 14px 18px;
             border-radius: 8px;
@@ -150,23 +147,16 @@
             gap: 10px;
         }
         .alert-banner.critical { background: #FFEBEE; border: 1px solid #FFCDD2; color: var(--danger); }
-        .alert-banner.warning { background: #FFF3E0; border: 1px solid #FFE0B2; color: var(--warning); }
+        .alert-banner.warning  { background: #FFF3E0; border: 1px solid #FFE0B2; color: var(--warning); }
 
-        /* ── METRIC CARDS ── */
         .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
-        .metric-card {
-            padding: 20px;
-            border-radius: 12px;
-            color: white;
-        }
+        .metric-card { padding: 20px; border-radius: 12px; color: white; }
         .metric-card .label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.8; margin-bottom: 6px; }
         .metric-card .value { font-size: 22px; font-weight: 800; font-family: 'Archivo', sans-serif; line-height: 1.2; }
         .metric-card.green { background: var(--dark); }
-        .metric-card.mid { background: var(--mid); }
-        .metric-card.red { background: #8B1A1A; }
-        .metric-card.gold { background: #A37A00; }
+        .metric-card.mid   { background: var(--mid); }
+        .metric-card.red   { background: #8B1A1A; }
 
-        /* ── STATUS BADGES ── */
         .badge {
             display: inline-block;
             padding: 3px 10px;
@@ -176,7 +166,6 @@
             white-space: nowrap;
         }
 
-        /* ── SECTION HEADING ── */
         .section-title {
             font-size: 11px;
             font-weight: 800;
@@ -188,7 +177,6 @@
             border-bottom: 2px solid var(--dark);
         }
 
-        /* ── TABLES ── */
         .table-wrap {
             background: var(--surface);
             border-radius: 12px;
@@ -210,9 +198,7 @@
         .td-project { max-width: 260px; line-height: 1.4; }
         .td-note { max-width: 200px; font-size: 11px; color: var(--text-muted); line-height: 1.4; }
         .td-warn { background: #FFEBEE !important; color: #721C24; font-weight: 700; }
-        .td-alert { color: #721C24; background: #FFEBEE !important; }
 
-        /* ── MODAL ── */
         .modal-backdrop {
             position: fixed; inset: 0;
             background: rgba(0,0,0,0.55);
@@ -236,12 +222,14 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
         .modal-header span { color: white; font-weight: 700; font-size: 15px; font-family: 'Archivo', sans-serif; }
         .modal-header button { background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; line-height: 1; }
         .modal-body { padding: 24px; }
 
-        /* ── FORM ── */
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         .form-full { grid-column: 1 / -1; }
         .form-group { display: flex; flex-direction: column; gap: 5px; }
@@ -263,35 +251,20 @@
         .form-group select:focus,
         .form-group textarea:focus { outline: none; border-color: var(--primary); }
         .form-group textarea { min-height: 72px; resize: vertical; }
-
         .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 
-        /* ── BUTTONS ── */
-        .btn {
-            padding: 8px 20px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            border: none;
-            font-family: 'DM Sans', sans-serif;
-            transition: all 0.2s;
-        }
+        .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
         .btn-primary { background: var(--dark); color: white; }
         .btn-primary:hover { background: var(--primary-dark); }
         .btn-secondary { background: white; color: var(--text); border: 1.5px solid #ccc; }
         .btn-secondary:hover { background: var(--bg); }
         .btn-add { background: var(--dark); color: white; padding: 7px 16px; font-size: 12px; font-weight: 700; border: none; border-radius: 6px; cursor: pointer; }
         .btn-edit { background: transparent; border: none; color: var(--mid); cursor: pointer; font-size: 12px; font-weight: 600; padding: 2px 6px; }
-        .btn-del { background: transparent; border: none; color: #8B1A1A; cursor: pointer; font-size: 12px; font-weight: 600; padding: 2px 6px; }
-        .btn-edit:hover { text-decoration: underline; }
-        .btn-del:hover { text-decoration: underline; }
+        .btn-del  { background: transparent; border: none; color: #8B1A1A; cursor: pointer; font-size: 12px; font-weight: 600; padding: 2px 6px; }
+        .btn-edit:hover, .btn-del:hover { text-decoration: underline; }
 
-        /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 48px 24px; color: var(--text-muted); }
-        .empty-state i { font-size: 36px; margin-bottom: 12px; display: block; }
 
-        /* ── ACCESS DENIED ── */
         .access-denied {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             min-height: 60vh; text-align: center; color: var(--text-muted);
@@ -299,16 +272,13 @@
         .access-denied .icon { font-size: 64px; margin-bottom: 16px; }
         .access-denied h2 { font-family: 'Archivo', sans-serif; color: var(--text); margin-bottom: 8px; }
 
-        /* ── LOADING ── */
         .loading { text-align: center; padding: 64px; }
         .spinner { font-size: 32px; color: var(--primary); display: inline-block; animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-        /* ── RECEIVABLES special ── */
         .rcv-critical td { background: #FFF0F0 !important; }
-        .rcv-pending td { background: #FFFBEA !important; }
+        .rcv-pending  td { background: #FFFBEA !important; }
 
-        /* ── Dashboard status chips ── */
         .chip { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; margin: 2px; }
 
         @media (max-width: 900px) {
@@ -322,39 +292,33 @@
 </head>
 <body>
 <div class="app">
-    <!-- ── SIDEBAR ── -->
     <aside class="sidebar">
         <div class="logo">
             <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA" onerror="this.style.display='none'">
             <h1>Project Tracker</h1>
             <p>2025 – 2026</p>
         </div>
-
         <div class="user-card" id="userCard">
             <div class="name" id="userName">Loading…</div>
             <span class="role-badge" id="userRoleBadge">–</span>
         </div>
-
         <ul class="nav">
-            <li><button onclick="showTab('dashboard')"   data-tab="dashboard"   class="active">📊 Dashboard</button></li>
-            <li><button onclick="showTab('p2025')"       data-tab="p2025">📋 2025 Pipeline</button></li>
-            <li><button onclick="showTab('b2025')"       data-tab="b2025">💰 2025 Budgets</button></li>
-            <li><button onclick="showTab('ag2026')"      data-tab="ag2026">✅ 2026 Active Grants</button></li>
-            <li><button onclick="showTab('p2026')"       data-tab="p2026">🔭 2026 Pipeline</button></li>
-            <li><button onclick="showTab('receivables')" data-tab="receivables">⚠ Receivables</button></li>
+            <li><button onclick="showTab('dashboard')"    data-tab="dashboard"    class="active">📊 Dashboard</button></li>
+            <li><button onclick="showTab('p2025')"        data-tab="p2025">📋 2025 Pipeline</button></li>
+            <li><button onclick="showTab('b2025')"        data-tab="b2025">💰 2025 Budgets</button></li>
+            <li><button onclick="showTab('ag2026')"       data-tab="ag2026">✅ 2026 Active Grants</button></li>
+            <li><button onclick="showTab('p2026')"        data-tab="p2026">🔭 2026 Pipeline</button></li>
+            <li><button onclick="showTab('receivables')"  data-tab="receivables">⚠ Receivables</button></li>
             <li><button onclick="showTab('unsuccessful')" data-tab="unsuccessful">❌ Unsuccessful</button></li>
         </ul>
-
-        <a href="fms.html" class="portal-link">← Back to FMS</a>
+        <a href="index.html" class="portal-link">← Back to Portal</a>
     </aside>
 
-    <!-- ── MAIN ── -->
     <main class="main" id="mainContent">
         <div class="loading"><span class="spinner">⟳</span><p style="margin-top:16px;color:var(--text-muted)">Loading tracker…</p></div>
     </main>
 </div>
 
-<!-- ── MODAL CONTAINER ── -->
 <div id="modalContainer"></div>
 
 <script>
@@ -365,18 +329,15 @@ const SUPABASE_URL = 'https://sqygmoxpegbfxddglhbx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8';
 
 // ── ACCESS CONTROL ──────────────────────────────────────
-// Emails that can EDIT (add / edit / delete everything)
-const EDITOR_EMAILS = [
-    'fatima.tijjani@rgcweinigeria.org',       // ED
-    'salahuddeen.sambo@rgcweinigeria.org',    // Finance
-    'sani.hamisu@rgcweinigeria.org',           // Finance
-    'aisha.abdulrahman@rgcweinigeria.org',     // Supervisor / Budget Owner
-    'maryam.tijjani@rgcweinigeria.org',        // Strategic Engagement
+// Session comes from the appraisal portal which stores:
+// { email, name, role: 'employee'|'supervisor', id }
+// All supervisors get access. Specific employees below also get access.
+const AUTHORIZED_EMPLOYEE_EMAILS = [
+    'salahuddeen.sambo@rgcweinigeria.org',
+    'sani.hamisu@rgcweinigeria.org',
+    'aisha.abdulrahman@rgcweinigeria.org',
+    'maryam.tijjani@rgcweinigeria.org',
 ];
-// Roles (from appraisal portal) that can also edit
-const EDITOR_ROLES = ['supervisor'];
-
-// Everyone else → NO ACCESS
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -384,7 +345,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // STATE
 // ═══════════════════════════════════════════════════════
 let STATE = {
-    user: null,        // { email, name, role, id }
+    user: null,
     canEdit: false,
     tab: 'dashboard',
     data: {
@@ -398,10 +359,9 @@ let STATE = {
 };
 
 // ═══════════════════════════════════════════════════════
-// INIT
+// INIT — FIX: check name OR email OR role, with full error handling
 // ═══════════════════════════════════════════════════════
 async function init() {
-    // Read session from localStorage (set by FMS login — key is 'pms_user')
     const raw = localStorage.getItem('pms_user');
     if (!raw) {
         showAccessDenied('no-session');
@@ -409,30 +369,51 @@ async function init() {
     }
 
     let session;
-    try { session = JSON.parse(raw); } catch { showAccessDenied('no-session'); return; }
+    try {
+        session = JSON.parse(raw);
+    } catch (e) {
+        showAccessDenied('no-session');
+        return;
+    }
 
+    const name  = (session.name  || '').trim();
     const email = (session.email || '').toLowerCase().trim();
     const role  = (session.role  || '').toLowerCase().trim();
 
-    // Check access
-    const emailAllowed = EDITOR_EMAILS.map(e => e.toLowerCase()).includes(email);
-    const roleAllowed  = EDITOR_ROLES.includes(role);
+    // Appraisal portal sets role as 'supervisor' or 'employee'
+    // All supervisors get full access; specific employees also get access
+    const isSupervisor    = role === 'supervisor';
+    const isAuthorizedEmp = AUTHORIZED_EMPLOYEE_EMAILS.includes(email);
 
-    if (!emailAllowed && !roleAllowed) {
+    if (!isSupervisor && !isAuthorizedEmp) {
         showAccessDenied('no-access');
         return;
     }
 
     STATE.user    = session;
-    STATE.canEdit = true; // all allowed users can edit
+    STATE.canEdit = true;
 
-    // Update sidebar
-    document.getElementById('userName').textContent = session.name || email;
+    document.getElementById('userName').textContent = name || email || 'User';
     const badge = document.getElementById('userRoleBadge');
     badge.textContent = 'Editor';
     badge.className = 'role-badge role-editor';
 
-    await loadAllData();
+    // ── FIX: wrap loadAllData in try/catch so errors show instead of freezing ──
+    try {
+        await loadAllData();
+    } catch (err) {
+        console.error('Data load error:', err);
+        document.getElementById('mainContent').innerHTML = `
+            <div class="access-denied">
+                <div class="icon">⚠️</div>
+                <h2>Could not load tracker data</h2>
+                <p style="margin-top:8px;max-width:400px">${err.message || 'A network or database error occurred. Please check your connection and try again.'}</p>
+                <br>
+                <button onclick="init()" class="btn btn-primary" style="margin-top:8px">Retry</button>
+            </div>`;
+        return;
+    }
+
     showTab('dashboard');
 }
 
@@ -440,14 +421,17 @@ async function init() {
 // DATA LOADING
 // ═══════════════════════════════════════════════════════
 async function loadAllData() {
-    const tables = ['pipeline2025','budgets2025','active_grants_2026','pipeline2026','receivables','unsuccessful'];
-    const keys   = ['pipeline2025','budgets2025','activeGrants2026','pipeline2026','receivables','unsuccessful'];
+    const tables = ['pipeline2025', 'budgets2025', 'active_grants_2026', 'pipeline2026', 'receivables', 'unsuccessful'];
+    const keys   = ['pipeline2025', 'budgets2025', 'activeGrants2026',   'pipeline2026', 'receivables', 'unsuccessful'];
 
-    const results = await Promise.all(tables.map(t =>
-        db.from(t).select('*').order('id', { ascending: true })
-    ));
+    const results = await Promise.all(
+        tables.map(t => db.from(t).select('*').order('id', { ascending: true }))
+    );
 
     results.forEach((res, i) => {
+        if (res.error) {
+            console.warn(`Table '${tables[i]}' error:`, res.error.message);
+        }
         if (res.data) STATE.data[keys[i]] = res.data;
     });
 }
@@ -461,10 +445,10 @@ function showTab(tab) {
         b.classList.toggle('active', b.dataset.tab === tab);
     });
     const main = document.getElementById('mainContent');
-    switch(tab) {
-        case 'dashboard':    renderDashboard(main); break;
+    switch (tab) {
+        case 'dashboard':    renderDashboard(main);  break;
         case 'p2025':        renderPipeline(main, 'pipeline2025', '2025 Pipeline Tracker'); break;
-        case 'b2025':        renderBudgets(main); break;
+        case 'b2025':        renderBudgets(main);    break;
         case 'ag2026':       renderActiveGrants(main); break;
         case 'p2026':        renderPipeline(main, 'pipeline2026', '2026 Pipeline Tracker'); break;
         case 'receivables':  renderReceivables(main); break;
@@ -473,12 +457,13 @@ function showTab(tab) {
 }
 
 // ═══════════════════════════════════════════════════════
-// ACCESS DENIED SCREENS
+// ACCESS DENIED
 // ═══════════════════════════════════════════════════════
 function showAccessDenied(reason) {
     document.getElementById('userName').textContent = 'Not signed in';
-    document.getElementById('userRoleBadge').textContent = 'No Access';
-    document.getElementById('userRoleBadge').className = 'role-badge role-viewer';
+    const badge = document.getElementById('userRoleBadge');
+    badge.textContent = 'No Access';
+    badge.className = 'role-badge role-viewer';
 
     const main = document.getElementById('mainContent');
     if (reason === 'no-session') {
@@ -486,10 +471,10 @@ function showAccessDenied(reason) {
             <div class="access-denied">
                 <div class="icon">🔐</div>
                 <h2>Please sign in first</h2>
-                <p>You need to log in through the Staff Portal to access this tracker.</p>
+                <p>You need to log in through the FMS portal to access this tracker.</p>
                 <br>
-                <a href="fms.html" style="background:var(--dark);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;">
-                    Go to FMS Portal
+                <a href="index.html" style="background:var(--dark);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;">
+                    Go to Portal
                 </a>
             </div>`;
     } else {
@@ -500,8 +485,8 @@ function showAccessDenied(reason) {
                 <p>The Project Tracker is only available to authorised staff.</p>
                 <p style="margin-top:8px;">Please contact the Executive Director if you need access.</p>
                 <br>
-                <a href="fms.html" style="background:var(--dark);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;">
-                    ← Back to FMS
+                <a href="index.html" style="background:var(--dark);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;">
+                    ← Back to Portal
                 </a>
             </div>`;
     }
@@ -510,27 +495,27 @@ function showAccessDenied(reason) {
 // ═══════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════
-const fmtUSD = n => n != null ? '$' + Number(n).toLocaleString('en-NG', {minimumFractionDigits:2,maximumFractionDigits:2}) : '–';
-const fmtNGN = n => n != null ? '₦' + Number(n).toLocaleString('en-NG', {minimumFractionDigits:2,maximumFractionDigits:2}) : '–';
-const pct    = n => (n != null ? (n*100).toFixed(0) + '%' : '–');
-const sym    = c => c === 'EUR' ? '€' : c === 'NGN' ? '₦' : '$';
-const esc    = s => (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const fmtUSD = n => n != null ? '$' + Number(n).toLocaleString('en-NG', {minimumFractionDigits:2, maximumFractionDigits:2}) : '–';
+const fmtNGN = n => n != null ? '₦' + Number(n).toLocaleString('en-NG', {minimumFractionDigits:2, maximumFractionDigits:2}) : '–';
+const pct    = n => (n != null ? (n * 100).toFixed(0) + '%' : '–');
+const symOf  = c => c === 'EUR' ? '€' : c === 'NGN' ? '₦' : '$';
+const esc    = s => (s || '').toString().replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 const STATUS_META = {
-    'Awarded':           { bg:'#D4EDDA', fg:'#155724' },
-    'Active':            { bg:'#D4EDDA', fg:'#1E4D2B' },
-    'Awaiting Outcome':  { bg:'#FFF3CD', fg:'#856404' },
-    'Not Awarded':       { bg:'#F8D7DA', fg:'#721C24' },
-    'Not Submitted':     { bg:'#E8F4F8', fg:'#0C5460' },
-    'Submitted':         { bg:'#E8F0FE', fg:'#1a3c8f' },
-    'Closed':            { bg:'#E2E3E5', fg:'#383D41' },
-    'On Hold':           { bg:'#E2E3E5', fg:'#555555' },
-    'Overdue / Pending': { bg:'#FFF3CD', fg:'#856404' },
-    'Overdue / CRITICAL':{ bg:'#F8D7DA', fg:'#8B1A1A' },
+    'Awarded':            { bg: '#D4EDDA', fg: '#155724' },
+    'Active':             { bg: '#D4EDDA', fg: '#1E4D2B' },
+    'Awaiting Outcome':   { bg: '#FFF3CD', fg: '#856404' },
+    'Not Awarded':        { bg: '#F8D7DA', fg: '#721C24' },
+    'Not Submitted':      { bg: '#E8F4F8', fg: '#0C5460' },
+    'Submitted':          { bg: '#E8F0FE', fg: '#1a3c8f' },
+    'Closed':             { bg: '#E2E3E5', fg: '#383D41' },
+    'On Hold':            { bg: '#E2E3E5', fg: '#555555' },
+    'Overdue / Pending':  { bg: '#FFF3CD', fg: '#856404' },
+    'Overdue / CRITICAL': { bg: '#F8D7DA', fg: '#8B1A1A' },
 };
 
 function badge(status) {
-    const m = STATUS_META[status] || { bg:'#eee', fg:'#333' };
+    const m = STATUS_META[status] || { bg: '#eee', fg: '#333' };
     return `<span class="badge" style="background:${m.bg};color:${m.fg}">${esc(status)}</span>`;
 }
 
@@ -545,7 +530,7 @@ function addBtn(label, onclick) {
 }
 
 // ═══════════════════════════════════════════════════════
-// DASHBOARD
+// DASHBOARD  ← FIX: removed \` syntax error, fixed ] typo
 // ═══════════════════════════════════════════════════════
 function renderDashboard(el) {
     const p25 = STATE.data.pipeline2025;
@@ -554,43 +539,48 @@ function renderDashboard(el) {
     const p26 = STATE.data.pipeline2026;
     const rcv = STATE.data.receivables;
 
-    const p25Total    = p25.reduce((s,p) => s + (p.amount||0), 0);
-    const p25Weighted = p25.reduce((s,p) => s + (p.amount||0) * (p.prob||0), 0);
-    const p25Awarded  = p25.filter(p=>p.status==='Awarded').reduce((s,p) => s + (p.amount||0), 0);
-    const b25Total    = b25.reduce((s,b) => s + (b.ngn||0), 0);
-    const ag26Usd     = ag.reduce((s,g) => s + (g.total_usd||0), 0);
-    const ag26Ngn     = ag.reduce((s,g) => s + (g.total_ngn||0), 0);
-    const p26Weighted = p26.reduce((s,p) => s + (p.amount||0) * (p.prob||0), 0);
-    const outUsd      = rcv.reduce((s,r) => s + (r.amount_usd||0), 0);
-    const outNgn      = rcv.reduce((s,r) => s + (r.amount_ngn||0), 0);
+    const p25Total    = p25.reduce((s, p) => s + (p.amount  || 0), 0);
+    const p25Weighted = p25.reduce((s, p) => s + (p.amount  || 0) * (p.prob || 0), 0);
+    const p25Awarded  = p25.filter(p => p.status === 'Awarded').reduce((s, p) => s + (p.amount || 0), 0);
+    const b25Total    = b25.reduce((s, b) => s + (b.ngn     || 0), 0);
+    const ag26Usd     = ag.reduce((s, g)  => s + (g.total_usd || 0), 0);
+    const ag26Ngn     = ag.reduce((s, g)  => s + (g.total_ngn || 0), 0);
+    const p26Weighted = p26.reduce((s, p) => s + (p.amount  || 0) * (p.prob || 0), 0);
+    const outUsd      = rcv.reduce((s, r) => s + (r.amount_usd || 0), 0);
+    const outNgn      = rcv.reduce((s, r) => s + (r.amount_ngn || 0), 0);
     const hasCritical = rcv.some(r => r.priority === 'CRITICAL');
 
     const statusChips = (arr) => {
         const counts = {};
-        arr.forEach(p => { counts[p.status] = (counts[p.status]||0) + 1; });
-        return Object.entries(counts).map(([st,n]) => {
-            const m = STATUS_META[st] || { bg:'#eee', fg:'#333' };
+        arr.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
+        return Object.entries(counts).map(([st, n]) => {
+            const m = STATUS_META[st] || { bg: '#eee', fg: '#333' };
             return `<span class="chip" style="background:${m.bg};color:${m.fg}">${st}: ${n}</span>`;
         }).join('');
     };
 
-    el.innerHTML = `
-        ${hasCritical ? `
+    // ── FIX: no escaped backtick; plain string concatenation for safety ──
+    let html = '';
+
+    if (hasCritical) {
+        html += `
         <div class="alert-banner critical">
             <span style="font-size:20px">⚠️</span>
             <div>
                 <div>CRITICAL: Outstanding Receivables Require Immediate Action</div>
                 <div style="font-weight:400;margin-top:2px">MdM last tranche ₦4,142,372.74 overdue · $3,000 GOA tranche pending · See Receivables tab</div>
             </div>
-        </div>` : ''}
+        </div>`;
+    }
 
+    html += `
         <div class="section-title">2025 Overview</div>
         <div class="metrics-grid">
             <div class="metric-card green"><div class="label">Pipeline Projects</div><div class="value">${p25.length}</div></div>
             <div class="metric-card mid"><div class="label">Total Pipeline (USD)</div><div class="value">${fmtUSD(p25Total)}</div></div>
             <div class="metric-card mid"><div class="label">Weighted Value</div><div class="value">${fmtUSD(Math.round(p25Weighted))}</div></div>
             <div class="metric-card green"><div class="label">Awarded (${p25.filter(p=>p.status==='Awarded').length} grants)</div><div class="value">${fmtUSD(Math.round(p25Awarded))}</div></div>
-            <div class="metric-card green"><div class="label">Active Budget (NGN)</div><div class="value">₦${Math.round(b25Total/1000000)}M</div></div>
+            <div class="metric-card green"><div class="label">Active Budget (NGN)</div><div class="value">₦${Math.round(b25Total / 1000000)}M</div></div>
         </div>
         <div style="margin-bottom:20px">${statusChips(p25)}</div>
 
@@ -600,420 +590,41 @@ function renderDashboard(el) {
         <div class="metrics-grid">
             <div class="metric-card green"><div class="label">Active Grants</div><div class="value">${ag.length}</div></div>
             <div class="metric-card mid"><div class="label">Active Budget (USD)</div><div class="value">${fmtUSD(ag26Usd)}</div></div>
-            <div class="metric-card mid"><div class="label">Active Budget (NGN)</div><div class="value">₦${Math.round(ag26Ngn/1000000)}M</div></div>
+            <div class="metric-card mid"><div class="label">Active Budget (NGN)</div><div class="value">₦${Math.round(ag26Ngn / 1000000)}M</div></div>
             <div class="metric-card red"><div class="label">⚠ Overdue (USD)</div><div class="value">${fmtUSD(outUsd)}</div></div>
             <div class="metric-card red"><div class="label">⚠ Overdue (NGN)</div><div class="value">${fmtNGN(outNgn)}</div></div>
         </div>
         <div style="margin-bottom:12px">${statusChips(p26)}</div>
-        <div style="background:#f0faf4;border-radius:8px;padding:12px 16px;font-size:13px">
+        <div style="background:#f0faf4;border-radius:8px;padding:12px 16px;font-size:13px;margin-bottom:28px">
             <strong style="color:var(--dark)">2026 Pipeline Weighted Total:</strong> ~${fmtUSD(Math.round(p26Weighted))}
         </div>
 
-        <div style="margin-top:28px;padding-top:24px;border-top:1px solid #e0e0e0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div style="padding:20px 24px;background:white;border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
             <div>
-                <div style="font-weight:700;font-size:14px;color:var(--dark)">\u{1F4E5} Export Full Tracker Report</div>
+                <div style="font-weight:700;font-size:14px;color:var(--dark)">⬇ Export Full Tracker Report</div>
                 <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Downloads a colour-coded Excel workbook with all 7 sections</div>
             </div>
             <button onclick="exportToExcel()" style="background:linear-gradient(135deg,#1E4D2B,#2E7D47);color:white;border:none;border-radius:8px;padding:12px 24px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
-                \u2B07 Download Excel Report
+                Download Excel Report
             </button>
-        </div>
-    \`;
-}
+        </div>`;
 
-
-// ═══════════════════════════════════════════════════════
-// EXPORT TO EXCEL
-// ═══════════════════════════════════════════════════════
-function exportToExcel() {
-    const d = STATE.data;
-    const wb = XLSX.utils.book_new();
-
-    // ── BRAND COLOURS ──
-    const C = {
-        greenDark:  '1E4D2B',
-        greenMid:   '2E7D47',
-        greenLight: 'D4EDDA',
-        greenAccent:'A8D5B5',
-        redDark:    '8B1A1A',
-        redLight:   'F8D7DA',
-        goldLight:  'FFF3CD',
-        goldDark:   '856404',
-        grey:       'E2E3E5',
-        white:      'FFFFFF',
-        black:      '1A1A1A',
-        blue:       'E8F0FE',
-    };
-
-    // ── STYLE FACTORIES ──
-    const titleStyle = (bg, color='FFFFFF', sz=13) => ({
-        font: { bold:true, sz, color:{rgb:color}, name:'Arial' },
-        fill: { fgColor:{rgb:bg}, patternType:'solid' },
-        alignment: { horizontal:'center', vertical:'center', wrapText:true },
-    });
-    const subTitleStyle = () => ({
-        font: { italic:true, sz:9, color:{rgb:C.greenAccent}, name:'Arial' },
-        fill: { fgColor:{rgb:C.greenDark}, patternType:'solid' },
-        alignment: { horizontal:'center', vertical:'center' },
-    });
-    const metaStyle = () => ({
-        font: { sz:9, color:{rgb:C.white}, name:'Arial' },
-        fill: { fgColor:{rgb:C.greenMid}, patternType:'solid' },
-        alignment: { horizontal:'center', vertical:'center' },
-    });
-    const sectionStyle = () => ({
-        font: { bold:true, sz:9, color:{rgb:C.white}, name:'Arial' },
-        fill: { fgColor:{rgb:C.greenDark}, patternType:'solid' },
-        alignment: { vertical:'center' },
-    });
-    const headerStyle = (bg=null) => ({
-        font: { bold:true, sz:9, color:{rgb:C.white}, name:'Arial' },
-        fill: { fgColor:{rgb: bg||C.greenMid}, patternType:'solid' },
-        alignment: { horizontal:'center', vertical:'center', wrapText:true },
-        border: { bottom:{style:'medium', color:{rgb:C.greenDark}} },
-    });
-    const dataStyle = (bg=null, bold=false, color=null, align='left') => ({
-        font: { sz:9, bold, name:'Arial', color:{rgb: color||C.black} },
-        fill: bg ? { fgColor:{rgb:bg}, patternType:'solid' } : { patternType:'none' },
-        alignment: { vertical:'center', wrapText:true, horizontal:align },
-        border: { bottom:{style:'hair', color:{rgb:'DDDDDD'}}, right:{style:'hair', color:{rgb:'EEEEEE'}} },
-    });
-    const totalStyle = () => ({
-        font: { bold:true, sz:9, color:{rgb:C.white}, name:'Arial' },
-        fill: { fgColor:{rgb:C.greenDark}, patternType:'solid' },
-        alignment: { horizontal:'right', vertical:'center' },
-        border: { top:{style:'medium', color:{rgb:C.greenMid}} },
-    });
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-NG', {day:'2-digit', month:'long', year:'numeric'});
-    const NCOLS = 12; // max columns used across sheets
-
-    // ── HEADER BLOCK builder (rows 0–4, returns next free row index = 5) ──
-    const addHeader = (ws, sheetTitle, cols) => {
-        const merge = (r1,c1,r2,c2) => ({ s:{r:r1,c:c1}, e:{r:r2,c:c2} });
-        const merges = [
-            merge(0,0,0,cols-1),
-            merge(1,0,1,cols-1),
-            merge(2,0,2,cols-1),
-            merge(3,0,3,cols-1),
-            merge(4,0,4,cols-1),
-        ];
-        ws['!merges'] = (ws['!merges']||[]).concat(merges);
-
-        const set = (addr, val, style) => {
-            ws[addr] = { v:val, t:'s', s:style };
-        };
-
-        set('A1', 'RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE', titleStyle(C.greenDark,'FFFFFF',14));
-        set('A2', 'Empowering Girls  ·  Protecting Women  ·  Transforming Communities', subTitleStyle());
-        set('A3', sheetTitle, titleStyle(C.greenMid,'FFFFFF',11));
-        set('A4', 'Generated: ' + dateStr + '     |     CONFIDENTIAL — For Internal Use Only', metaStyle());
-        set('A5', '', { fill:{fgColor:{rgb:C.greenAccent}, patternType:'solid'} });
-
-        ws['!rows'] = ws['!rows'] || [];
-        ws['!rows'][0] = { hpt: 26 };
-        ws['!rows'][1] = { hpt: 16 };
-        ws['!rows'][2] = { hpt: 20 };
-        ws['!rows'][3] = { hpt: 14 };
-        ws['!rows'][4] = { hpt: 6  };
-
-        return 5; // next row
-    };
-
-    // ── Apply column headers + data with styles ──
-    const buildSheet = (rows2d, headers, colWidths, rowStyles, headerBg=null) => {
-        const ws = {};
-        const range = { s:{r:0,c:0}, e:{r:0,c:0} };
-
-        // Write data
-        rows2d.forEach((row, R) => {
-            row.forEach((val, C2) => {
-                const addr = XLSX.utils.encode_cell({r:R, c:C2});
-                const isNum = typeof val === 'number';
-                ws[addr] = { v: val==null?'':val, t: isNum?'n':'s' };
-                range.e.r = Math.max(range.e.r, R);
-                range.e.c = Math.max(range.e.c, C2);
-            });
-        });
-        ws['!ref'] = XLSX.utils.encode_range(range);
-        ws['!cols'] = colWidths.map(w=>({wch:w}));
-        ws['!rows'] = ws['!rows']||[];
-
-        // Style header row (row index = headerRowIdx, passed as first row in rows2d)
-        headers.forEach((_,c) => {
-            const cell = ws[XLSX.utils.encode_cell({r:0,c})];
-            if (cell) cell.s = headerStyle(headerBg);
-        });
-        ws['!rows'][0] = { hpt: 22 };
-
-        // Style data rows
-        rowStyles.forEach((rs, idx) => {
-            const R = idx + 1;
-            headers.forEach((_,c) => {
-                const cell = ws[XLSX.utils.encode_cell({r:R,c})];
-                if (!cell) return;
-                if (rs === 'total') {
-                    cell.s = totalStyle();
-                } else if (rs === 'section') {
-                    cell.s = sectionStyle();
-                } else {
-                    const bg    = rs.bg    || null;
-                    const bold  = rs.bold  || false;
-                    const color = rs.color || null;
-                    const align = rs.align || 'left';
-                    cell.s = dataStyle(bg, bold, color, align);
-                }
-            });
-            if (rs !== 'total' && rs !== 'section') {
-                ws['!rows'][R] = { hpt: 18 };
-            }
-        });
-
-        return ws;
-    };
-
-    // ── SHEET 1: SUMMARY ──────────────────────────────────────
-    const p25Total    = d.pipeline2025.reduce((s,p)=>s+(p.amount||0),0);
-    const p25Weighted = d.pipeline2025.reduce((s,p)=>s+(p.amount||0)*(p.prob||0),0);
-    const p25Awarded  = d.pipeline2025.filter(p=>p.status==='Awarded').reduce((s,p)=>s+(p.amount||0),0);
-    const b25Total    = d.budgets2025.reduce((s,b)=>s+(b.ngn||0),0);
-    const ag26Usd     = d.activeGrants2026.reduce((s,g)=>s+(g.total_usd||0),0);
-    const ag26Ngn     = d.activeGrants2026.reduce((s,g)=>s+(g.total_ngn||0),0);
-    const p26Total    = d.pipeline2026.reduce((s,p)=>s+(p.amount||0),0);
-    const p26Weighted = d.pipeline2026.reduce((s,p)=>s+(p.amount||0)*(p.prob||0),0);
-    const outUsd      = d.receivables.reduce((s,r)=>s+(r.amount_usd||0),0);
-    const outNgn      = d.receivables.reduce((s,r)=>s+(r.amount_ngn||0),0);
-
-    const sumHeaders = ['METRIC', 'VALUE', 'NOTES'];
-    const sumData = [
-        ['2025 OVERVIEW', '', ''],
-        ['Total Pipeline Projects',           d.pipeline2025.length,                              ''],
-        ['Total Pipeline Value',              '$'+Math.round(p25Total).toLocaleString(),           'USD'],
-        ['Weighted Pipeline Value',           '$'+Math.round(p25Weighted).toLocaleString(),        'Probability-adjusted (USD)'],
-        ['Awarded Grants',                    '$'+Math.round(p25Awarded).toLocaleString(),         d.pipeline2025.filter(p=>p.status==='Awarded').length+' grants awarded (USD)'],
-        ['Active Budget 2025',                '₦'+b25Total.toLocaleString(),                      'NGN'],
-        ['2026 OVERVIEW', '', ''],
-        ['Active Grants',                     d.activeGrants2026.length,                          'Currently running'],
-        ['Active Budget (USD)',               '$'+ag26Usd.toLocaleString(),                       'USD'],
-        ['Active Budget (NGN)',               '₦'+ag26Ngn.toLocaleString(),                      'NGN'],
-        ['2026 Pipeline Projects',            d.pipeline2026.length,                              ''],
-        ['2026 Pipeline Weighted Value',      '$'+Math.round(p26Weighted).toLocaleString(),       'Probability-adjusted (USD)'],
-        ['RECEIVABLES', '', ''],
-        ['Outstanding Receivables (USD)',     '$'+outUsd.toLocaleString(),                         outUsd>0?'⚠ ACTION REQUIRED':'Clear'],
-        ['Outstanding Receivables (NGN)',     '₦'+outNgn.toLocaleString(),                        outNgn>0?'⚠ CRITICAL':'Clear'],
-        ['Critical Receivable Items',         d.receivables.filter(r=>r.priority==='CRITICAL').length, ''],
-        ['OTHER', '', ''],
-        ['Unsuccessful Applications Logged',  d.unsuccessful.length,                              ''],
-    ];
-    const sumStyles = [
-        'section',
-        {},{},{},{},{},
-        'section',
-        {},{},{},{},{},
-        'section',
-        {bg:C.redLight,bold:true,color:C.redDark},
-        {bg:C.redLight,bold:true,color:C.redDark},
-        {bg:C.redLight,bold:true,color:C.redDark},
-        'section',
-        {},
-    ];
-
-    const wsSummary = XLSX.utils.aoa_to_sheet([]);
-    wsSummary['!ref'] = 'A1:C1';
-    const sumStartRow = addHeader(wsSummary, '2025 – 2026 Project Tracker  |  Summary Dashboard', 3);
-
-    // Write summary table below header
-    [sumHeaders, ...sumData].forEach((row, ri) => {
-        row.forEach((val, ci) => {
-            const addr = XLSX.utils.encode_cell({r: sumStartRow + ri, c: ci});
-            wsSummary[addr] = { v: val==null?'':val, t: typeof val==='number'?'n':'s' };
-        });
-    });
-    // Extend ref
-    const sumEndRow = sumStartRow + sumData.length;
-    wsSummary['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:sumEndRow,c:2}});
-    wsSummary['!cols'] = [{wch:38},{wch:26},{wch:34}];
-    wsSummary['!rows'] = wsSummary['!rows']||[];
-
-    // Style summary header row
-    ['A','B','C'].forEach(col => {
-        const addr = col+(sumStartRow+1);
-        if (wsSummary[addr]) wsSummary[addr].s = headerStyle();
-    });
-    wsSummary['!rows'][sumStartRow] = {hpt:20};
-
-    // Style summary data rows
-    sumStyles.forEach((rs, idx) => {
-        const excelRow = sumStartRow + 1 + idx;
-        ['A','B','C'].forEach(col => {
-            const addr = col+(excelRow+1);
-            if (!wsSummary[addr]) return;
-            if (rs==='section') {
-                wsSummary[addr].s = sectionStyle();
-                wsSummary['!rows'][excelRow] = {hpt:16};
-            } else {
-                wsSummary[addr].s = dataStyle(rs.bg||null, rs.bold||false, rs.color||null);
-                wsSummary['!rows'][excelRow] = {hpt:18};
-            }
-        });
-    });
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-    // ── HELPER: full sheet with header block ──
-    const makeSheet = (sheetTitle, headers, dataRows, colWidths, rowStyles, headerBg=null) => {
-        const wsTemp = buildSheet([headers,...dataRows], headers, colWidths, rowStyles, headerBg);
-        // We need to shift all existing data down by 5 rows to make room for header block
-        const existingRef = XLSX.utils.decode_range(wsTemp['!ref']);
-        const totalDataRows = existingRef.e.r;
-        const totalCols     = existingRef.e.c;
-        const OFFSET = 6; // 5 header rows + 1 spacer
-
-        // Collect all cells, shift down
-        const shiftedCells = {};
-        for (let R = totalDataRows; R >= 0; R--) {
-            for (let C2 = 0; C2 <= totalCols; C2++) {
-                const oldAddr = XLSX.utils.encode_cell({r:R, c:C2});
-                const newAddr = XLSX.utils.encode_cell({r:R+OFFSET, c:C2});
-                if (wsTemp[oldAddr]) shiftedCells[newAddr] = wsTemp[oldAddr];
-            }
-        }
-        // Clear old cells and write shifted
-        Object.keys(wsTemp).forEach(k => { if (!k.startsWith('!')) delete wsTemp[k]; });
-        Object.assign(wsTemp, shiftedCells);
-
-        // Shift row heights
-        const oldRows = wsTemp['!rows']||[];
-        const newRows = new Array(OFFSET).fill({hpt:16});
-        oldRows.forEach((r,i) => { newRows[i+OFFSET] = r; });
-        wsTemp['!rows'] = newRows;
-
-        wsTemp['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:totalDataRows+OFFSET, c:totalCols}});
-
-        addHeader(wsTemp, sheetTitle, Math.min(headers.length, NCOLS));
-        return wsTemp;
-    };
-
-    // ── SHEET 2: 2025 PIPELINE ────────────────────────────────
-    const p25H = ['#','Project Title','Funder','Thematic Area','Geography','Amount','Currency','Probability','Weighted Value','Deadline','Status','Notes'];
-    const p25R = d.pipeline2025.map((p,i) => [
-        p.sn||i+1, p.project||'', p.funder||'', p.thematic||'', p.geo||'',
-        p.amount||0, p.currency||'USD',
-        ((p.prob||0)*100).toFixed(0)+'%',
-        Math.round((p.amount||0)*(p.prob||0)),
-        p.deadline||'', p.status||'', p.note||''
-    ]);
-    p25R.push(['','','','','TOTAL', p25Total,'','', Math.round(p25Weighted),'','','']);
-    const p25S = d.pipeline2025.map(p =>
-        p.status==='Awarded'          ? {bg:C.greenLight} :
-        p.status==='Not Awarded'      ? {bg:C.redLight}   :
-        p.status==='Awaiting Outcome' ? {bg:C.goldLight}  : {}
-    );
-    p25S.push('total');
-    const ws25 = makeSheet('2025 Grant Pipeline Tracker', p25H, p25R,
-        [4,44,28,22,18,12,10,12,14,14,18,34], p25S);
-    XLSX.utils.book_append_sheet(wb, ws25, '2025 Pipeline');
-
-    // ── SHEET 3: 2025 BUDGETS ─────────────────────────────────
-    const b25H = ['Grant / Project','Funder','Period','Budget (NGN)','% of Portfolio','Status into 2026'];
-    const b25R = d.budgets2025.map(b => [
-        b.name||'', b.funder||'', b.period||'', b.ngn||0,
-        b25Total>0 ? ((b.ngn/b25Total)*100).toFixed(1)+'%' : '–',
-        b.status||''
-    ]);
-    b25R.push(['GRAND TOTAL','','', b25Total,'','']);
-    const b25S = d.budgets2025.map(b =>
-        b.status==='Closed' ? {bg:C.grey} : {bg:C.greenLight}
-    );
-    b25S.push('total');
-    const wsB25 = makeSheet('2025 Active Grant Budgets', b25H, b25R,
-        [36,32,14,18,16,22], b25S);
-    XLSX.utils.book_append_sheet(wb, wsB25, '2025 Budgets');
-
-    // ── SHEET 4: 2026 ACTIVE GRANTS ──────────────────────────
-    const agH = ['Grant Name','Funder','Thematic Area','Geography','Period','Total (USD)','Total (NGN)','Received (USD)','Outstanding (USD)','Outstanding (NGN)','Status','Notes'];
-    const agR = d.activeGrants2026.map(g => [
-        g.name||'', g.funder||'', g.thematic||'', g.geo||'', g.period||'',
-        g.total_usd||'', g.total_ngn||'', g.received_usd||'',
-        g.outstanding_usd||'', g.outstanding_ngn||'',
-        g.status||'', g.note||''
-    ]);
-    const agS = d.activeGrants2026.map(g =>
-        (g.outstanding_usd||g.outstanding_ngn)
-            ? {bg:C.redLight, color:C.redDark, bold:true}
-            : {bg:C.greenLight}
-    );
-    const wsAg = makeSheet('2026 Active Grants', agH, agR,
-        [36,30,24,20,16,14,16,14,16,16,14,38], agS);
-    XLSX.utils.book_append_sheet(wb, wsAg, '2026 Active Grants');
-
-    // ── SHEET 5: 2026 PIPELINE ────────────────────────────────
-    const p26H = ['#','Project Title','Funder','Thematic Area','Geography','Amount','Currency','Probability','Weighted Value','Deadline','Status','Notes'];
-    const p26R = d.pipeline2026.map((p,i) => [
-        p.sn||i+1, p.project||'', p.funder||'', p.thematic||'', p.geo||'',
-        p.amount||0, p.currency||'USD',
-        ((p.prob||0)*100).toFixed(0)+'%',
-        Math.round((p.amount||0)*(p.prob||0)),
-        p.deadline||'', p.status||'', p.note||''
-    ]);
-    p26R.push(['','','','','TOTAL', p26Total,'','', Math.round(p26Weighted),'','','']);
-    const p26S = d.pipeline2026.map(p =>
-        p.status==='Awarded'          ? {bg:C.greenLight} :
-        p.status==='Not Awarded'      ? {bg:C.redLight}   :
-        p.status==='Awaiting Outcome' ? {bg:C.goldLight}  : {}
-    );
-    p26S.push('total');
-    const ws26 = makeSheet('2026 Grant Pipeline Tracker', p26H, p26R,
-        [4,44,28,22,18,12,10,12,14,14,18,34], p26S);
-    XLSX.utils.book_append_sheet(wb, ws26, '2026 Pipeline');
-
-    // ── SHEET 6: RECEIVABLES ─────────────────────────────────
-    const rcvH = ['Grant','Funder','Amount (USD)','Amount (NGN)','Due Date','Status','Priority','Action Required','Owner','Target Date'];
-    const rcvR = d.receivables.map(r => [
-        r.grant_name||'', r.funder||'',
-        r.amount_usd||'', r.amount_ngn||'',
-        r.due||'', r.status||'', r.priority||'',
-        r.action||'', r.owner||'', r.target||''
-    ]);
-    const rcvS = d.receivables.map(r =>
-        r.priority==='CRITICAL'
-            ? {bg:C.redLight, color:C.redDark, bold:true}
-            : {bg:C.goldLight, color:C.goldDark}
-    );
-    const wsRcv = makeSheet('Outstanding Receivables — Action Required', rcvH, rcvR,
-        [28,28,14,16,16,18,12,38,18,14], rcvS, C.redDark);
-    XLSX.utils.book_append_sheet(wb, wsRcv, 'Receivables');
-
-    // ── SHEET 7: UNSUCCESSFUL ────────────────────────────────
-    const unH = ['Year','Project Title','Funder','Thematic Area','Geography','Amount (€/yr)','Period','Status','Lessons Learned','Re-submission Strategy'];
-    const unR = d.unsuccessful.map(a => [
-        a.year||'', a.project||'', a.funder||'', a.thematic||'', a.geo||'',
-        a.amount_eur||'', a.years||'', a.status||'',
-        a.lessons||'', a.strategy||''
-    ]);
-    const unS = d.unsuccessful.map(() => ({bg:C.redLight}));
-    const wsUn = makeSheet('Unsuccessful Applications Log', unH, unR,
-        [8,44,28,22,20,14,14,14,40,40], unS);
-    XLSX.utils.book_append_sheet(wb, wsUn, 'Unsuccessful');
-
-    // ── DOWNLOAD ─────────────────────────────────────────────
-    const fileName = 'RAHAMA_Project_Tracker_' + now.toISOString().slice(0,10) + '.xlsx';
-    XLSX.writeFile(wb, fileName, {bookSST:false, cellStyles:true});
+    el.innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════
-// PIPELINE TABLE (2025 + 2026)
+// PIPELINE TABLE
 // ═══════════════════════════════════════════════════════
 function renderPipeline(el, tableKey, title) {
-    const data = STATE.data[tableKey];
-    const total    = data.reduce((s,p) => s+(p.amount||0), 0);
-    const weighted = data.reduce((s,p) => s+(p.amount||0)*(p.prob||0), 0);
+    const data     = STATE.data[tableKey];
+    const total    = data.reduce((s, p) => s + (p.amount || 0), 0);
+    const weighted = data.reduce((s, p) => s + (p.amount || 0) * (p.prob || 0), 0);
 
     el.innerHTML = `
         <div class="page-header">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div><h2>${title}</h2><p>${data.length} projects</p></div>
-                ${addBtn('+ Add Project', `openPipelineModal('${tableKey}', null)`)}
+                ${addBtn('+ Add Project', "openPipelineModal('" + tableKey + "', null)")}
             </div>
         </div>
         <div class="table-wrap">
@@ -1025,23 +636,23 @@ function renderPipeline(el, tableKey, title) {
                     ${STATE.canEdit ? '<th></th>' : ''}
                 </tr></thead>
                 <tbody>
-                    ${data.map((p,i) => {
-                        const s = sym(p.currency);
+                    ${data.map((p, i) => {
+                        const s = symOf(p.currency);
                         return `<tr>
-                            <td><strong style="color:var(--dark)">${p.sn||i+1}</strong></td>
+                            <td><strong style="color:var(--dark)">${p.sn || i + 1}</strong></td>
                             <td class="td-project">${esc(p.project)}</td>
                             <td style="white-space:nowrap;font-size:11px">${esc(p.thematic)}</td>
                             <td style="white-space:nowrap">${esc(p.geo)}</td>
                             <td>${esc(p.funder)}</td>
-                            <td style="white-space:nowrap;font-weight:600">${s}${Number(p.amount||0).toLocaleString()}</td>
+                            <td style="white-space:nowrap;font-weight:600">${s}${Number(p.amount || 0).toLocaleString()}</td>
                             <td style="text-align:center">${pct(p.prob)}</td>
-                            <td style="white-space:nowrap;font-weight:700">${s}${Math.round((p.amount||0)*(p.prob||0)).toLocaleString()}</td>
+                            <td style="white-space:nowrap;font-weight:700">${s}${Math.round((p.amount || 0) * (p.prob || 0)).toLocaleString()}</td>
                             <td style="white-space:nowrap">${esc(p.deadline)}</td>
                             <td>${badge(p.status)}</td>
                             <td class="td-note">${esc(p.note)}</td>
                             ${STATE.canEdit ? `<td style="white-space:nowrap">
-                                ${editBtn(`openPipelineModal('${tableKey}', ${p.id})`)}
-                                ${delBtn(`deleteRow('${tableKey}', ${p.id})`)}
+                                ${editBtn("openPipelineModal('" + tableKey + "', " + p.id + ")")}
+                                ${delBtn("deleteRow('" + tableKey + "', " + p.id + ")")}
                             </td>` : ''}
                         </tr>`;
                     }).join('')}
@@ -1062,13 +673,13 @@ function renderPipeline(el, tableKey, title) {
 // ═══════════════════════════════════════════════════════
 function renderBudgets(el) {
     const data  = STATE.data.budgets2025;
-    const total = data.reduce((s,b) => s+(b.ngn||0), 0);
+    const total = data.reduce((s, b) => s + (b.ngn || 0), 0);
 
     el.innerHTML = `
         <div class="page-header">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div><h2>2025 Active Grant Budgets</h2><p>${data.length} grants</p></div>
-                ${addBtn('+ Add Budget', "openBudgetModal(null)")}
+                ${addBtn('+ Add Budget', 'openBudgetModal(null)')}
             </div>
         </div>
         <div class="table-wrap">
@@ -1084,11 +695,11 @@ function renderBudgets(el) {
                         <td>${esc(b.funder)}</td>
                         <td style="white-space:nowrap">${esc(b.period)}</td>
                         <td style="font-weight:700;white-space:nowrap">${fmtNGN(b.ngn)}</td>
-                        <td style="text-align:center">${total > 0 ? ((b.ngn/total)*100).toFixed(1)+'%' : '–'}</td>
+                        <td style="text-align:center">${total > 0 ? ((b.ngn / total) * 100).toFixed(1) + '%' : '–'}</td>
                         <td>${badge(b.status)}</td>
                         ${STATE.canEdit ? `<td style="white-space:nowrap">
-                            ${editBtn(`openBudgetModal(${b.id})`)}
-                            ${delBtn(`deleteRow('budgets2025', ${b.id})`)}
+                            ${editBtn('openBudgetModal(' + b.id + ')')}
+                            ${delBtn("deleteRow('budgets2025', " + b.id + ')')}
                         </td>` : ''}
                     </tr>`).join('')}
                 </tbody>
@@ -1111,7 +722,7 @@ function renderActiveGrants(el) {
         <div class="page-header">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div><h2>2026 Active Grants</h2><p>${data.length} grants</p></div>
-                ${addBtn('+ Add Active Grant', "openActiveGrantModal(null)")}
+                ${addBtn('+ Add Active Grant', 'openActiveGrantModal(null)')}
             </div>
         </div>
         <div class="table-wrap">
@@ -1129,16 +740,16 @@ function renderActiveGrants(el) {
                         <td>${esc(g.funder)}</td>
                         <td style="font-size:11px">${esc(g.thematic)}</td>
                         <td style="white-space:nowrap">${esc(g.period)}</td>
-                        <td style="white-space:nowrap">${g.total_usd ? fmtUSD(g.total_usd) : '–'}</td>
-                        <td style="white-space:nowrap">${g.total_ngn ? fmtNGN(g.total_ngn) : '–'}</td>
+                        <td style="white-space:nowrap">${g.total_usd    ? fmtUSD(g.total_usd)    : '–'}</td>
+                        <td style="white-space:nowrap">${g.total_ngn    ? fmtNGN(g.total_ngn)    : '–'}</td>
                         <td style="white-space:nowrap">${g.received_usd ? fmtUSD(g.received_usd) : '–'}</td>
                         <td class="${g.outstanding_usd ? 'td-warn' : ''}" style="white-space:nowrap">${g.outstanding_usd ? fmtUSD(g.outstanding_usd) : '–'}</td>
                         <td class="${g.outstanding_ngn ? 'td-warn' : ''}" style="white-space:nowrap">${g.outstanding_ngn ? fmtNGN(g.outstanding_ngn) : '–'}</td>
                         <td>${badge(g.status)}</td>
-                        <td class="td-note" style="${g.outstanding_usd||g.outstanding_ngn ? 'color:#721C24' : ''}">${esc(g.note)}</td>
+                        <td class="td-note" style="${g.outstanding_usd || g.outstanding_ngn ? 'color:#721C24' : ''}">${esc(g.note)}</td>
                         ${STATE.canEdit ? `<td style="white-space:nowrap">
-                            ${editBtn(`openActiveGrantModal(${g.id})`)}
-                            ${delBtn(`deleteRow('active_grants_2026', ${g.id})`)}
+                            ${editBtn('openActiveGrantModal(' + g.id + ')')}
+                            ${delBtn("deleteRow('active_grants_2026', " + g.id + ')')}
                         </td>` : ''}
                     </tr>`).join('')}
                 </tbody>
@@ -1151,14 +762,14 @@ function renderActiveGrants(el) {
 // ═══════════════════════════════════════════════════════
 function renderReceivables(el) {
     const data   = STATE.data.receivables;
-    const totUsd = data.reduce((s,r) => s+(r.amount_usd||0), 0);
-    const totNgn = data.reduce((s,r) => s+(r.amount_ngn||0), 0);
+    const totUsd = data.reduce((s, r) => s + (r.amount_usd || 0), 0);
+    const totNgn = data.reduce((s, r) => s + (r.amount_ngn || 0), 0);
 
     el.innerHTML = `
         <div class="page-header">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div><h2 style="color:#8B1A1A">⚠ Outstanding Receivables</h2><p>${data.length} items</p></div>
-                ${addBtn('+ Add Receivable', "openReceivableModal(null)")}
+                ${addBtn('+ Add Receivable', 'openReceivableModal(null)')}
             </div>
         </div>
         <div class="table-wrap">
@@ -1185,8 +796,8 @@ function renderReceivables(el) {
                             <td style="white-space:nowrap">${esc(r.owner)}</td>
                             <td style="white-space:nowrap;font-weight:600">${esc(r.target)}</td>
                             ${STATE.canEdit ? `<td style="white-space:nowrap">
-                                ${editBtn(`openReceivableModal(${r.id})`)}
-                                ${delBtn(`deleteRow('receivables', ${r.id})`)}
+                                ${editBtn('openReceivableModal(' + r.id + ')')}
+                                ${delBtn("deleteRow('receivables', " + r.id + ')')}
                             </td>` : ''}
                         </tr>`;
                     }).join('')}
@@ -1194,7 +805,7 @@ function renderReceivables(el) {
             </table>
         </div>
         ${data.length > 0 ? `
-        <div style="background:var(--dark);border-radius:8px;padding:12px 20px;display:flex;gap:32px">
+        <div style="background:var(--dark);border-radius:8px;padding:12px 20px;display:flex;gap:32px;flex-wrap:wrap">
             <span style="color:white;font-size:13px;font-weight:700">Total Outstanding USD: ${fmtUSD(totUsd)}</span>
             <span style="color:white;font-size:13px;font-weight:700">Total Outstanding NGN: ${fmtNGN(totNgn)}</span>
         </div>` : ''}`;
@@ -1210,7 +821,7 @@ function renderUnsuccessful(el) {
         <div class="page-header">
             <div style="display:flex;justify-content:space-between;align-items:center">
                 <div><h2>Unsuccessful Applications Log</h2><p>${data.length} entries</p></div>
-                ${addBtn('+ Add Entry', "openUnsuccessfulModal(null)")}
+                ${addBtn('+ Add Entry', 'openUnsuccessfulModal(null)')}
             </div>
         </div>
         <div class="table-wrap">
@@ -1228,14 +839,14 @@ function renderUnsuccessful(el) {
                         <td>${esc(a.funder)}</td>
                         <td style="font-size:11px">${esc(a.thematic)}</td>
                         <td style="white-space:nowrap">${esc(a.geo)}</td>
-                        <td style="white-space:nowrap">${a.amount_eur ? '€'+Number(a.amount_eur).toLocaleString() : '–'}</td>
+                        <td style="white-space:nowrap">${a.amount_eur ? '€' + Number(a.amount_eur).toLocaleString() : '–'}</td>
                         <td style="white-space:nowrap">${esc(a.years)}</td>
                         <td>${badge(a.status)}</td>
                         <td class="td-note">${esc(a.lessons)}</td>
                         <td class="td-note">${esc(a.strategy)}</td>
                         ${STATE.canEdit ? `<td style="white-space:nowrap">
-                            ${editBtn(`openUnsuccessfulModal(${a.id})`)}
-                            ${delBtn(`deleteRow('unsuccessful', ${a.id})`)}
+                            ${editBtn('openUnsuccessfulModal(' + a.id + ')')}
+                            ${delBtn("deleteRow('unsuccessful', " + a.id + ')')}
                         </td>` : ''}
                     </tr>`).join('')}
                 </tbody>
@@ -1244,7 +855,7 @@ function renderUnsuccessful(el) {
 }
 
 // ═══════════════════════════════════════════════════════
-// MODAL HELPERS
+// MODAL SYSTEM
 // ═══════════════════════════════════════════════════════
 function openModal(title, bodyHTML) {
     document.getElementById('modalContainer').innerHTML = `
@@ -1262,12 +873,12 @@ function closeModal() { document.getElementById('modalContainer').innerHTML = ''
 function closeModalIfBackdrop(e) { if (e.target.classList.contains('modal-backdrop')) closeModal(); }
 
 // ── Field helpers ──
-const inp = (name, label, val, type='text', extra='') =>
-    `<div class="form-group"><label>${label}</label><input name="${name}" type="${type}" value="${esc(val||'')}" ${extra}></div>`;
+const inp = (name, label, val, type, extra) =>
+    '<div class="form-group"><label>' + label + '</label><input name="' + name + '" type="' + (type||'text') + '" value="' + esc(val||'') + '" ' + (extra||'') + '></div>';
 const sel = (name, label, val, opts) =>
-    `<div class="form-group"><label>${label}</label><select name="${name}">${opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
-const ta  = (name, label, val, extra='') =>
-    `<div class="form-group form-full"><label>${label}</label><textarea name="${name}" ${extra}>${esc(val||'')}</textarea></div>`;
+    '<div class="form-group"><label>' + label + '</label><select name="' + name + '">' + opts.map(o => '<option value="' + o + '"' + (o===val?' selected':'') + '>' + o + '</option>').join('') + '</select></div>';
+const ta  = (name, label, val, extra) =>
+    '<div class="form-group form-full"><label>' + label + '</label><textarea name="' + name + '" ' + (extra||'') + '>' + esc(val||'') + '</textarea></div>';
 
 const PIPELINE_STATUSES = ['Not Submitted','Submitted','Awaiting Outcome','Awarded','Not Awarded','On Hold'];
 const STATUS_OPTIONS    = ['Awarded','Active','Awaiting Outcome','Not Awarded','Not Submitted','Submitted','Closed','On Hold'];
@@ -1277,39 +888,35 @@ const RCVBL_STATUSES    = ['Overdue / Pending','Overdue / CRITICAL','Paid','Part
 // PIPELINE MODAL
 // ═══════════════════════════════════════════════════════
 function openPipelineModal(tableKey, id) {
-    const item = id ? STATE.data[tableKey].find(x => x.id === id) : null;
+    const item  = id ? STATE.data[tableKey].find(x => x.id === id) : null;
     const title = item ? 'Edit Pipeline Entry' : 'Add Pipeline Entry';
-
-    const body = `<form class="form-grid" onsubmit="savePipeline(event,'${tableKey}',${id||'null'})">
-        ${ta('project','Project Title', item?.project, 'required')}
-        ${inp('funder','Funder', item?.funder, 'text', 'required')}
-        ${inp('thematic','Thematic Area', item?.thematic)}
-        ${inp('geo','Geography', item?.geo)}
-        ${inp('amount','Grant Amount', item?.amount, 'number')}
-        ${sel('currency','Currency', item?.currency||'USD', ['USD','EUR','NGN','GBP'])}
-        ${inp('prob','Probability (0–1)', item?.prob, 'number')}
-        ${inp('deadline','Deadline / Quarter', item?.deadline)}
-        ${sel('status','Status', item?.status||'Not Submitted', PIPELINE_STATUSES)}
-        ${ta('note','Notes / Outcome', item?.note)}
-        <div class="form-actions form-full">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-    </form>`;
+    const body  = '<form class="form-grid" onsubmit="savePipeline(event,\'' + tableKey + '\',' + (id||'null') + ')">'
+        + ta('project','Project Title', item && item.project, 'required')
+        + inp('funder','Funder', item && item.funder, 'text', 'required')
+        + inp('thematic','Thematic Area', item && item.thematic)
+        + inp('geo','Geography', item && item.geo)
+        + inp('amount','Grant Amount', item && item.amount, 'number')
+        + sel('currency','Currency', (item && item.currency) || 'USD', ['USD','EUR','NGN','GBP'])
+        + inp('prob','Probability (0–1)', item && item.prob, 'number')
+        + inp('deadline','Deadline / Quarter', item && item.deadline)
+        + sel('status','Status', (item && item.status) || 'Not Submitted', PIPELINE_STATUSES)
+        + ta('note','Notes / Outcome', item && item.note)
+        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
+        + '</form>';
     openModal(title, body);
 }
 
 async function savePipeline(e, tableKey, id) {
     e.preventDefault();
-    const fd = new FormData(e.target);
+    const fd  = new FormData(e.target);
     const row = {
         project:  fd.get('project'),
         funder:   fd.get('funder'),
         thematic: fd.get('thematic'),
         geo:      fd.get('geo'),
-        amount:   parseFloat(fd.get('amount'))||0,
+        amount:   parseFloat(fd.get('amount')) || 0,
         currency: fd.get('currency'),
-        prob:     parseFloat(fd.get('prob'))||0,
+        prob:     parseFloat(fd.get('prob'))   || 0,
         deadline: fd.get('deadline'),
         status:   fd.get('status'),
         note:     fd.get('note'),
@@ -1325,34 +932,23 @@ async function savePipeline(e, tableKey, id) {
 // ═══════════════════════════════════════════════════════
 function openBudgetModal(id) {
     const item = id ? STATE.data.budgets2025.find(x => x.id === id) : null;
-    const body = `<form class="form-grid" onsubmit="saveBudget(event,${id||'null'})">
-        ${inp('name','Grant / Project Name', item?.name, 'text', 'required')}
-        ${inp('funder','Funder', item?.funder)}
-        ${inp('period','Period', item?.period)}
-        ${inp('ngn','Budget (NGN)', item?.ngn, 'number')}
-        ${inp('status','Status into 2026', item?.status)}
-        <div class="form-actions form-full">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-    </form>`;
+    const body = '<form class="form-grid" onsubmit="saveBudget(event,' + (id||'null') + ')">'
+        + inp('name','Grant / Project Name', item && item.name, 'text', 'required')
+        + inp('funder','Funder', item && item.funder)
+        + inp('period','Period', item && item.period)
+        + inp('ngn','Budget (NGN)', item && item.ngn, 'number')
+        + inp('status','Status into 2026', item && item.status)
+        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
+        + '</form>';
     openModal(id ? 'Edit Budget Entry' : 'Add Budget Entry', body);
 }
 
 async function saveBudget(e, id) {
     e.preventDefault();
-    const fd = new FormData(e.target);
-    const row = {
-        name:   fd.get('name'),
-        funder: fd.get('funder'),
-        period: fd.get('period'),
-        ngn:    parseFloat(fd.get('ngn'))||0,
-        status: fd.get('status'),
-    };
+    const fd  = new FormData(e.target);
+    const row = { name: fd.get('name'), funder: fd.get('funder'), period: fd.get('period'), ngn: parseFloat(fd.get('ngn')) || 0, status: fd.get('status') };
     await upsertRow('budgets2025', id, row);
-    closeModal();
-    await loadAllData();
-    showTab(STATE.tab);
+    closeModal(); await loadAllData(); showTab(STATE.tab);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1360,49 +956,37 @@ async function saveBudget(e, id) {
 // ═══════════════════════════════════════════════════════
 function openActiveGrantModal(id) {
     const item = id ? STATE.data.activeGrants2026.find(x => x.id === id) : null;
-    const body = `<form class="form-grid" onsubmit="saveActiveGrant(event,${id||'null'})">
-        ${inp('name','Grant Name', item?.name, 'text', 'required')}
-        ${inp('funder','Funder', item?.funder)}
-        ${inp('thematic','Thematic Area', item?.thematic)}
-        ${inp('geo','Geography', item?.geo)}
-        ${inp('period','Grant Period', item?.period)}
-        ${sel('status','Status', item?.status||'Active', STATUS_OPTIONS)}
-        ${inp('total_usd','Total Grant (USD)', item?.total_usd, 'number')}
-        ${inp('total_ngn','Total Grant (NGN)', item?.total_ngn, 'number')}
-        ${inp('received_usd','Amount Received (USD)', item?.received_usd, 'number')}
-        ${inp('outstanding_usd','Outstanding (USD)', item?.outstanding_usd, 'number')}
-        ${inp('outstanding_ngn','Outstanding (NGN)', item?.outstanding_ngn, 'number')}
-        ${ta('note','Notes / Outstanding Action', item?.note)}
-        <div class="form-actions form-full">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-    </form>`;
+    const body = '<form class="form-grid" onsubmit="saveActiveGrant(event,' + (id||'null') + ')">'
+        + inp('name','Grant Name', item && item.name, 'text', 'required')
+        + inp('funder','Funder', item && item.funder)
+        + inp('thematic','Thematic Area', item && item.thematic)
+        + inp('geo','Geography', item && item.geo)
+        + inp('period','Grant Period', item && item.period)
+        + sel('status','Status', (item && item.status) || 'Active', STATUS_OPTIONS)
+        + inp('total_usd','Total Grant (USD)', item && item.total_usd, 'number')
+        + inp('total_ngn','Total Grant (NGN)', item && item.total_ngn, 'number')
+        + inp('received_usd','Amount Received (USD)', item && item.received_usd, 'number')
+        + inp('outstanding_usd','Outstanding (USD)', item && item.outstanding_usd, 'number')
+        + inp('outstanding_ngn','Outstanding (NGN)', item && item.outstanding_ngn, 'number')
+        + ta('note','Notes / Outstanding Action', item && item.note)
+        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
+        + '</form>';
     openModal(id ? 'Edit Active Grant' : 'Add Active Grant', body);
 }
 
 async function saveActiveGrant(e, id) {
     e.preventDefault();
-    const fd = new FormData(e.target);
+    const fd  = new FormData(e.target);
     const num = k => { const v = parseFloat(fd.get(k)); return isNaN(v) ? null : v; };
     const row = {
-        name:            fd.get('name'),
-        funder:          fd.get('funder'),
-        thematic:        fd.get('thematic'),
-        geo:             fd.get('geo'),
-        period:          fd.get('period'),
-        status:          fd.get('status'),
-        total_usd:       num('total_usd'),
-        total_ngn:       num('total_ngn'),
-        received_usd:    num('received_usd'),
-        outstanding_usd: num('outstanding_usd'),
-        outstanding_ngn: num('outstanding_ngn'),
-        note:            fd.get('note'),
+        name: fd.get('name'), funder: fd.get('funder'), thematic: fd.get('thematic'),
+        geo: fd.get('geo'), period: fd.get('period'), status: fd.get('status'),
+        total_usd: num('total_usd'), total_ngn: num('total_ngn'),
+        received_usd: num('received_usd'), outstanding_usd: num('outstanding_usd'),
+        outstanding_ngn: num('outstanding_ngn'), note: fd.get('note'),
     };
     await upsertRow('active_grants_2026', id, row);
-    closeModal();
-    await loadAllData();
-    showTab(STATE.tab);
+    closeModal(); await loadAllData(); showTab(STATE.tab);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1410,45 +994,34 @@ async function saveActiveGrant(e, id) {
 // ═══════════════════════════════════════════════════════
 function openReceivableModal(id) {
     const item = id ? STATE.data.receivables.find(x => x.id === id) : null;
-    const body = `<form class="form-grid" onsubmit="saveReceivable(event,${id||'null'})">
-        ${inp('grant_name','Grant Name', item?.grant_name, 'text', 'required')}
-        ${inp('funder','Funder', item?.funder)}
-        ${inp('amount_usd','Amount (USD)', item?.amount_usd, 'number')}
-        ${inp('amount_ngn','Amount (NGN)', item?.amount_ngn, 'number')}
-        ${inp('due','Due Date', item?.due)}
-        ${sel('status','Status', item?.status||'Overdue / Pending', RCVBL_STATUSES)}
-        ${sel('priority','Priority', item?.priority||'HIGH', ['CRITICAL','HIGH','MEDIUM','LOW'])}
-        ${inp('owner','Action Owner', item?.owner)}
-        ${inp('target','Target Date', item?.target)}
-        ${ta('action','Required Action', item?.action)}
-        <div class="form-actions form-full">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-    </form>`;
+    const body = '<form class="form-grid" onsubmit="saveReceivable(event,' + (id||'null') + ')">'
+        + inp('grant_name','Grant Name', item && item.grant_name, 'text', 'required')
+        + inp('funder','Funder', item && item.funder)
+        + inp('amount_usd','Amount (USD)', item && item.amount_usd, 'number')
+        + inp('amount_ngn','Amount (NGN)', item && item.amount_ngn, 'number')
+        + inp('due','Due Date', item && item.due)
+        + sel('status','Status', (item && item.status) || 'Overdue / Pending', RCVBL_STATUSES)
+        + sel('priority','Priority', (item && item.priority) || 'HIGH', ['CRITICAL','HIGH','MEDIUM','LOW'])
+        + inp('owner','Action Owner', item && item.owner)
+        + inp('target','Target Date', item && item.target)
+        + ta('action','Required Action', item && item.action)
+        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
+        + '</form>';
     openModal(id ? 'Edit Receivable' : 'Add Receivable', body);
 }
 
 async function saveReceivable(e, id) {
     e.preventDefault();
-    const fd = new FormData(e.target);
+    const fd  = new FormData(e.target);
     const num = k => { const v = parseFloat(fd.get(k)); return isNaN(v) ? null : v; };
     const row = {
-        grant_name: fd.get('grant_name'),
-        funder:     fd.get('funder'),
-        amount_usd: num('amount_usd'),
-        amount_ngn: num('amount_ngn'),
-        due:        fd.get('due'),
-        status:     fd.get('status'),
-        priority:   fd.get('priority'),
-        owner:      fd.get('owner'),
-        target:     fd.get('target'),
-        action:     fd.get('action'),
+        grant_name: fd.get('grant_name'), funder: fd.get('funder'),
+        amount_usd: num('amount_usd'), amount_ngn: num('amount_ngn'),
+        due: fd.get('due'), status: fd.get('status'), priority: fd.get('priority'),
+        owner: fd.get('owner'), target: fd.get('target'), action: fd.get('action'),
     };
     await upsertRow('receivables', id, row);
-    closeModal();
-    await loadAllData();
-    showTab(STATE.tab);
+    closeModal(); await loadAllData(); showTab(STATE.tab);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1456,43 +1029,33 @@ async function saveReceivable(e, id) {
 // ═══════════════════════════════════════════════════════
 function openUnsuccessfulModal(id) {
     const item = id ? STATE.data.unsuccessful.find(x => x.id === id) : null;
-    const body = `<form class="form-grid" onsubmit="saveUnsuccessful(event,${id||'null'})">
-        ${inp('year','Year', item?.year||'2026')}
-        ${inp('funder','Funder', item?.funder)}
-        ${ta('project','Project Title', item?.project, 'required')}
-        ${inp('thematic','Thematic', item?.thematic)}
-        ${inp('geo','Geography', item?.geo)}
-        ${inp('amount_eur','Amount (€/yr)', item?.amount_eur, 'number')}
-        ${inp('years','Project Years', item?.years)}
-        ${ta('lessons','Key Lessons Learned', item?.lessons)}
-        ${ta('strategy','Re-submission Strategy', item?.strategy)}
-        <div class="form-actions form-full">
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-    </form>`;
+    const body = '<form class="form-grid" onsubmit="saveUnsuccessful(event,' + (id||'null') + ')">'
+        + inp('year','Year', (item && item.year) || '2026')
+        + inp('funder','Funder', item && item.funder)
+        + ta('project','Project Title', item && item.project, 'required')
+        + inp('thematic','Thematic', item && item.thematic)
+        + inp('geo','Geography', item && item.geo)
+        + inp('amount_eur','Amount (€/yr)', item && item.amount_eur, 'number')
+        + inp('years','Project Years', item && item.years)
+        + ta('lessons','Key Lessons Learned', item && item.lessons)
+        + ta('strategy','Re-submission Strategy', item && item.strategy)
+        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
+        + '</form>';
     openModal(id ? 'Edit Application Entry' : 'Add Unsuccessful Application', body);
 }
 
 async function saveUnsuccessful(e, id) {
     e.preventDefault();
-    const fd = new FormData(e.target);
+    const fd  = new FormData(e.target);
     const row = {
-        year:       fd.get('year'),
-        funder:     fd.get('funder'),
-        project:    fd.get('project'),
-        thematic:   fd.get('thematic'),
-        geo:        fd.get('geo'),
-        amount_eur: parseFloat(fd.get('amount_eur'))||null,
-        years:      fd.get('years'),
-        status:     'Not Awarded',
-        lessons:    fd.get('lessons'),
-        strategy:   fd.get('strategy'),
+        year: fd.get('year'), funder: fd.get('funder'), project: fd.get('project'),
+        thematic: fd.get('thematic'), geo: fd.get('geo'),
+        amount_eur: parseFloat(fd.get('amount_eur')) || null,
+        years: fd.get('years'), status: 'Not Awarded',
+        lessons: fd.get('lessons'), strategy: fd.get('strategy'),
     };
     await upsertRow('unsuccessful', id, row);
-    closeModal();
-    await loadAllData();
-    showTab(STATE.tab);
+    closeModal(); await loadAllData(); showTab(STATE.tab);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1505,7 +1068,10 @@ async function upsertRow(table, id, row) {
     } else {
         res = await db.from(table).insert([row]);
     }
-    if (res.error) { alert('Error saving: ' + res.error.message); throw res.error; }
+    if (res.error) {
+        alert('Error saving to database: ' + res.error.message);
+        throw res.error;
+    }
 }
 
 async function deleteRow(table, id) {
@@ -1514,6 +1080,112 @@ async function deleteRow(table, id) {
     if (error) { alert('Error deleting: ' + error.message); return; }
     await loadAllData();
     showTab(STATE.tab);
+}
+
+// ═══════════════════════════════════════════════════════
+// EXCEL EXPORT
+// ═══════════════════════════════════════════════════════
+function exportToExcel() {
+    const d  = STATE.data;
+    const wb = XLSX.utils.book_new();
+
+    const C = {
+        greenDark: '1E4D2B', greenMid: '2E7D47', greenLight: 'D4EDDA',
+        redDark: '8B1A1A', redLight: 'F8D7DA', goldLight: 'FFF3CD', goldDark: '856404',
+        grey: 'E2E3E5', white: 'FFFFFF', black: '1A1A1A',
+    };
+
+    const hdrStyle = (bg) => ({
+        font: { bold:true, sz:9, color:{rgb:'FFFFFF'}, name:'Arial' },
+        fill: { fgColor:{rgb: bg||C.greenMid}, patternType:'solid' },
+        alignment: { horizontal:'center', vertical:'center', wrapText:true },
+    });
+    const dataStyle = (bg, bold, color) => ({
+        font: { sz:9, bold: bold||false, name:'Arial', color:{rgb: color||C.black} },
+        fill: bg ? { fgColor:{rgb:bg}, patternType:'solid' } : { patternType:'none' },
+        alignment: { vertical:'center', wrapText:true },
+        border: { bottom:{style:'hair',color:{rgb:'DDDDDD'}} },
+    });
+    const totalStyle = () => ({
+        font: { bold:true, sz:9, color:{rgb:'FFFFFF'}, name:'Arial' },
+        fill: { fgColor:{rgb:C.greenDark}, patternType:'solid' },
+        alignment: { horizontal:'right', vertical:'center' },
+    });
+    const sectionStyle = () => ({
+        font: { bold:true, sz:9, color:{rgb:'FFFFFF'}, name:'Arial' },
+        fill: { fgColor:{rgb:C.greenDark}, patternType:'solid' },
+        alignment: { vertical:'center' },
+    });
+
+    function makeWS(title, headers, dataRows, colWidths, rowStyles, hdrBg) {
+        const ws  = {};
+        const all = [headers, ...dataRows];
+        all.forEach((row, R) => {
+            row.forEach((val, C2) => {
+                const addr = XLSX.utils.encode_cell({r:R, c:C2});
+                ws[addr]   = { v: val == null ? '' : val, t: typeof val === 'number' ? 'n' : 's' };
+                if (R === 0) ws[addr].s = hdrStyle(hdrBg);
+                else if (rowStyles[R-1] === 'total')   ws[addr].s = totalStyle();
+                else if (rowStyles[R-1] === 'section') ws[addr].s = sectionStyle();
+                else ws[addr].s = dataStyle(rowStyles[R-1] && rowStyles[R-1].bg, rowStyles[R-1] && rowStyles[R-1].bold, rowStyles[R-1] && rowStyles[R-1].color);
+            });
+        });
+        ws['!ref']  = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:all.length-1, c:headers.length-1}});
+        ws['!cols'] = colWidths.map(w => ({wch:w}));
+        ws['!rows'] = all.map((_,i) => ({hpt: i===0 ? 22 : 18}));
+        return ws;
+    }
+
+    const now = new Date();
+
+    // 2025 Pipeline
+    const p25H = ['#','Project Title','Funder','Thematic','Geography','Amount','Currency','Probability','Weighted','Deadline','Status','Notes'];
+    const p25R = d.pipeline2025.map((p,i) => [p.sn||i+1, p.project, p.funder, p.thematic, p.geo, p.amount||0, p.currency, ((p.prob||0)*100).toFixed(0)+'%', Math.round((p.amount||0)*(p.prob||0)), p.deadline, p.status, p.note]);
+    const p25Total = d.pipeline2025.reduce((s,p)=>s+(p.amount||0),0);
+    const p25W     = d.pipeline2025.reduce((s,p)=>s+(p.amount||0)*(p.prob||0),0);
+    p25R.push(['','','','','TOTAL', p25Total,'','', Math.round(p25W),'','','']);
+    const p25S = d.pipeline2025.map(p => p.status==='Awarded' ? {bg:C.greenLight} : p.status==='Not Awarded' ? {bg:C.redLight} : p.status==='Awaiting Outcome' ? {bg:C.goldLight} : {});
+    p25S.push('total');
+    XLSX.utils.book_append_sheet(wb, makeWS('2025 Pipeline', p25H, p25R, [4,44,28,22,18,12,10,12,14,14,18,34], p25S), '2025 Pipeline');
+
+    // 2025 Budgets
+    const b25Total = d.budgets2025.reduce((s,b)=>s+(b.ngn||0),0);
+    const b25H = ['Grant / Project','Funder','Period','Budget (NGN)','% Portfolio','Status into 2026'];
+    const b25R = d.budgets2025.map(b => [b.name, b.funder, b.period, b.ngn||0, b25Total>0?((b.ngn/b25Total)*100).toFixed(1)+'%':'–', b.status]);
+    b25R.push(['GRAND TOTAL','','', b25Total,'','']);
+    const b25S = d.budgets2025.map(b => b.status==='Closed' ? {bg:C.grey} : {bg:C.greenLight});
+    b25S.push('total');
+    XLSX.utils.book_append_sheet(wb, makeWS('2025 Budgets', b25H, b25R, [36,32,14,18,16,22], b25S), '2025 Budgets');
+
+    // 2026 Active Grants
+    const agH = ['Grant Name','Funder','Thematic','Geography','Period','Total (USD)','Total (NGN)','Received (USD)','Outstanding (USD)','Outstanding (NGN)','Status','Notes'];
+    const agR = d.activeGrants2026.map(g => [g.name, g.funder, g.thematic, g.geo, g.period, g.total_usd||'', g.total_ngn||'', g.received_usd||'', g.outstanding_usd||'', g.outstanding_ngn||'', g.status, g.note]);
+    const agS = d.activeGrants2026.map(g => (g.outstanding_usd||g.outstanding_ngn) ? {bg:C.redLight,bold:true,color:C.redDark} : {bg:C.greenLight});
+    XLSX.utils.book_append_sheet(wb, makeWS('2026 Active Grants', agH, agR, [36,30,24,20,16,14,16,14,16,16,14,38], agS), '2026 Active Grants');
+
+    // 2026 Pipeline
+    const p26H = ['#','Project Title','Funder','Thematic','Geography','Amount','Currency','Probability','Weighted','Deadline','Status','Notes'];
+    const p26Total = d.pipeline2026.reduce((s,p)=>s+(p.amount||0),0);
+    const p26W     = d.pipeline2026.reduce((s,p)=>s+(p.amount||0)*(p.prob||0),0);
+    const p26R = d.pipeline2026.map((p,i) => [p.sn||i+1, p.project, p.funder, p.thematic, p.geo, p.amount||0, p.currency, ((p.prob||0)*100).toFixed(0)+'%', Math.round((p.amount||0)*(p.prob||0)), p.deadline, p.status, p.note]);
+    p26R.push(['','','','','TOTAL', p26Total,'','', Math.round(p26W),'','','']);
+    const p26S = d.pipeline2026.map(p => p.status==='Awarded' ? {bg:C.greenLight} : p.status==='Not Awarded' ? {bg:C.redLight} : p.status==='Awaiting Outcome' ? {bg:C.goldLight} : {});
+    p26S.push('total');
+    XLSX.utils.book_append_sheet(wb, makeWS('2026 Pipeline', p26H, p26R, [4,44,28,22,18,12,10,12,14,14,18,34], p26S), '2026 Pipeline');
+
+    // Receivables
+    const rcvH = ['Grant','Funder','Amount (USD)','Amount (NGN)','Due Date','Status','Priority','Action Required','Owner','Target Date'];
+    const rcvR = d.receivables.map(r => [r.grant_name, r.funder, r.amount_usd||'', r.amount_ngn||'', r.due, r.status, r.priority, r.action, r.owner, r.target]);
+    const rcvS = d.receivables.map(r => r.priority==='CRITICAL' ? {bg:C.redLight,bold:true,color:C.redDark} : {bg:C.goldLight,color:C.goldDark});
+    XLSX.utils.book_append_sheet(wb, makeWS('Receivables', rcvH, rcvR, [28,28,14,16,16,18,12,38,18,14], rcvS, C.redDark), 'Receivables');
+
+    // Unsuccessful
+    const unH = ['Year','Project Title','Funder','Thematic','Geography','Amount (€/yr)','Period','Status','Lessons Learned','Re-submission Strategy'];
+    const unR = d.unsuccessful.map(a => [a.year, a.project, a.funder, a.thematic, a.geo, a.amount_eur||'', a.years, a.status, a.lessons, a.strategy]);
+    const unS = d.unsuccessful.map(() => ({bg:C.redLight}));
+    XLSX.utils.book_append_sheet(wb, makeWS('Unsuccessful', unH, unR, [8,44,28,22,20,14,14,14,40,40], unS), 'Unsuccessful');
+
+    XLSX.writeFile(wb, 'RAHAMA_Project_Tracker_' + now.toISOString().slice(0,10) + '.xlsx', {bookSST:false, cellStyles:true});
 }
 
 // ═══════════════════════════════════════════════════════
