@@ -1968,20 +1968,22 @@
                                     }).join('')}
                                 </select>
                             </div>
-                            
-                            <div class="form-group">
-                                <label>Actual Amount Spent (₦) <span class="required">*</span></label>
-                                <input type="number" name="actualSpent" id="actualSpent" required min="0" step="0.01">
-                            </div>
+
+                            <!-- ── LINE ITEM BREAKDOWN TABLE (injected by loadPaymentDetails) ── -->
+                            <div id="retirementBreakdownPanel" class="form-group full-width" style="display:none;"></div>
+
+                            <!-- actualSpent is hidden and driven by the table totals -->
+                            <input type="number" name="actualSpent" id="actualSpent" style="display:none;" min="0" step="0.01" value="0">
                             
                             <div class="form-group">
                                 <label>Amount to Return (₦)</label>
-                                <input type="number" name="amountReturned" min="0" step="0.01" value="0">
+                                <input type="number" name="amountReturned" id="amountReturned" min="0" step="0.01" value="0">
+                                <span class="form-hint">Auto-filled from the breakdown above. Adjust if needed.</span>
                             </div>
                             
                             <div class="form-group full-width">
                                 <label>Expenditure Details <span class="required">*</span></label>
-                                <textarea name="expenditureDetails" required placeholder="Describe how the funds were spent"></textarea>
+                                <textarea name="expenditureDetails" id="expenditureDetails" required placeholder="Describe how the funds were spent — line items will be appended automatically"></textarea>
                             </div>
                             
                             <div class="form-group full-width">
@@ -2004,13 +2006,247 @@
             
             loadPaymentDetails(refNumber) {
                 const payment = this.data.payments.find(p => p.refNumber === refNumber);
-                if (payment) {
-                    const form = document.querySelector('form');
-                    const actualSpentInput = form.querySelector('[name="actualSpent"]');
-                    if (actualSpentInput) {
-                        actualSpentInput.max = payment.amount;
+                if (!payment) return;
+
+                // Find linked concept note for estimated cost (procurement retirements)
+                const cn = this.data.conceptNotes.find(c => c.refNumber === payment.conceptNoteRef);
+
+                const isProcurement = payment.retirementresponsibility === 'procurement';
+                // For procurement: compare against concept note estimated cost; for staff: against advance paid
+                const referenceAmount = isProcurement && cn ? cn.estimatedCost : payment.amount;
+
+                // Store on app for recalc
+                app._retirementRefAmount = referenceAmount;
+                app._retirementPaidAmount = payment.amount;
+                app._retirementIsProcurement = isProcurement;
+                app._retirementLineCount = 1;
+
+                const daysSince = payment.paidDate
+                    ? Math.floor((Date.now() - new Date(payment.paidDate)) / (1000 * 60 * 60 * 24))
+                    : '—';
+
+                const panel = document.getElementById('retirementBreakdownPanel');
+                if (!panel) return;
+
+                panel.style.display = 'block';
+                panel.innerHTML = `
+                    <div style="border: 2px solid #BFDBFE; border-radius: 10px; overflow: hidden;">
+                        <!-- Panel header -->
+                        <div style="background: #1D4ED8; color: white; padding: 12px 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
+                            ${isProcurement ? '🛒 Procurement Retirement — Expenditure Breakdown' : '💳 Advance Retirement — Expenditure Breakdown'}
+                        </div>
+
+                        <!-- Advance info bar -->
+                        <div style="background: #EFF6FF; padding: 12px 20px; display: flex; gap: 32px; border-bottom: 1px solid #BFDBFE; flex-wrap: wrap;">
+                            <div>
+                                <div style="font-size: 11px; font-weight: 700; color: #3B82F6; text-transform: uppercase; margin-bottom: 2px;">
+                                    ${isProcurement ? 'Estimated Budget' : 'Advance Given'}
+                                </div>
+                                <div style="font-size: 18px; font-weight: 700; color: #1D4ED8; font-family: 'Archivo', sans-serif;">
+                                    ₦${referenceAmount.toLocaleString()}
+                                </div>
+                            </div>
+                            ${isProcurement && cn ? `
+                            <div>
+                                <div style="font-size: 11px; font-weight: 700; color: #3B82F6; text-transform: uppercase; margin-bottom: 2px;">Amount Paid Out</div>
+                                <div style="font-size: 18px; font-weight: 700; color: #1D4ED8; font-family: 'Archivo', sans-serif;">₦${payment.amount.toLocaleString()}</div>
+                            </div>` : ''}
+                            <div>
+                                <div style="font-size: 11px; font-weight: 700; color: #3B82F6; text-transform: uppercase; margin-bottom: 2px;">Date Paid</div>
+                                <div style="font-size: 14px; font-weight: 600; color: #374151; padding-top: 3px;">
+                                    ${payment.paidDate ? new Date(payment.paidDate).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' }) : '—'}
+                                </div>
+                            </div>
+                            <div>
+                                <div style="font-size: 11px; font-weight: 700; color: #3B82F6; text-transform: uppercase; margin-bottom: 2px;">Days Since Payment</div>
+                                <div style="font-size: 14px; font-weight: 600; color: #374151; padding-top: 3px;">${daysSince} day${daysSince === 1 ? '' : 's'}</div>
+                            </div>
+                        </div>
+
+                        <!-- Line items table -->
+                        <div style="padding: 16px 20px; background: #F8FAFF;">
+                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                <thead>
+                                    <tr style="background:#EFF6FF;">
+                                        <th style="padding:10px 12px; text-align:left; color:#374151; font-weight:700; border:1px solid #DBEAFE; width:40px;">S/N</th>
+                                        <th style="padding:10px 12px; text-align:left; color:#374151; font-weight:700; border:1px solid #DBEAFE;">Description</th>
+                                        <th style="padding:10px 12px; text-align:right; color:#374151; font-weight:700; border:1px solid #DBEAFE; width:150px;">Unit Amount (₦)</th>
+                                        <th style="padding:10px 12px; text-align:right; color:#374151; font-weight:700; border:1px solid #DBEAFE; width:110px;">Qty / Days</th>
+                                        <th style="padding:10px 12px; text-align:right; color:#374151; font-weight:700; border:1px solid #DBEAFE; width:150px;">Total (₦)</th>
+                                        <th style="padding:10px 12px; text-align:center; color:#374151; font-weight:700; border:1px solid #DBEAFE; width:40px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="retLineItemsBody">
+                                    <tr id="retRow_1">
+                                        <td style="padding:8px 12px; border:1px solid #DBEAFE; color:#6B7280; font-weight:600;">1</td>
+                                        <td style="padding:6px 8px; border:1px solid #DBEAFE;">
+                                            <input type="text" placeholder="e.g. Per Diem (Travel days)"
+                                                style="width:100%;border:none;background:transparent;font-size:13px;outline:none;font-family:inherit;"
+                                                oninput="app.recalcRetirementRow(1)" id="ret_desc_1">
+                                        </td>
+                                        <td style="padding:6px 8px; border:1px solid #DBEAFE;">
+                                            <input type="number" min="0" step="0.01" placeholder="0"
+                                                style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;"
+                                                oninput="app.recalcRetirementRow(1)" id="ret_amt_1">
+                                        </td>
+                                        <td style="padding:6px 8px; border:1px solid #DBEAFE;">
+                                            <input type="number" min="1" step="1" value="1"
+                                                style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;"
+                                                oninput="app.recalcRetirementRow(1)" id="ret_qty_1">
+                                        </td>
+                                        <td style="padding:8px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:600;" id="ret_total_1">0.00</td>
+                                        <td style="padding:8px 12px; border:1px solid #DBEAFE; text-align:center;">
+                                            <button type="button" onclick="app.removeRetirementRow(1)"
+                                                style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;" title="Remove">✕</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background:#EFF6FF;">
+                                        <td colspan="4" style="padding:10px 12px; border:1px solid #DBEAFE; font-weight:700; color:#1E3A5F;">Total Amount Spent</td>
+                                        <td style="padding:10px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:700; color:#1D4ED8;" id="retSummarySpent">₦0.00</td>
+                                        <td style="border:1px solid #DBEAFE;"></td>
+                                    </tr>
+                                    <tr style="background:#F0FDF4;">
+                                        <td colspan="4" style="padding:10px 12px; border:1px solid #DBEAFE; font-weight:700; color:#065F46;">
+                                            ${isProcurement ? 'Estimated Budget (Concept Note)' : 'Advance Given'}
+                                        </td>
+                                        <td style="padding:10px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:700; color:#059669;" id="retSummaryAdvance">
+                                            ₦${referenceAmount.toLocaleString()}
+                                        </td>
+                                        <td style="border:1px solid #DBEAFE;"></td>
+                                    </tr>
+                                    <tr id="retBalanceRow" style="background:#FFFBEB;">
+                                        <td colspan="4" style="padding:10px 12px; border:1px solid #DBEAFE; font-weight:700;">Balance</td>
+                                        <td style="padding:10px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:700;" id="retSummaryBalance">₦0.00</td>
+                                        <td style="border:1px solid #DBEAFE;"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            <button type="button" onclick="app.addRetirementRow()"
+                                style="margin-top:10px; padding:8px 16px; background:#EFF6FF; border:1px dashed #93C5FD; border-radius:6px; color:#1D4ED8; font-size:13px; font-weight:600; cursor:pointer;">
+                                + Add Line Item
+                            </button>
+                        </div>
+
+                        <!-- Status bar -->
+                        <div id="retStatusBar" style="padding:12px 20px; font-size:13px; font-weight:600; background:#F3F4F6; color:#6B7280; border-top:1px solid #E5E7EB;">
+                            Fill in the line items above — the balance will calculate automatically
+                        </div>
+                    </div>
+                `;
+            },
+
+            recalcRetirementRow(id) {
+                const amt = parseFloat(document.getElementById('ret_amt_' + id)?.value) || 0;
+                const qty = parseFloat(document.getElementById('ret_qty_' + id)?.value) || 1;
+                const total = amt * qty;
+                const el = document.getElementById('ret_total_' + id);
+                if (el) el.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                app.updateRetirementSummary();
+            },
+
+            addRetirementRow() {
+                app._retirementLineCount = (app._retirementLineCount || 1) + 1;
+                const id = app._retirementLineCount;
+                const tbody = document.getElementById('retLineItemsBody');
+                if (!tbody) return;
+                const row = document.createElement('tr');
+                row.id = 'retRow_' + id;
+                row.innerHTML = `
+                    <td style="padding:8px 12px; border:1px solid #DBEAFE; color:#6B7280; font-weight:600;">${id}</td>
+                    <td style="padding:6px 8px; border:1px solid #DBEAFE;">
+                        <input type="text" placeholder="Description"
+                            style="width:100%;border:none;background:transparent;font-size:13px;outline:none;font-family:inherit;"
+                            oninput="app.recalcRetirementRow(${id})" id="ret_desc_${id}">
+                    </td>
+                    <td style="padding:6px 8px; border:1px solid #DBEAFE;">
+                        <input type="number" min="0" step="0.01" placeholder="0"
+                            style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;"
+                            oninput="app.recalcRetirementRow(${id})" id="ret_amt_${id}">
+                    </td>
+                    <td style="padding:6px 8px; border:1px solid #DBEAFE;">
+                        <input type="number" min="1" step="1" value="1"
+                            style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;"
+                            oninput="app.recalcRetirementRow(${id})" id="ret_qty_${id}">
+                    </td>
+                    <td style="padding:8px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:600;" id="ret_total_${id}">0.00</td>
+                    <td style="padding:8px 12px; border:1px solid #DBEAFE; text-align:center;">
+                        <button type="button" onclick="app.removeRetirementRow(${id})"
+                            style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;">✕</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            },
+
+            removeRetirementRow(id) {
+                const row = document.getElementById('retRow_' + id);
+                if (row) row.remove();
+                app.updateRetirementSummary();
+            },
+
+            updateRetirementSummary() {
+                // Sum all row totals
+                let totalSpent = 0;
+                document.querySelectorAll('#retLineItemsBody tr').forEach(row => {
+                    const m = row.id.match(/retRow_(\d+)/);
+                    if (!m) return;
+                    const amt = parseFloat(document.getElementById('ret_amt_' + m[1])?.value) || 0;
+                    const qty = parseFloat(document.getElementById('ret_qty_' + m[1])?.value) || 1;
+                    totalSpent += amt * qty;
+                });
+
+                const ref = app._retirementRefAmount || 0;
+                const balance = ref - totalSpent; // positive = surplus to return; negative = org owes
+
+                const fmt = v => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                const spentEl   = document.getElementById('retSummarySpent');
+                const balanceEl = document.getElementById('retSummaryBalance');
+                const balanceRow = document.getElementById('retBalanceRow');
+                const statusBar = document.getElementById('retStatusBar');
+
+                if (spentEl) spentEl.textContent = '₦' + fmt(totalSpent);
+
+                if (balanceEl && balanceRow && statusBar) {
+                    if (balance > 0.005) {
+                        // Surplus — staff must return money
+                        balanceEl.textContent = '₦' + fmt(balance);
+                        balanceEl.style.color  = '#D97706';
+                        balanceRow.style.background = '#FFFBEB';
+                        statusBar.style.background  = '#FFFBEB';
+                        statusBar.style.color = '#92400E';
+                        statusBar.innerHTML = `⚠️ You must return <strong>₦${fmt(balance)}</strong> to RAHAMA — you spent less than the ${app._retirementIsProcurement ? 'estimated budget' : 'advance'}`;
+                        const retInput = document.getElementById('amountReturned');
+                        if (retInput) retInput.value = balance.toFixed(2);
+                    } else if (balance < -0.005) {
+                        // Overspent — org owes staff
+                        const owed = Math.abs(balance);
+                        balanceEl.textContent = '-₦' + fmt(owed);
+                        balanceEl.style.color  = '#1D4ED8';
+                        balanceRow.style.background = '#EFF6FF';
+                        statusBar.style.background  = '#EFF6FF';
+                        statusBar.style.color = '#1E40AF';
+                        statusBar.innerHTML = `ℹ️ RAHAMA owes you <strong>₦${fmt(owed)}</strong> — you spent more than the ${app._retirementIsProcurement ? 'estimated budget' : 'advance'}. Finance will process a top-up.`;
+                        const retInput = document.getElementById('amountReturned');
+                        if (retInput) retInput.value = '0';
+                    } else {
+                        // Exact
+                        balanceEl.textContent = '₦0.00';
+                        balanceEl.style.color  = '#059669';
+                        balanceRow.style.background = '#ECFDF5';
+                        statusBar.style.background  = '#ECFDF5';
+                        statusBar.style.color = '#065F46';
+                        statusBar.innerHTML = `✅ Perfectly accounted for — nothing to return`;
+                        const retInput = document.getElementById('amountReturned');
+                        if (retInput) retInput.value = '0';
                     }
                 }
+
+                // Sync hidden actualSpent so submitRetirement reads the right value
+                const actualSpentInput = document.getElementById('actualSpent');
+                if (actualSpentInput) actualSpentInput.value = totalSpent.toFixed(2);
             },
             
             async submitRetirement(event) {
@@ -2019,11 +2255,57 @@
                 
                 const form = event.target;
                 const formData = new FormData(form);
-                
-                const actualSpent = parseFloat(formData.get('actualSpent'));
-                if (!this.validateAmount(actualSpent)) {
-                    this.showError('actualSpent', 'Please enter a valid amount');
+
+                // Read actualSpent from the hidden field (driven by line item table)
+                const actualSpent = parseFloat(document.getElementById('actualSpent')?.value) || 0;
+
+                // Validate: at least one line item with an amount must be entered
+                if (actualSpent <= 0) {
+                    alert('Please fill in at least one line item in the expenditure breakdown table before submitting.');
                     return;
+                }
+
+                // Validate: all visible line item rows must have a description
+                let missingDesc = false;
+                document.querySelectorAll('#retLineItemsBody tr').forEach(row => {
+                    const m = row.id.match(/retRow_(\d+)/);
+                    if (!m) return;
+                    const desc = document.getElementById('ret_desc_' + m[1])?.value?.trim();
+                    if (!desc) missingDesc = true;
+                });
+                if (missingDesc) {
+                    alert('Please add a description for every line item in the breakdown table.');
+                    return;
+                }
+
+                // Balance warning: if there is a surplus and the return field doesn't cover it
+                const refAmount  = app._retirementRefAmount || 0;
+                const surplus    = refAmount - actualSpent;
+                const amountReturned = parseFloat(formData.get('amountReturned')) || 0;
+                if (surplus > 0.01 && amountReturned < surplus - 0.01) {
+                    if (!confirm(
+                        `⚠️ Balance Warning\n\n` +
+                        `Reference Amount: ₦${refAmount.toLocaleString()}\n` +
+                        `Amount Spent: ₦${actualSpent.toLocaleString()}\n` +
+                        `Unaccounted Surplus: ₦${surplus.toLocaleString()}\n\n` +
+                        `The "Amount to Return" field (₦${amountReturned.toLocaleString()}) does not cover the full surplus.\n\n` +
+                        `Submit anyway?`
+                    )) return;
+                }
+
+                // Auto-append line item summary to expenditure details if field is empty
+                const expTextarea = document.getElementById('expenditureDetails');
+                if (expTextarea && (!expTextarea.value || expTextarea.value.trim() === '')) {
+                    const lines = [];
+                    document.querySelectorAll('#retLineItemsBody tr').forEach(row => {
+                        const m = row.id.match(/retRow_(\d+)/);
+                        if (!m) return;
+                        const desc = document.getElementById('ret_desc_' + m[1])?.value || '';
+                        const amt  = parseFloat(document.getElementById('ret_amt_'  + m[1])?.value) || 0;
+                        const qty  = parseFloat(document.getElementById('ret_qty_'  + m[1])?.value) || 1;
+                        if (desc) lines.push(`${desc}: ₦${amt.toLocaleString()} × ${qty} = ₦${(amt * qty).toLocaleString()}`);
+                    });
+                    if (lines.length) expTextarea.value = lines.join('\n');
                 }
 
                 const file = document.getElementById('retirementFile').files[0];
@@ -2603,18 +2885,73 @@
                 content.innerHTML = `
                     <div class="header">
                         <h2>Complete Procurement & Forward to Finance</h2>
-                        <p>Upload documents and create payment request</p>
+                        <p>Upload documents, confirm actual cost, and send payment request to Finance</p>
                     </div>
                     
                     <form class="form-grid" id="procurementForm" onsubmit="app.completeProcurementWithDocs(event, '${refNumber}')">
+
+                        <!-- ── COST SUMMARY PANEL ── -->
                         <div class="form-group full-width">
-                            <div class="threshold-info">
-                                <strong>Concept Note:</strong> ${cn.refNumber} - ${cn.activityTitle}<br>
-                                <strong>Amount:</strong> ₦${cn.estimatedCost.toLocaleString()}<br>
-                                <strong>Staff:</strong> ${cn.staffName}
+                            <div style="border: 2px solid #BFDBFE; border-radius: 10px; overflow: hidden;">
+                                <div style="background: #1D4ED8; color: white; padding: 12px 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;">
+                                    🛒 Procurement Cost Adjustment
+                                </div>
+                                <div style="padding: 20px; background: #F8FAFF;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                        <div>
+                                            <div style="font-size: 11px; font-weight: 700; color: #3B82F6; text-transform: uppercase; margin-bottom: 4px;">Concept Note</div>
+                                            <div style="font-size: 13px; color: #374151;">${cn.refNumber} — ${cn.activityTitle}</div>
+                                            <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Staff: ${cn.staffName}</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 11px; font-weight: 700; color: #3B82F6; text-transform: uppercase; margin-bottom: 4px;">Staff's Estimated Budget</div>
+                                            <div style="font-size: 22px; font-weight: 700; color: #1D4ED8; font-family: 'Archivo', sans-serif;">₦${cn.estimatedCost.toLocaleString()}</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Actual cost input -->
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;">
+                                        <div>
+                                            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">
+                                                Actual Procurement Cost (₦) <span style="color: var(--danger);">*</span>
+                                            </label>
+                                            <input type="number" id="actualProcurementCost" required min="0" step="0.01"
+                                                placeholder="Enter what was actually spent"
+                                                style="width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit;"
+                                                oninput="app.calcProcurementVariance(${cn.estimatedCost})">
+                                            <span style="font-size: 12px; color: var(--text-muted); font-style: italic;">
+                                                This becomes the payment amount sent to Finance
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Variance</label>
+                                            <div id="procVarianceDisplay" style="padding: 12px 16px; border-radius: 8px; background: #F3F4F6; border: 1px solid #E5E7EB; font-size: 13px; color: #6B7280; min-height: 48px; display: flex; align-items: center;">
+                                                Enter actual cost to see variance
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Variance summary table (shown after input) -->
+                                    <div id="procVarianceTable" style="display:none; margin-top: 16px;">
+                                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                            <tr style="background:#EFF6FF;">
+                                                <td style="padding:10px 12px; border:1px solid #DBEAFE; font-weight:700; color:#1E3A5F;">Staff Estimated Budget</td>
+                                                <td style="padding:10px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:700; color:#1D4ED8;">₦${cn.estimatedCost.toLocaleString()}</td>
+                                            </tr>
+                                            <tr style="background:#F8FAFF;">
+                                                <td style="padding:10px 12px; border:1px solid #DBEAFE; font-weight:700; color:#1E3A5F;">Actual Procurement Cost</td>
+                                                <td style="padding:10px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:700;" id="procVarActual">—</td>
+                                            </tr>
+                                            <tr id="procVarBalanceRow">
+                                                <td style="padding:10px 12px; border:1px solid #DBEAFE; font-weight:700;">Variance (Budget − Actual)</td>
+                                                <td style="padding:10px 12px; border:1px solid #DBEAFE; text-align:right; font-weight:700;" id="procVarBalance">—</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        
+
                         <div class="form-group full-width">
                             <label>Upload GRR (Goods Received Report) <span class="required">*</span></label>
                             <div class="file-upload-area" id="grrUploadArea" onclick="document.getElementById('grrFile').click()">
@@ -2684,6 +3021,50 @@
                     </form>
                 `;
             },
+
+            calcProcurementVariance(estimatedCost) {
+                const actual = parseFloat(document.getElementById('actualProcurementCost')?.value) || 0;
+                const variance = estimatedCost - actual;
+                const fmt = v => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                const display   = document.getElementById('procVarianceDisplay');
+                const table     = document.getElementById('procVarianceTable');
+                const varActual = document.getElementById('procVarActual');
+                const varBal    = document.getElementById('procVarBalance');
+                const varRow    = document.getElementById('procVarBalanceRow');
+
+                if (actual <= 0 || !display) return;
+
+                table.style.display = 'table';
+                if (varActual) varActual.textContent = '₦' + fmt(actual);
+
+                if (Math.abs(variance) < 0.005) {
+                    // Exact match
+                    display.style.background = '#ECFDF5';
+                    display.style.borderColor = '#10B981';
+                    display.style.color = '#065F46';
+                    display.innerHTML = '✅ Exact match — no variance';
+                    if (varBal) { varBal.textContent = '₦0.00'; varBal.style.color = '#059669'; }
+                    if (varRow) varRow.style.background = '#ECFDF5';
+                } else if (variance > 0) {
+                    // Under budget — savings
+                    display.style.background = '#F0FDF4';
+                    display.style.borderColor = '#10B981';
+                    display.style.color = '#065F46';
+                    display.innerHTML = `✅ <strong>₦${fmt(variance)} under budget</strong> — savings to be noted`;
+                    if (varBal) { varBal.textContent = '+₦' + fmt(variance); varBal.style.color = '#059669'; }
+                    if (varRow) varRow.style.background = '#F0FDF4';
+                } else {
+                    // Over budget — needs justification
+                    const over = Math.abs(variance);
+                    display.style.background = '#FFFBEB';
+                    display.style.borderColor = '#F59E0B';
+                    display.style.color = '#92400E';
+                    display.innerHTML = `⚠️ <strong>₦${fmt(over)} over budget</strong> — Finance will see this. Add a note below.`;
+                    if (varBal) { varBal.textContent = '-₦' + fmt(over); varBal.style.color = '#D97706'; }
+                    if (varRow) varRow.style.background = '#FFFBEB';
+                }
+            },
             
             handleFileUpload(input, areaId) {
                 const area = document.getElementById(areaId);
@@ -2734,9 +3115,15 @@
                 const accountName = document.getElementById('accountName').value;
                 const accountNumber = document.getElementById('accountNumber').value;
                 const bankName = document.getElementById('bankName').value;
+                const actualCost = parseFloat(document.getElementById('actualProcurementCost')?.value);
                 
                 if (!grrFile || !poFile) {
                     alert('Please upload both GRR and PO/Invoice documents');
+                    return;
+                }
+
+                if (!actualCost || actualCost <= 0) {
+                    alert('Please enter the actual procurement cost.');
                     return;
                 }
                 
@@ -2748,6 +3135,19 @@
                 if (!this.validateAccountNumber(accountNumber)) {
                     alert('Account number must be exactly 10 digits');
                     return;
+                }
+
+                // Warn if over budget before proceeding
+                const variance = cn.estimatedCost - actualCost;
+                if (variance < -0.01) {
+                    const over = Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    if (!confirm(
+                        `⚠️ Over Budget Warning\n\n` +
+                        `Staff estimated: ₦${cn.estimatedCost.toLocaleString()}\n` +
+                        `Actual cost: ₦${actualCost.toLocaleString()}\n` +
+                        `Over by: ₦${over}\n\n` +
+                        `Finance will see this variance. Continue?`
+                    )) return;
                 }
                 
                 try {
@@ -2770,7 +3170,9 @@
                             grrFileName: grrData.fileName,
                             poFileUrl: poData.url,
                             poFileName: poData.fileName,
-                            procurementNotes: notes
+                            procurementNotes: notes,
+                            actualProcurementCost: actualCost,
+                            procurementVariance: variance
                         })
                         .eq('refNumber', refNumber);
                     
@@ -2782,9 +3184,9 @@
                         conceptNoteRef: cn.refNumber,
                         projectCode: cn.projectCode,
                         staffName: cn.staffName,
-                        amount: cn.estimatedCost,
+                        amount: actualCost,
                         paymentMethod: 'bank_transfer',
-                        justification: `Procurement completed by ${this.currentUser}. ${notes}`,
+                        justification: `Procurement completed by ${this.currentUser}. Estimated: ₦${cn.estimatedCost.toLocaleString()} | Actual: ₦${actualCost.toLocaleString()} | Variance: ${variance >= 0 ? '+' : ''}₦${variance.toLocaleString()}. ${notes}`,
                         accountName: accountName,
                         accountNumber: accountNumber,
                         bankName: bankName,
