@@ -1149,7 +1149,7 @@
                         case 'dashboard': this.renderDashboard(content); break;
                         case 'conceptNote': this.renderConceptNoteForm(content); break;
                         case 'payment': this.renderPaymentForm(content); break;
-                        case 'retirement': this.renderRetirementForm(content); break;
+                        case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
                         case 'approvals': this.renderApprovals(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
                         case 'settings': this.renderSettings(content); break;
@@ -1920,30 +1920,64 @@
                 }
             },
             
-            renderRetirementForm(content) {
+            async renderRetirementForm(content) {
                 const userRole = this.getUserRole();
 
-                const paidPayments = this.data.payments.filter(p => {
-                    if (p.status !== 'paid') return false;
+                // ── Fetch fresh from DB so we never miss rejected retirements ──
+                // Payments: staff sees own; procurement sees all with retirementresponsibility=procurement
+                let freshPayments = [];
+                let freshRetirements = [];
+
+                try {
+                    if (userRole === 'procurement') {
+                        const { data: procPay } = await supabaseClient
+                            .from('payments')
+                            .select('*')
+                            .eq('status', 'paid')
+                            .eq('retirementresponsibility', 'procurement');
+                        freshPayments = procPay || [];
+                    } else {
+                        const { data: staffPay } = await supabaseClient
+                            .from('payments')
+                            .select('*')
+                            .eq('staffName', this.currentUser)
+                            .eq('status', 'paid');
+                        freshPayments = staffPay || [];
+                    }
+
+                    // Fetch ALL retirements for the relevant payment refs
+                    const payRefs = freshPayments.map(p => p.refNumber);
+                    if (payRefs.length > 0) {
+                        const { data: rets } = await supabaseClient
+                            .from('retirements')
+                            .select('*')
+                            .in('paymentRef', payRefs);
+                        freshRetirements = rets || [];
+                    }
+                } catch(e) {
+                    console.error('Retirement form fetch error:', e);
+                    // Fall back to cached data
+                    freshPayments   = this.data.payments;
+                    freshRetirements = this.data.retirements;
+                }
+
+                const paidPayments = freshPayments.filter(p => {
                     if (!p.paidDate) return false;
 
                     // Allow resubmission if the only existing retirement was rejected
-                    const existingRetirement = this.data.retirements.find(r => r.paymentRef === p.refNumber);
+                    const existingRetirement = freshRetirements.find(r => r.paymentRef === p.refNumber);
                     if (existingRetirement && existingRetirement.status !== 'rejected') return false;
 
-                    if (p.staffName === this.currentUser) {
-                        return p.retirementresponsibility === 'staff';
-                    }
                     if (userRole === 'procurement') {
                         return p.retirementresponsibility === 'procurement';
                     }
-                    return false;
+                    return p.staffName === this.currentUser && p.retirementresponsibility === 'staff';
                 });
 
                 // Build map of paymentRef → rejected retirement for UX hints
                 const rejectedRetirementMap = {};
                 paidPayments.forEach(p => {
-                    const rejected = this.data.retirements.find(
+                    const rejected = freshRetirements.find(
                         r => r.paymentRef === p.refNumber && r.status === 'rejected'
                     );
                     if (rejected) rejectedRetirementMap[p.refNumber] = rejected;
