@@ -1922,26 +1922,33 @@
             
             renderRetirementForm(content) {
                 const userRole = this.getUserRole();
-                const myPayments = this.getMyPayments();
-                
+
                 const paidPayments = this.data.payments.filter(p => {
                     if (p.status !== 'paid') return false;
                     if (!p.paidDate) return false;
-                    if (this.data.retirements.find(r => r.paymentRef === p.refNumber)) return false;
+
+                    // Allow resubmission if the only existing retirement was rejected
+                    const existingRetirement = this.data.retirements.find(r => r.paymentRef === p.refNumber);
+                    if (existingRetirement && existingRetirement.status !== 'rejected') return false;
 
                     if (p.staffName === this.currentUser) {
-                        return (
-                            p.staffName === this.currentUser &&
-                            p.retirementresponsibility === 'staff'
-                        );
+                        return p.retirementresponsibility === 'staff';
                     }
-
                     if (userRole === 'procurement') {
                         return p.retirementresponsibility === 'procurement';
                     }
-
                     return false;
                 });
+
+                // Build map of paymentRef → rejected retirement for UX hints
+                const rejectedRetirementMap = {};
+                paidPayments.forEach(p => {
+                    const rejected = this.data.retirements.find(
+                        r => r.paymentRef === p.refNumber && r.status === 'rejected'
+                    );
+                    if (rejected) rejectedRetirementMap[p.refNumber] = rejected;
+                });
+                this._rejectedRetirementMap = rejectedRetirementMap;
                 
                 content.innerHTML = `
                     <div class="header">
@@ -1949,6 +1956,13 @@
                         <p>${userRole === 'procurement' ? 'Retire procured activities' : 'Retire advance payments (available 5 days after payment)'}</p>
                     </div>
                     
+                    ${Object.keys(rejectedRetirementMap).length > 0 ? `
+                        <div class="alert-badge danger" style="display:block; margin-bottom:16px;">
+                            ⚠️ One or more of your previous retirements were <strong>rejected by Finance</strong>.
+                            Please review the rejection reason shown below and resubmit.
+                        </div>
+                    ` : ''}
+
                     ${paidPayments.length === 0 ? `
                         <div class="empty-state">
                             <h3>No payments to retire</h3>
@@ -1964,9 +1978,22 @@
                                     <option value="">Choose a payment</option>
                                     ${paidPayments.map(p => {
                                         const daysSince = Math.floor((Date.now() - new Date(p.paidDate)) / (1000 * 60 * 60 * 24));
-                                        return `<option value="${p.refNumber}">${p.refNumber} - ₦${p.amount.toLocaleString()} (Paid ${daysSince} days ago)</option>`;
+                                        const wasRejected = rejectedRetirementMap[p.refNumber];
+                                        const label = wasRejected
+                                            ? `${p.refNumber} - ₦${p.amount.toLocaleString()} ⚠️ RESUBMISSION (previously rejected)`
+                                            : `${p.refNumber} - ₦${p.amount.toLocaleString()} (Paid ${daysSince} days ago)`;
+                                        return `<option value="${p.refNumber}">${label}</option>`;
                                     }).join('')}
                                 </select>
+                            </div>
+
+                            <!-- Rejection reason panel — shown when resubmitting a rejected retirement -->
+                            <div id="rejectionReasonPanel" class="form-group full-width" style="display:none;">
+                                <div style="background:#FFEBEE; border:1px solid #FFCDD2; border-radius:8px; padding:16px;">
+                                    <strong style="color:var(--danger);">❌ Finance Rejection Reason:</strong>
+                                    <p id="rejectionReasonText" style="margin-top:8px; color:#B71C1C; font-size:14px;"></p>
+                                    <p style="margin-top:8px; font-size:12px; color:#C62828;">Please address the above in your resubmission.</p>
+                                </div>
                             </div>
 
                             <!-- ── LINE ITEM BREAKDOWN TABLE (injected by loadPaymentDetails) ── -->
@@ -2020,6 +2047,20 @@
                 app._retirementPaidAmount = payment.amount;
                 app._retirementIsProcurement = isProcurement;
                 app._retirementLineCount = 1;
+
+                // Show rejection reason panel if this is a resubmission
+                const rejPanel = document.getElementById('rejectionReasonPanel');
+                const rejText  = document.getElementById('rejectionReasonText');
+                const rejMap   = app._rejectedRetirementMap || {};
+                if (rejPanel && rejText) {
+                    const prevRejected = rejMap[refNumber];
+                    if (prevRejected) {
+                        rejText.textContent = prevRejected.rejectionReason || 'No reason provided.';
+                        rejPanel.style.display = 'block';
+                    } else {
+                        rejPanel.style.display = 'none';
+                    }
+                }
 
                 const daysSince = payment.paidDate
                     ? Math.floor((Date.now() - new Date(payment.paidDate)) / (1000 * 60 * 60 * 24))
@@ -2600,6 +2641,9 @@
                                                         📎 Download Receipt
                                                     </button><br>
                                                 ` : ''}
+                                                <button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">
+                                                    📄 View Concept Note
+                                                </button><br>
                                                 <button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">
                                                     ✓ Approve Retirement
                                                 </button>
@@ -3379,6 +3423,29 @@
                 `;
             },
             
+            // Finance helper: view linked concept note from a paymentRef
+            async viewConceptNoteFromPayment(paymentRef) {
+                let payment = this.data.payments.find(p => p.refNumber === paymentRef);
+
+                if (!payment) {
+                    const { data, error } = await supabaseClient
+                        .from('payments')
+                        .select('*')
+                        .eq('refNumber', paymentRef)
+                        .single();
+                    if (error || !data) { alert('Payment not found.'); return; }
+                    payment = data;
+                }
+
+                if (!payment.conceptNoteRef) {
+                    alert('No concept note is linked to this payment.');
+                    return;
+                }
+
+                // viewConceptNoteDetails already fetches from DB if not in local cache
+                await this.viewConceptNoteDetails(payment.conceptNoteRef);
+            },
+
             async rejectPayment(refNumber) {
                 const reason = prompt('Please provide a reason for rejection:');
                 if (!reason) return;
