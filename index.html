@@ -668,7 +668,6 @@
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 12px;
-            cursor: pointer;
             transition: all 0.2s;
         }
         
@@ -1357,7 +1356,7 @@
                             ${myConceptNotes.slice(0, 5).map(cn => {
                                 const progress = this.getConceptNoteProgress(cn);
                                 return `
-                                    <div class="tracking-card" onclick="app.showConceptNoteTracking('${cn.refNumber}')">
+                                    <div class="tracking-card">
                                         <div class="tracking-header">
                                             <div>
                                                 <span class="tracking-ref">${cn.refNumber}</span>
@@ -1374,7 +1373,10 @@
                                                     ${progress.currentStep}
                                                 </div>
                                             </div>
-                                            <span class="status-badge status-${cn.status}">${cn.status}</span>
+                                            <span class="status-badge status-${cn.status}" style="margin-right: 12px;">${cn.status}</span>
+                                            <button onclick="app.showConceptNoteTracking('${cn.refNumber}')" style="padding: 6px 14px; background: none; border: 1px solid var(--primary); border-radius: 6px; color: var(--primary); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                                                📄 View Details
+                                            </button>
                                         </div>
                                     </div>
                                 `;
@@ -1597,6 +1599,47 @@
             },
             
             renderConceptNoteForm(content) {
+                // ── CHANGE 2: Block submission if staff has outstanding unretired advances ──
+                const myPayments = this.getMyPayments();
+                const myRetirements = this.getMyRetirements();
+                const unretiredPayments = myPayments.filter(p =>
+                    p.status === 'paid' && !myRetirements.find(r => r.paymentRef === p.refNumber)
+                );
+
+                if (unretiredPayments.length > 0) {
+                    content.innerHTML = `
+                        <div class="header">
+                            <h2>Create Concept Note</h2>
+                            <p>Step 1: Develop your concept note or Terms of Reference</p>
+                        </div>
+                        <div style="background: #FFEBEE; border: 1px solid #FFCDD2; border-radius: 12px; padding: 32px; text-align: center; max-width: 600px;">
+                            <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
+                            <h3 style="color: var(--danger); font-family: 'Archivo', sans-serif; margin-bottom: 12px;">Submission Blocked</h3>
+                            <p style="color: #B71C1C; font-size: 14px; margin-bottom: 16px;">
+                                You have <strong>${unretiredPayments.length} outstanding unretired advance${unretiredPayments.length > 1 ? 's' : ''}</strong>.
+                                You must retire ${unretiredPayments.length > 1 ? 'all of them' : 'it'} before submitting a new concept note.
+                            </p>
+                            <div style="background: white; border-radius: 8px; padding: 16px; margin-bottom: 20px; text-align: left;">
+                                ${unretiredPayments.map(p => `
+                                    <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #FFCDD2; font-size: 13px;">
+                                        <span style="font-weight: 600; color: #B71C1C;">${p.refNumber}</span>
+                                        <span style="color: var(--text);">₦${p.amount.toLocaleString()}</span>
+                                        <span style="color: var(--text-muted);">Paid ${p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '—'}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <button class="btn btn-primary" onclick="app.showView('retirement')">
+                                Submit Retirement Now →
+                            </button>
+                            <button class="btn btn-secondary" onclick="app.showView('dashboard')" style="margin-left: 12px;">
+                                Back to Dashboard
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+                // ── END CHANGE 2 ──
+
                 content.innerHTML = `
                     <div class="header">
                         <h2>Create Concept Note</h2>
