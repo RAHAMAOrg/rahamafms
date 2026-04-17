@@ -1226,9 +1226,11 @@
                     }
                 }
                 
-                const unretiredPayments = myPayments.filter(p => 
-                    p.status === 'paid' && !myRetirements.find(r => r.paymentRef === p.refNumber)
-                );
+               const unretiredPayments = myPayments.filter(p =>
+    p.status === 'paid'
+    && (p.retirementresponsibility === 'staff' || !p.retirementresponsibility)
+    && !myRetirements.find(r => r.paymentRef === p.refNumber)
+);
                 
                 const overdueRetirements = unretiredPayments.filter(p => {
                     if (!p.paidDate) return false;
@@ -2016,7 +2018,8 @@
                     if (userRole === 'procurement') {
                         return p.retirementresponsibility === 'procurement';
                     }
-                    return p.staffName === this.currentUser && p.retirementresponsibility === 'staff';
+                   return p.staffName === this.currentUser
+    && (p.retirementresponsibility === 'staff' || !p.retirementresponsibility);
                 });
 
                 // Build map of paymentRef → rejected retirement for UX hints
