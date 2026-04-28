@@ -189,6 +189,7 @@
                 <li><button onclick="app.showView('retirement')" data-view="retirement">Submit Retirement</button></li>
                 <li><button onclick="app.showView('approvals')" data-view="approvals">My Approvals</button></li>
                 <li><button id="reportsBtn" onclick="app.showView('reports')" data-view="reports">Reports & Budget</button></li>
+                <li><button id="auditBtn" onclick="app.showView('audit')" data-view="audit">Audit Trail</button></li>
                 <li><button onclick="app.showView('settings')" data-view="settings">Settings</button></li>
                 <li><button onclick="window.location.href='grants-tracker.html'" style="color:#059669;font-weight:600;">📊 Project Tracker</button></li>
             </ul>
@@ -249,6 +250,10 @@
                     const btn = document.getElementById('reportsBtn');
                     if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
                         if (btn) btn.style.display = 'none';
+                    }
+                    const auditBtn = document.getElementById('auditBtn');
+                    if (!['budgetOwner','ed','finance'].includes(role)) {
+                        if (auditBtn) auditBtn.style.display = 'none';
                     }
                 }
                 this.showView('dashboard');
@@ -449,6 +454,7 @@
                         case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
                         case 'approvals': this.renderApprovals(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
+                        case 'audit': this.renderAuditTrail(content).catch(e => console.error(e)); break;
                         case 'settings': this.renderSettings(content); break;
                     }
                 }, 100);
@@ -1410,8 +1416,118 @@
                 window.URL.revokeObjectURL(url);
             },
 
+            async renderAuditTrail(content) {
+                const role = this.getUserRole();
+                if (!['budgetOwner','ed','finance'].includes(role)) {
+                    content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view the audit trail.</p></div>`;
+                    return;
+                }
+                content.innerHTML = `<div class="header"><h2>Audit Trail</h2><p>Full record of all approval and financial actions</p></div><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>`;
+                try {
+                    const { data: logs, error } = await supabaseClient
+                        .from('audit_log')
+                        .select('*')
+                        .order('changedAt', { ascending: false })
+                        .limit(200);
+                    if (error) throw error;
+
+                    // Filters state
+                    const tables = [...new Set((logs || []).map(l => l.tableName))];
+                    const actors = [...new Set((logs || []).map(l => l.changedBy))];
+
+                    const renderTable = (rows) => {
+                        if (!rows.length) return `<div class="empty-state" style="padding:32px;"><p>No audit records match the current filter.</p></div>`;
+                        return `<div class="table-container"><table><thead><tr>
+                            <th>Date & Time</th><th>Table</th><th>Reference</th><th>Action</th><th>Actor</th><th>Details</th>
+                        </tr></thead><tbody>${rows.map(l => {
+                            const actionColor = l.action.includes('approved') || l.action.includes('paid') ? 'var(--success)' :
+                                l.action.includes('reject') ? 'var(--danger)' : 'var(--warning)';
+                            return `<tr>
+                                <td style="white-space:nowrap;font-size:12px;">${new Date(l.changedAt).toLocaleString()}</td>
+                                <td><span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">${l.tableName || '—'}</span></td>
+                                <td><span style="font-weight:600;color:var(--primary);font-size:13px;">${l.refNumber || '—'}</span></td>
+                                <td><span style="font-weight:700;color:${actionColor};font-size:12px;text-transform:uppercase;">${l.action || '—'}</span></td>
+                                <td style="font-size:13px;">${l.changedBy || '—'}</td>
+                                <td style="font-size:12px;color:var(--text-muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;" title="${(l.details||'').replace(/"/g,'&quot;')}">${l.details || '—'}</td>
+                            </tr>`;
+                        }).join('')}</tbody></table></div>`;
+                    };
+
+                    content.innerHTML = `
+                        <div class="header"><h2>Audit Trail</h2><p>All approval and payment actions — ${(logs||[]).length} records</p></div>
+                        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:24px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+                            <div class="form-group" style="margin:0;min-width:160px;">
+                                <label style="font-size:12px;">Filter by Table</label>
+                                <select id="auditTableFilter" onchange="app._applyAuditFilters()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;">
+                                    <option value="">All tables</option>
+                                    ${tables.map(t => `<option value="${t}">${t}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin:0;min-width:180px;">
+                                <label style="font-size:12px;">Filter by Actor</label>
+                                <select id="auditActorFilter" onchange="app._applyAuditFilters()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;">
+                                    <option value="">All actors</option>
+                                    ${actors.map(a => `<option value="${a}">${a}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+                                <label style="font-size:12px;">Search Reference / Details</label>
+                                <input id="auditSearchInput" type="text" placeholder="e.g. CN17773..." oninput="app._applyAuditFilters()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;width:100%;">
+                            </div>
+                            <button class="btn btn-secondary" onclick="app._exportAuditCSV()" style="height:38px;padding:0 16px;font-size:13px;">⬇ Export CSV</button>
+                        </div>
+                        <div id="auditTableContainer">${renderTable(logs||[])}</div>`;
+
+                    // Store logs for client-side filtering
+                    app._auditLogs = logs || [];
+                    app._renderAuditTable = renderTable;
+                } catch(e) {
+                    content.innerHTML = `<div class="header"><h2>Audit Trail</h2></div><div class="alert-badge danger">⚠️ Failed to load audit log: ${e.message}</div>`;
+                }
+            },
+
+            _applyAuditFilters() {
+                const tableF = document.getElementById('auditTableFilter')?.value || '';
+                const actorF = document.getElementById('auditActorFilter')?.value || '';
+                const search = (document.getElementById('auditSearchInput')?.value || '').toLowerCase();
+                const filtered = (app._auditLogs || []).filter(l => {
+                    if (tableF && l.tableName !== tableF) return false;
+                    if (actorF && l.changedBy !== actorF) return false;
+                    if (search && !(
+                        (l.refNumber||'').toLowerCase().includes(search) ||
+                        (l.details||'').toLowerCase().includes(search) ||
+                        (l.action||'').toLowerCase().includes(search)
+                    )) return false;
+                    return true;
+                });
+                const container = document.getElementById('auditTableContainer');
+                if (container) container.innerHTML = app._renderAuditTable(filtered);
+            },
+
+            _exportAuditCSV() {
+                const logs = app._auditLogs || [];
+                if (!logs.length) { alert('No audit records to export.'); return; }
+                const csv = [['Date & Time','Table','Reference','Action','Actor','Details'].join(',')];
+                logs.forEach(l => {
+                    csv.push([
+                        `"${new Date(l.changedAt).toLocaleString()}"`,
+                        l.tableName || '',
+                        l.refNumber || '',
+                        l.action || '',
+                        `"${l.changedBy || ''}"`,
+                        `"${(l.details||'').replace(/"/g,'""')}"`
+                    ].join(','));
+                });
+                const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = `rahama_audit_trail_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            },
+
             async downloadConceptNoteFile(refNumber) {
-                // Fetch full records from Supabase so budget owner / procurement / finance all see complete history
+                // Fetch full records from Supabase so all roles see complete history
                 const { data: cnArr } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber);
                 const cn = cnArr && cnArr[0];
                 if (!cn) { alert('Concept note not found.'); return; }
@@ -1424,16 +1540,166 @@
                     retirements = ret || [];
                 }
 
-                const procurementSection = cn.requiresProcurement === 'yes' ? `\n================================================\nPROCUREMENT DETAILS\n================================================\n\nProcurement Completed: ${cn.procurementComplete ? new Date(cn.procurementComplete).toLocaleString() : 'N/A'}\nActual Procurement Cost: ${cn.actualProcurementCost != null ? '₦' + Number(cn.actualProcurementCost).toLocaleString() : 'N/A'}\nProcurement Variance: ${cn.procurementVariance != null ? (cn.procurementVariance >= 0 ? '+' : '') + '₦' + Number(cn.procurementVariance).toLocaleString() : 'N/A'}\nProcurement Notes: ${cn.procurementNotes || 'N/A'}\nGRR File: ${cn.grrFileName || 'N/A'}\nPO File: ${cn.poFileName || 'N/A'}\nRetirement Responsibility: ${cn.retirementresponsibility || 'staff'}\n` : '';
+                // ── Build a printable HTML page with the RAHAMA logo ──────────────
+                const logoUrl = new URL('RAHAMA Empowerment Logo Design (3).png', window.location.href).href;
+                const fmtMoney = v => v != null ? '₦' + Number(v).toLocaleString() : 'N/A';
+                const fmtDate  = v => v ? new Date(v).toLocaleString() : 'N/A';
+                const statusColor = { approved: '#059669', pending: '#F57C00', rejected: '#D32F2F', paid: '#1976D2', retired: '#7B1FA2' };
+                const sc = statusColor[cn.status] || '#616161';
 
-                const content = `RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE\n================================================\n\nFULL CONCEPT NOTE HISTORY RECORD\n------------------------------------------------\n\nReference Number: ${cn.refNumber}\nStaff Name: ${cn.staffName}\nProject Code: ${cn.projectCode}\nEstimated Cost: ₦${Number(cn.estimatedCost).toLocaleString()}\nSubmitted Date: ${new Date(cn.submittedDate).toLocaleString()}\nStatus: ${cn.status}\n\n================================================\nCONCEPT NOTE DETAILS\n================================================\n\nActivity Title:\n${cn.activityTitle}\n\nObjective:\n${cn.objective}\n\nDescription:\n${cn.description}\n\nRequires Procurement:\n${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}\n\n================================================\nAPPROVAL HISTORY\n================================================\n\nApproved By: ${cn.approvedBy || 'N/A'}\nApproved Date: ${cn.approvedDate ? new Date(cn.approvedDate).toLocaleString() : 'N/A'}\nBudget Owner Note: ${cn.budgetOwnerNote || 'N/A'}\nForwarded To ED: ${cn.forwardedToED ? new Date(cn.forwardedToED).toLocaleString() : 'N/A'}\nSent To Procurement: ${cn.sentToProcurement ? new Date(cn.sentToProcurement).toLocaleString() : 'N/A'}\n${procurementSection}\n================================================\nPAYMENT HISTORY\n================================================\n${payments.length === 0 ? 'No payment records found.\n' : payments.map(p => `\nPayment Ref: ${p.refNumber}\nAmount: ₦${Number(p.amount).toLocaleString()}\nStatus: ${p.status}\nRetirement Responsibility: ${p.retirementresponsibility || 'staff'}\nRequested: ${p.requestDate ? new Date(p.requestDate).toLocaleString() : 'N/A'}\nPaid: ${p.paidDate ? new Date(p.paidDate).toLocaleString() : 'N/A'}\nProcessed By: ${p.processedBy || 'N/A'}\n------------------------------------------------`).join('\n')}\n\n================================================\nRETIREMENT HISTORY\n================================================\n${retirements.length === 0 ? 'No retirement records found.\n' : retirements.map(r => `\nRetirement Ref: ${r.refNumber}\nPayment Ref: ${r.paymentRef}\nActual Spent: ₦${Number(r.actualSpent).toLocaleString()}\nReturned: ₦${Number(r.amountReturned).toLocaleString()}\nStatus: ${r.status}\nSubmitted: ${r.submittedDate ? new Date(r.submittedDate).toLocaleString() : 'N/A'}\nApproved By: ${r.approvedBy || 'N/A'}\nFinance Approved By: ${r.financeApprovedBy || 'N/A'}\nFinance Approved Date: ${r.financeApprovedDate ? new Date(r.financeApprovedDate).toLocaleString() : 'N/A'}\n------------------------------------------------`).join('\n')}`;
+                const procSection = cn.requiresProcurement === 'yes' ? `
+                    <div class="section">
+                        <div class="section-title">PROCUREMENT DETAILS</div>
+                        <div class="grid2">
+                            <div class="field"><span class="label">Procurement Completed</span><span class="value">${fmtDate(cn.procurementComplete)}</span></div>
+                            <div class="field"><span class="label">Actual Procurement Cost</span><span class="value">${fmtMoney(cn.actualProcurementCost)}</span></div>
+                            <div class="field"><span class="label">Variance</span><span class="value">${cn.procurementVariance != null ? (cn.procurementVariance >= 0 ? '+' : '') + fmtMoney(cn.procurementVariance) : 'N/A'}</span></div>
+                            <div class="field"><span class="label">Retirement Responsibility</span><span class="value">${cn.retirementresponsibility || 'staff'}</span></div>
+                            <div class="field full"><span class="label">Procurement Notes</span><span class="value">${cn.procurementNotes || 'N/A'}</span></div>
+                            <div class="field"><span class="label">GRR File</span><span class="value">${cn.grrFileName || 'N/A'}</span></div>
+                            <div class="field"><span class="label">PO File</span><span class="value">${cn.poFileName || 'N/A'}</span></div>
+                        </div>
+                    </div>` : '';
 
-                const blob = new Blob([content], { type: 'text/plain' });
+                const paymentsSection = payments.length === 0
+                    ? `<div class="empty-row">No payment records found.</div>`
+                    : payments.map(p => `
+                        <div class="record-card">
+                            <div class="grid2">
+                                <div class="field"><span class="label">Payment Ref</span><span class="value mono">${p.refNumber}</span></div>
+                                <div class="field"><span class="label">Amount</span><span class="value">${fmtMoney(p.amount)}</span></div>
+                                <div class="field"><span class="label">Status</span><span class="value" style="color:${statusColor[p.status]||'#616161'};font-weight:700;text-transform:uppercase;">${p.status}</span></div>
+                                <div class="field"><span class="label">Retirement Responsibility</span><span class="value">${p.retirementresponsibility || 'staff'}</span></div>
+                                <div class="field"><span class="label">Requested</span><span class="value">${fmtDate(p.requestDate)}</span></div>
+                                <div class="field"><span class="label">Paid</span><span class="value">${fmtDate(p.paidDate)}</span></div>
+                                <div class="field"><span class="label">Processed By</span><span class="value">${p.processedBy || 'N/A'}</span></div>
+                            </div>
+                        </div>`).join('');
+
+                const retirementsSection = retirements.length === 0
+                    ? `<div class="empty-row">No retirement records found.</div>`
+                    : retirements.map(r => `
+                        <div class="record-card">
+                            <div class="grid2">
+                                <div class="field"><span class="label">Retirement Ref</span><span class="value mono">${r.refNumber}</span></div>
+                                <div class="field"><span class="label">Payment Ref</span><span class="value mono">${r.paymentRef}</span></div>
+                                <div class="field"><span class="label">Actual Spent</span><span class="value">${fmtMoney(r.actualSpent)}</span></div>
+                                <div class="field"><span class="label">Amount Returned</span><span class="value">${fmtMoney(r.amountReturned)}</span></div>
+                                <div class="field"><span class="label">Status</span><span class="value" style="color:${statusColor[r.status]||'#616161'};font-weight:700;text-transform:uppercase;">${r.status}</span></div>
+                                <div class="field"><span class="label">Submitted</span><span class="value">${fmtDate(r.submittedDate)}</span></div>
+                                <div class="field"><span class="label">Approved By</span><span class="value">${r.approvedBy || r.financeApprovedBy || 'N/A'}</span></div>
+                                <div class="field"><span class="label">Approved Date</span><span class="value">${fmtDate(r.approvedDate || r.financeApprovedDate)}</span></div>
+                                ${r.rejectionReason ? `<div class="field full"><span class="label" style="color:var(--danger)">Rejection Reason</span><span class="value" style="color:#B71C1C;">${r.rejectionReason}</span></div>` : ''}
+                                ${r.expenditureDetails ? `<div class="field full"><span class="label">Expenditure Details</span><span class="value" style="white-space:pre-wrap;">${r.expenditureDetails}</span></div>` : ''}
+                            </div>
+                        </div>`).join('');
+
+                const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${cn.refNumber} — Concept Note</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Archivo:wght@600;700&display=swap');
+  :root { --primary:#059669; --danger:#D32F2F; --border:#E0E0E0; --bg:#F5F7FA; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; color:#1A1A1A; background:#fff; padding:48px; max-width:900px; margin:0 auto; }
+  .header { display:flex; align-items:center; gap:24px; border-bottom:3px solid var(--primary); padding-bottom:24px; margin-bottom:32px; }
+  .logo { width:72px; height:72px; object-fit:contain; flex-shrink:0; }
+  .org-name { font-family:'Archivo',sans-serif; font-size:22px; font-weight:700; color:var(--primary); line-height:1.2; }
+  .org-sub { font-size:12px; color:#616161; margin-top:4px; letter-spacing:0.5px; text-transform:uppercase; }
+  .doc-title { margin-left:auto; text-align:right; }
+  .doc-title h2 { font-family:'Archivo',sans-serif; font-size:16px; color:#1A1A1A; }
+  .doc-title p { font-size:12px; color:#616161; margin-top:4px; }
+  .meta-bar { display:flex; flex-wrap:wrap; gap:16px; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:16px 20px; margin-bottom:28px; align-items:center; }
+  .meta-item { display:flex; flex-direction:column; gap:3px; }
+  .meta-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#616161; }
+  .meta-value { font-size:15px; font-weight:700; color:#1A1A1A; }
+  .status-chip { padding:4px 14px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:${sc}; background:${sc}22; border:1px solid ${sc}55; }
+  .section { margin-bottom:28px; }
+  .section-title { font-family:'Archivo',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--primary); border-bottom:2px solid var(--primary); padding-bottom:6px; margin-bottom:16px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; }
+  .field { display:flex; flex-direction:column; gap:4px; }
+  .field.full { grid-column:1/-1; }
+  .label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; color:#616161; }
+  .value { font-size:14px; color:#1A1A1A; line-height:1.5; }
+  .mono { font-family:monospace; font-size:13px; color:var(--primary); }
+  .record-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px 20px; margin-bottom:12px; }
+  .empty-row { color:#9E9E9E; font-style:italic; font-size:14px; padding:12px 0; }
+  .footer { margin-top:48px; border-top:1px solid var(--border); padding-top:16px; display:flex; justify-content:space-between; font-size:11px; color:#9E9E9E; }
+  @media print { body { padding:24px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <img class="logo" src="${logoUrl}" alt="RAHAMA Logo" onerror="this.style.display='none'">
+  <div>
+    <div class="org-name">RAHAMA</div>
+    <div class="org-sub">Girl Child &amp; Women Empowerment Initiative</div>
+  </div>
+  <div class="doc-title">
+    <h2>Concept Note — Full History</h2>
+    <p>Generated ${new Date().toLocaleString()}</p>
+  </div>
+</div>
+
+<div class="meta-bar">
+  <div class="meta-item"><span class="meta-label">Reference</span><span class="meta-value mono">${cn.refNumber}</span></div>
+  <div class="meta-item"><span class="meta-label">Project</span><span class="meta-value">${cn.projectCode}</span></div>
+  <div class="meta-item"><span class="meta-label">Estimated Cost</span><span class="meta-value">${fmtMoney(cn.estimatedCost)}</span></div>
+  <div class="meta-item"><span class="meta-label">Submitted</span><span class="meta-value">${new Date(cn.submittedDate).toLocaleDateString()}</span></div>
+  <div class="meta-item"><span class="meta-label">Status</span><span class="status-chip">${cn.status}</span></div>
+</div>
+
+<div class="section">
+  <div class="section-title">Concept Note Details</div>
+  <div class="grid2">
+    <div class="field"><span class="label">Staff Name</span><span class="value">${cn.staffName}</span></div>
+    <div class="field"><span class="label">Requires Procurement</span><span class="value">${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}</span></div>
+    <div class="field full"><span class="label">Activity Title</span><span class="value" style="font-weight:600;font-size:15px;">${cn.activityTitle}</span></div>
+    <div class="field full"><span class="label">Objective</span><span class="value" style="white-space:pre-wrap;">${cn.objective}</span></div>
+    <div class="field full"><span class="label">Description</span><span class="value" style="white-space:pre-wrap;">${cn.description}</span></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Approval History</div>
+  <div class="grid2">
+    <div class="field"><span class="label">Approved By</span><span class="value">${cn.approvedBy || 'N/A'}</span></div>
+    <div class="field"><span class="label">Approved Date</span><span class="value">${fmtDate(cn.approvedDate)}</span></div>
+    <div class="field"><span class="label">Forwarded to ED</span><span class="value">${fmtDate(cn.forwardedToED)}</span></div>
+    <div class="field"><span class="label">Sent to Procurement</span><span class="value">${fmtDate(cn.sentToProcurement)}</span></div>
+    ${cn.budgetOwnerNote ? `<div class="field full"><span class="label">Budget Owner Note</span><span class="value">${cn.budgetOwnerNote}</span></div>` : ''}
+    ${cn.rejectionReason ? `<div class="field full"><span class="label" style="color:var(--danger)">Rejection Reason</span><span class="value" style="color:#B71C1C;">${cn.rejectionReason}</span></div>` : ''}
+  </div>
+</div>
+
+${procSection}
+
+<div class="section">
+  <div class="section-title">Payment History</div>
+  ${paymentsSection}
+</div>
+
+<div class="section">
+  <div class="section-title">Retirement History</div>
+  ${retirementsSection}
+</div>
+
+<div class="footer">
+  <span>RAHAMA Financial Management System</span>
+  <span>${cn.refNumber} | Printed by ${this.currentUser} | ${new Date().toLocaleString()}</span>
+</div>
+
+<script>window.onload = () => window.print();<\/script>
+</body>
+</html>`;
+
+                const blob = new Blob([html], { type: 'text/html' });
                 const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url; link.download = `${cn.refNumber}_Concept_Note_Full_History.txt`;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
+                const win = window.open(url, '_blank');
+                // Revoke after a short delay to allow print dialog
+                setTimeout(() => window.URL.revokeObjectURL(url), 60000);
             },
 
             async _logAudit(table, refNumber, action, details) {
