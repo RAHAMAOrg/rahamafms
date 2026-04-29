@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rahama Financial Management System</title>
     <link rel="icon" type="image/png" href="RAHAMA Empowerment Logo Design (3).png">
@@ -168,7 +169,39 @@
         .tracking-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .tracking-ref { font-weight: 700; color: #059669; }
         .tracking-amount { font-weight: 700; color: var(--text); }
-    </style>
+    
+        /* ── Signature Pad Modal ── */
+        .sig-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000; align-items:center; justify-content:center; }
+        .sig-modal-overlay.open { display:flex; }
+        .sig-modal { background:#fff; border-radius:16px; padding:32px; max-width:560px; width:96%; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+        .sig-modal h3 { font-family:'Archivo',sans-serif; font-size:18px; margin-bottom:6px; color:var(--text); }
+        .sig-modal p  { font-size:13px; color:var(--text-muted); margin-bottom:20px; }
+        #sigCanvas { border:2px solid var(--border); border-radius:8px; width:100%; touch-action:none; cursor:crosshair; display:block; background:#fafafa; }
+        .sig-canvas-hint { font-size:11px; color:var(--text-muted); margin-top:6px; text-align:center; }
+        .sig-modal-actions { display:flex; gap:10px; margin-top:20px; }
+        /* ── Audit Trail ── */
+        .audit-row { display:grid; grid-template-columns:160px 120px 120px 1fr 140px; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); font-size:13px; align-items:start; }
+        .audit-row.head { background:var(--bg); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); border-radius:8px 8px 0 0; }
+        .audit-action-badge { display:inline-block; padding:3px 10px; border-radius:10px; font-size:11px; font-weight:700; background:#E8F5E9; color:#1B5E20; }
+        .audit-action-badge.reject  { background:#FFEBEE; color:#B71C1C; }
+        .audit-action-badge.paid    { background:#E3F2FD; color:#0D47A1; }
+
+        
+        /* ── Vendor Sign Fullscreen ── */
+        .vendor-sign-overlay { display:none; position:fixed; inset:0; background:#fff; z-index:20000; flex-direction:column; overflow-y:auto; }
+        .vendor-sign-overlay.open { display:flex; }
+        .vendor-sign-header { background:#285B3C; color:#fff; padding:20px 24px; display:flex; align-items:center; gap:16px; flex-shrink:0; }
+        .vendor-sign-header h2 { font-family:'Archivo',sans-serif; font-size:18px; margin:0; }
+        .vendor-sign-body { flex:1; padding:24px; max-width:680px; margin:0 auto; width:100%; }
+        .vendor-items-table { width:100%; border-collapse:collapse; margin:16px 0; font-size:13px; }
+        .vendor-items-table th { background:#285B3C; color:#fff; padding:10px 12px; text-align:left; }
+        .vendor-items-table td { padding:9px 12px; border-bottom:1px solid #e0e0e0; }
+        .vendor-items-table tr:nth-child(even) td { background:#f9f9f9; }
+        .vendor-confirm-box { background:#E8F5E9; border:1px solid #A5D6A7; border-radius:10px; padding:16px 20px; margin:20px 0; font-size:13px; }
+        #vendorSigCanvas { border:2px solid #285B3C; border-radius:8px; width:100%; touch-action:none; cursor:crosshair; display:block; background:#fafafa; }
+        .remote-sign-modal { background:#fff; border-radius:16px; padding:28px; max-width:480px; width:96%; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+
+        </style>
 </head>
 <body>
     <div class="app">
@@ -234,6 +267,10 @@
             
             async init() {
                 this.loadStartTime = Date.now();
+                // ── Vendor signing intercept — no login needed ──
+                const _initParams = new URLSearchParams(window.location.search);
+                const _vendorToken = _initParams.get('vendorSign');
+                if (_vendorToken) { this._renderVendorSignPage(_vendorToken); return; }
                 this._setupOfflineDetection();
                 this._setupSessionTimeout();
                 const params = new URLSearchParams(window.location.search);
@@ -444,6 +481,7 @@
                 setTimeout(() => {
                     switch(viewName) {
                         case 'dashboard': this.renderDashboard(content); break;
+                        case 'auditTrail': this.renderAuditTrail(content).catch(e => console.error(e)); break;
                         case 'conceptNote': this.renderConceptNoteForm(content).catch(e => console.error(e)); break;
                         case 'payment': this.renderPaymentForm(content); break;
                         case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
@@ -630,10 +668,18 @@
                 const form = event.target; const formData = new FormData(form);
                 const amount = parseFloat(formData.get('estimatedCost'));
                 if (!this.validateAmount(amount)) { this.showError('estimatedCost', 'Please enter a valid amount'); return; }
+
+                // ── Capture staff signature before proceeding ──
+                const sigData = await this._showSignaturePad(
+                    'Staff Declaration',
+                    `I, ${this.currentUser}, confirm that the information in this concept note is accurate and complete.`
+                );
+                if (!sigData) return; // user cancelled
+
                 const submitBtn = form.querySelector('[type="submit"]');
                 if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
                 try {
-                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: 'budgetOwner', submittedDate: new Date().toISOString() };
+                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: 'budgetOwner', submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
                     const { data, error } = await supabaseClient.from('concept_notes').insert([conceptNote]).select();
                     if (error) throw error;
                     this.data.conceptNotes.unshift(data[0]); this.clearCache();
@@ -724,13 +770,33 @@
             
             async renderRetirementForm(content) {
                 const userRole = this.getUserRole();
+
+                // Procurement does not retire — all accountability is in documents uploaded
+                // during procurement completion (PO, Invoice, GRR, Receipt)
+                if (userRole === 'procurement') {
+                    content.innerHTML = `
+                        <div class="header"><h2>Submit Retirement</h2></div>
+                        <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:32px;max-width:560px;">
+                            <div style="font-size:40px;margin-bottom:16px;">✅</div>
+                            <h3 style="font-family:'Archivo',sans-serif;margin-bottom:10px;color:#1B5E20;">No Retirement Required for Procurement</h3>
+                            <p style="font-size:14px;color:#2E7D32;line-height:1.6;">
+                                Procurement activities are fully accounted for through the documents uploaded during completion —
+                                <strong>Purchase Order, Invoice, GRR, and Receipt</strong>.
+                                Finance reviews and pays directly from those documents.
+                            </p>
+                            <p style="font-size:13px;color:#388E3C;margin-top:12px;">If you have a document variance query, contact the Budget Owner directly.</p>
+                            <button class="btn btn-primary" style="margin-top:20px;" onclick="app.showView('approvals')">← Back to Approvals</button>
+                        </div>`;
+                    return;
+                }
+
                 let freshPayments = [];
                 let freshRetirements = [];
 
                 try {
-                    if (userRole === 'procurement') {
-                        const { data: procPay } = await supabaseClient.from('payments').select('*').eq('status', 'paid').eq('retirementresponsibility', 'procurement');
-                        freshPayments = procPay || [];
+                    if (false) {
+                        // procurement path removed
+                        freshPayments = [];
                     } else {
                         const { data: staffPay } = await supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).eq('status', 'paid');
                         freshPayments = staffPay || [];
@@ -819,15 +885,29 @@
                         <input type="number" name="actualSpent" id="actualSpent" style="display:none;" min="0" step="0.01" value="0">
                         <div class="form-group"><label>Amount to Return (₦)</label><input type="number" name="amountReturned" id="amountReturned" min="0" step="0.01" value="0"><span class="form-hint">Auto-filled from the breakdown above. Adjust if needed.</span></div>
                         <div class="form-group full-width"><label>Expenditure Details <span class="required">*</span></label><textarea name="expenditureDetails" id="expenditureDetails" required placeholder="Describe how the funds were spent — line items will be appended automatically"></textarea></div>
-                        <div class="form-group full-width">
-                            <label>Upload Receipts <span class="required">*</span></label>
-                            <div class="file-upload-area" id="retirementUploadArea" onclick="document.getElementById('retirementFile').click()"><p>📎 Click to upload receipt(s)</p><span class="form-hint">PDF, JPG, PNG — Max 5MB</span></div>
+                        <div class="form-group">
+                            <label>Upload Receipt <span class="required">*</span></label>
+                            <div class="file-upload-area" id="retirementUploadArea" onclick="document.getElementById('retirementFile').click()"><p>📎 Click to upload receipt(s)</p><span class="form-hint">Proof of payment — PDF, JPG, PNG — Max 5MB</span></div>
                             <input type="file" id="retirementFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleRetirementUpload(this)">
+                        </div>
+                        <div class="form-group">
+                            <label>Upload Invoice</label>
+                            <div class="file-upload-area" id="invoiceUploadArea" onclick="document.getElementById('invoiceFile').click()"><p>📄 Click to upload vendor invoice</p><span class="form-hint">Vendor's invoice for goods/services — PDF, JPG, PNG — Max 5MB</span></div>
+                            <input type="file" id="invoiceFile" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="app.handleInvoiceUpload(this)">
                         </div>
                         <div class="btn-group full-width"><button type="submit" class="btn btn-primary">Submit Retirement</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
                     </form>`}`;
             },
             
+            handleInvoiceUpload(input) {
+                const area = document.getElementById('invoiceUploadArea');
+                const file = input.files[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) { alert('File too large — max 5MB'); input.value = ''; return; }
+                area.classList.add('has-file');
+                area.innerHTML = `<p>✓ ${file.name}</p><span class="form-hint">${(file.size/1024).toFixed(1)} KB — Invoice ready to upload</span>`;
+            },
+
             loadPaymentDetails(refNumber) {
                 // ── ROOT-CAUSE FIX ──────────────────────────────────────────────────────
                 // Procurement-created payments have staffName = original staff member, not
@@ -1019,8 +1099,10 @@
                     if (lines.length) expTextarea.value = lines.join('\n');
                 }
                 const file = document.getElementById('retirementFile').files[0];
-                let receiptFileData = null;
+                const invoiceFile = document.getElementById('invoiceFile')?.files[0];
+                let receiptFileData = null, invoiceFileData = null;
                 if (file) receiptFileData = await this.uploadFile(file, 'retirements');
+                if (invoiceFile) invoiceFileData = await this.uploadFile(invoiceFile, 'retirements');
               try {
     const paymentRef = formData.get('paymentRef');
     const retirementPayload = {
@@ -1031,6 +1113,8 @@
         expenditureDetails: formData.get('expenditureDetails'),
         receiptFileUrl: receiptFileData?.url,
         receiptFileName: receiptFileData?.fileName,
+        invoiceFileUrl: invoiceFileData?.url,
+        invoiceFileName: invoiceFileData?.fileName,
         status: 'pending',
         submittedDate: new Date().toISOString(),
         rejectionReason: null,
@@ -1072,13 +1156,35 @@
             
             async renderApprovals(content) {
                 const role = this.getUserRole();
+                // Also fetch variance_review CNs from Supabase (not in local cache)
+                let varReviewCNs = [];
+                if (role === 'budgetOwner') {
+                    const { data: vr } = await supabaseClient.from('concept_notes').select('*')
+                        .eq('status', 'variance_review').eq('currentApprover', 'budgetOwner');
+                    varReviewCNs = vr || [];
+                    // merge into data so the template can access via allCNs
+                    varReviewCNs.forEach(c => {
+                        if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
+                            this.data.conceptNotes.push(c);
+                    });
+                }
+                // Also fetch variance_rejected CNs for procurement
+                if (role === 'procurement') {
+                    const { data: vrej } = await supabaseClient.from('concept_notes').select('*')
+                        .in('status', ['variance_rejected']).eq('currentApprover', 'procurement');
+                    (vrej || []).forEach(c => {
+                        if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
+                            this.data.conceptNotes.push(c);
+                    });
+                }
                 const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
-                    if (cn.status !== 'pending') return false;
+                    if (!['pending','variance_rejected'].includes(cn.status)) return false;
                     if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
                     if (role === 'ed' && cn.currentApprover === 'ed') return true;
                     if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
                     return false;
                 });
+                const allCNs = this.data.conceptNotes;
                 const pendingPayments = this.data.payments.filter(p => p.status === 'pending' && role === 'finance');
                 const pendingRetirements = this.data.retirements.filter(r => r.status === 'pending' && role === 'finance');
                 let historyCNs = [], historyPayments = [], historyRetirements = [];
@@ -1107,9 +1213,41 @@
                 content.innerHTML = `
                     <div class="header"><h2>My Approvals</h2><p>Items requiring your review and approval</p></div>
                     ${pendingConceptNotes.length === 0 && pendingPayments.length === 0 && pendingRetirements.length === 0 ? `<div class="empty-state"><h3>No pending approvals</h3><p>You don't have any items waiting for your approval.</p></div>` : ''}
-                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">→ Forward to ED (>₦1M)</button>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>` : role === 'procurement' ? `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>` : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${(() => {
+                        const varCNs = (allCNs || this.data.conceptNotes).filter(c => c.status === 'variance_review' && c.currentApprover === 'budgetOwner');
+                        if (!varCNs.length) return '';
+                        return `<div style="background:#FFF3E0;border:2px solid #FF9800;border-radius:12px;padding:20px;margin-bottom:28px;">
+                            <h3 style="font-family:'Archivo',sans-serif;margin-bottom:6px;color:#E65100;">🚨 Variance Escalations Requiring Approval (${varCNs.length})</h3>
+                            <p style="font-size:13px;color:#BF360C;margin-bottom:16px;">These procurement activities exceed the 20% variance threshold and cannot proceed to finance without your approval.</p>
+                            <div class="table-container"><table><thead><tr>
+                                <th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th>
+                                <th>Estimated</th><th>Actual Cost</th><th>Variance</th>
+                                <th>Justification</th><th>Escalated</th><th>Actions</th>
+                            </tr></thead><tbody>
+                            ${varCNs.map(cn => {
+                                const over = cn.estimatedCost > 0 ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '—';
+                                return \`<tr style="background:#FFF8E1;">
+                                    <td style="font-weight:600;">\${cn.refNumber}</td>
+                                    <td>\${cn.staffName}</td>
+                                    <td>\${cn.activityTitle}</td>
+                                    <td>\${cn.projectCode}</td>
+                                    <td>₦\${Number(cn.estimatedCost).toLocaleString()}</td>
+                                    <td style="font-weight:600;color:#C62626;">₦\${Number(cn.actualProcurementCost).toLocaleString()}</td>
+                                    <td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+\${over}%</span></td>
+                                    <td style="font-size:12px;max-width:200px;">\${cn.varianceJustification || '—'}</td>
+                                    <td style="font-size:12px;">\${cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—'}</td>
+                                    <td>
+                                        <button class="action-btn approve" onclick="app.resolveVarianceEscalation('\${cn.refNumber}', 'approve')" style="margin-bottom:6px;">✓ Approve Excess</button>
+                                        <button class="action-btn reject"  onclick="app.resolveVarianceEscalation('\${cn.refNumber}', 'reject')">✗ Reject — Re-source</button>
+                                    </td>
+                                </tr>\`;
+                            }).join('')}
+                            </tbody></table></div>
+                        </div>`;
+                    })()}
+                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">→ Forward to ED (>₦1M)</button>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
                     ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.projectCode || '-'}</td><td><span class="status-badge ${p.status === 'paid' ? 'status-paid' : 'status-rejected'}">${p.status === 'paid' ? 'Processed' : 'Rejected'}</span></td><td>${p.status === 'paid' ? (p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '-') : (p.rejectedDate ? new Date(p.rejectedDate).toLocaleDateString() : '-')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
                     ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Amount Spent</th><th>Outcome</th><th>Date</th></tr></thead><tbody>${historyRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td><span class="status-badge ${r.status === 'approved' ? 'status-approved' : 'status-rejected'}">${r.status === 'approved' ? 'Approved' : 'Rejected'}</span></td><td>${r.status === 'approved' ? (r.approvedDate ? new Date(r.approvedDate).toLocaleDateString() : '-') : (r.rejectedDate ? new Date(r.rejectedDate).toLocaleDateString() : '-')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
@@ -1119,20 +1257,66 @@
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 let updates = {};
+                let approvalNote = '';
+
+                // ── For any approval action (not forward/reject): require BO signature ──
+                const needsSig = ['approve_under_1m','approve_with_note','ed_approve'].includes(action);
+                let boSigData = null;
+                if (needsSig) {
+                    if (action === 'approve_with_note') {
+                        approvalNote = prompt('Enter your approval note:');
+                        if (!approvalNote) return;
+                    }
+                    boSigData = await this._showSignaturePad(
+                        'Approver Signature',
+                        `I, ${this.currentUser}, approve concept note ${refNumber} (₦${cn.estimatedCost.toLocaleString()}).`
+                    );
+                    if (!boSigData) return; // cancelled
+                }
+
+                const now = new Date().toISOString();
+                const poNumber = 'PO-' + refNumber + '-' + Date.now();
+
                 switch(action) {
                     case 'approve_under_1m':
-                        updates = cn.requiresProcurement === 'yes' ? { currentApprover: 'procurement', sentToProcurement: new Date().toISOString(), retirementresponsibility: 'procurement' } : { status: 'approved', approvedDate: new Date().toISOString(), approvedBy: this.currentUser, retirementresponsibility: 'staff' }; break;
+                        updates = cn.requiresProcurement === 'yes'
+                            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
+                            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now };
+                        break;
                     case 'approve_with_note':
-                        const approvalNote = prompt('Enter your approval note:'); if (!approvalNote) return;
-                        updates = cn.requiresProcurement === 'yes' ? { currentApprover: 'procurement', sentToProcurement: new Date().toISOString(), retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote } : { status: 'approved', approvedDate: new Date().toISOString(), approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote }; break;
-                    case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: new Date().toISOString() }; break;
-                    case 'ed_approve': updates = cn.requiresProcurement === 'yes' ? { currentApprover: 'procurement', sentToProcurement: new Date().toISOString(), retirementresponsibility: 'procurement' } : { status: 'approved', approvedDate: new Date().toISOString(), approvedBy: this.currentUser, retirementresponsibility: 'staff' }; break;
+                        updates = cn.requiresProcurement === 'yes'
+                            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
+                            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now };
+                        break;
+                    case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
+                    case 'ed_approve':
+                        updates = cn.requiresProcurement === 'yes'
+                            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
+                            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now };
+                        break;
                 }
                 try {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
                     if (error) throw error;
                     Object.assign(cn, updates); this.clearCache();
                     await this._logAudit('concept_notes', refNumber, action, JSON.stringify(updates));
+
+                    // ── If PO was generated, record signature and offer preview ──
+                    if (boSigData && updates.poNumber) {
+                        await supabaseClient.from('document_signatures').insert([{
+                            docRef: updates.poNumber,
+                            docType: 'purchase_order',
+                            relatedRef: refNumber,
+                            signerName: this.currentUser,
+                            signerRole: this.data.roles[this.currentUser] || 'approver',
+                            signatureData: boSigData,
+                            signedAt: now,
+                            pageContext: 'concept_note_approval'
+                        }]);
+                        if (confirm('Purchase Order ' + updates.poNumber + ' has been generated and your signature recorded.\n\nWould you like to preview the PO now?')) {
+                            this._previewPODraft(refNumber);
+                        }
+                    }
                     const isFullyApproved = updates.status === 'approved';
                     const sentToProcurement = !!updates.sentToProcurement;
                     const forwardedToED = !!updates.forwardedToED;
@@ -1192,6 +1376,10 @@
                             <button class="btn btn-secondary" style="border-color:#059669;color:#059669;"
                                 onclick="app._previewGRRDraft('${refNumber}')">
                                 📦 Preview GRR Draft
+                            </button>
+                            <button class="btn btn-secondary" style="border-color:#285B3C;color:#285B3C;"
+                                onclick="app.vendorSignGRR('${refNumber}')">
+                                ✍️ Vendor Sign GRR
                             </button>
                         </div>
                         <p style="font-size:12px;color:#616161;margin-top:12px;font-style:italic;">
@@ -1320,13 +1508,54 @@
                     alert('Account number must be exactly 10 digits'); return; }
 
                 const variance = cn.estimatedCost - actualCost;
+                const overPct = cn.estimatedCost > 0 ? ((actualCost - cn.estimatedCost) / cn.estimatedCost) : 0;
+
+                // >20% variance: hard block — escalate to budget owner for approval
+                if (variance < -0.01 && overPct > 0.20) {
+                    const overAmt = Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                    const pctLabel = (overPct * 100).toFixed(1);
+                    const justification = prompt(
+                        `🚨 VARIANCE EXCEEDS 20% — Budget Owner Approval Required\n\n` +
+                        `Estimated: ₦${cn.estimatedCost.toLocaleString()}\n` +
+                        `Actual:    ₦${actualCost.toLocaleString()}\n` +
+                        `Over by:   ₦${overAmt} (${pctLabel}%)\n\n` +
+                        `This will be sent to the Budget Owner for approval before finance payment.\n\n` +
+                        `Enter a brief justification for the cost increase:`
+                    );
+                    if (justification === null) return; // cancelled
+                    if (!justification.trim()) { alert('A justification is required for variances above 20%.'); return; }
+
+                    try {
+                        submitBtn.disabled = true; submitBtn.textContent = 'Escalating…';
+                        await supabaseClient.from('concept_notes').update({
+                            status: 'variance_review',
+                            currentApprover: 'budgetOwner',
+                            actualProcurementCost: actualCost,
+                            procurementVariance: variance,
+                            procurementNotes: notes,
+                            varianceJustification: justification.trim(),
+                            varianceEscalatedAt: new Date().toISOString(),
+                            varianceEscalatedBy: this.currentUser,
+                            accountName, accountNumber, bankName
+                        }).eq('refNumber', refNumber);
+                        await this._logAudit('concept_notes', refNumber, 'variance_escalated',
+                            `${pctLabel}% over budget. Actual: ₦${actualCost.toLocaleString()}. Justification: ${justification.trim()}`);
+                        this.clearCache();
+                        alert(`Variance escalated to Budget Owner for approval.\n\nThe activity is on hold until approved. You will be able to complete once the Budget Owner approves the excess cost.`);
+                        this.showView('approvals');
+                    } catch(e) {
+                        alert('Error escalating variance: ' + e.message);
+                    } finally {
+                        submitBtn.disabled = false; submitBtn.textContent = 'Complete & Generate Documents →';
+                    }
+                    return;
+                }
+
+                // ≤20% over budget: warn but allow through
                 if (variance < -0.01) {
-                    const over    = Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 2 });
-                    const overPct = ((Math.abs(variance) / cn.estimatedCost) * 100).toFixed(1);
-                    const msg = Math.abs(variance) / cn.estimatedCost > 0.20
-                        ? `🚨 HIGH VARIANCE (${overPct}% over budget)\n\nEstimated: ₦${cn.estimatedCost.toLocaleString()}\nActual: ₦${actualCost.toLocaleString()}\nOver by: ₦${over}\n\nFinance will be alerted. Continue?`
-                        : `⚠️ Over Budget\n\nEstimated: ₦${cn.estimatedCost.toLocaleString()}\nActual: ₦${actualCost.toLocaleString()}\nOver by: ₦${over}\n\nContinue?`;
-                    if (!confirm(msg)) return;
+                    const overAmt = Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                    const pctLabel = (overPct * 100).toFixed(1);
+                    if (!confirm(`⚠️ Over Budget (${pctLabel}%)\n\nEstimated: ₦${cn.estimatedCost.toLocaleString()}\nActual: ₦${actualCost.toLocaleString()}\nOver by: ₦${overAmt}\n\nWithin the 20% permitted threshold. Continue?`)) return;
                 }
 
                 try {
@@ -1435,9 +1664,37 @@
                         <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${cn.description}</textarea></div>
                         <div class="form-group"><label>Requires Procurement?</label><input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly></div>
                         ${cn.procurementNotes ? `<div class="form-group full-width"><label>Procurement Notes</label><textarea rows="2" readonly>${cn.procurementNotes}</textarea></div>` : ''}
-                        ${cn.grrFileName ? `<div class="form-group"><label>GRR Document</label><button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">📎 Download ${cn.grrFileName}</button></div>` : ''}
-                        ${cn.poFileName ? `<div class="form-group"><label>PO/Invoice Document</label><button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.poFileUrl}', '${cn.poFileName}')">📎 Download ${cn.poFileName}</button></div>` : ''}
-                        <div class="btn-group full-width"><button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button><button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Concept Note</button></div>
+                        ${cn.requiresProcurement === 'yes' ? `
+                        <div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;">
+                            <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">📁 Procurement Documents</label>
+                            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                                ${cn.poNumber ? `<button type="button" class="btn btn-secondary" onclick="app._previewPODraft('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">🛒 View / Print PO (${cn.poNumber})</button>` : ''}
+                                ${cn.poFileName ? `<button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.poFileUrl}', '${cn.poFileName}')">📎 Download Uploaded PO</button>` : ''}
+                                ${cn.grrFileName ? `<button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.grrFileUrl}', '${cn.grrFileName}')">📦 Download GRR</button>` : ''}
+                                ${cn.grrNumber && !cn.grrFileName ? `<button type="button" class="btn btn-secondary" onclick="app._previewGRRDraft('${cn.refNumber}')">📦 View GRR Draft</button>` : ''}
+                            </div>
+                        </div>` : ''}
+                        <div id="cnLinkedDocs_${cn.refNumber}" style="display:none;"></div>
+                        <script>
+                        (async () => {
+                            const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef','${cn.refNumber}');
+                            const payRefs = (payResp.data||[]).map(p=>p.refNumber);
+                            if (!payRefs.length) return;
+                            const retResp = await supabaseClient.from('retirements').select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName').in('paymentRef',payRefs);
+                            const rets = retResp.data||[];
+                            const el = document.getElementById('cnLinkedDocs_${cn.refNumber}');
+                            if (!el || !rets.some(r=>r.receiptFileUrl||r.invoiceFileUrl)) return;
+                            el.style.display='block';
+                            el.innerHTML = \`<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">
+                                <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>
+                                <div style="display:flex;flex-wrap:wrap;gap:10px;">\${rets.map(r=>\`
+                                    \${r.receiptFileUrl ? \`<button type="button" class="btn btn-secondary" onclick="app.downloadFile('\${r.receiptFileUrl}','\${r.receiptFileName||'receipt'}')">📎 Receipt (\${r.refNumber})</button>\` : ''}
+                                    \${r.invoiceFileUrl ? \`<button type="button" class="btn btn-secondary" onclick="app.downloadFile('\${r.invoiceFileUrl}','\${r.invoiceFileName||'invoice'}')">🧾 Invoice (\${r.refNumber})</button>\` : ''}
+                                \`).join('')}</div>
+                            </div>\`;
+                        })();
+                        </script>
+                        <div class="btn-group full-width"><button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}<button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button></div>
                     </div>`;
             },
             
@@ -1495,8 +1752,39 @@
                         <div class="stat-card danger"><h3>Unretired Advances</h3><div class="stat-value">${this.data.payments.filter(p => p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)).length}</div><div class="stat-label">Need retirement</div></div>
                     </div>
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
-                    <div style="margin-bottom:16px;"><button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Payments Report</button></div>
-                    <div class="table-container"><table><thead><tr><th>Project Code</th><th>Project Name</th><th>Total Budget</th><th>Spent</th><th>Remaining</th><th>Usage</th></tr></thead><tbody>${projectStats.map(p => `<tr><td><strong>${p.code}</strong></td><td>${p.name}</td><td>₦${p.budget.toLocaleString()}</td><td>₦${p.spent.toLocaleString()}</td><td>₦${p.remaining.toLocaleString()}</td><td><div style="display: flex; align-items: center; gap: 12px;"><div class="budget-bar" style="flex: 1; margin: 0;"><div class="budget-fill ${p.percentUsed > 90 ? 'danger' : p.percentUsed > 70 ? 'warning' : ''}" style="width: ${p.percentUsed}%"></div></div><span style="font-weight: 600; min-width: 50px;">${p.percentUsed}%</span></div></td></tr>`).join('')}</tbody></table></div>`;
+                    <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Payments Report</button>
+                        <button class="btn btn-secondary" onclick="app.exportRetirementReport()">⬇ Download Retirement Report</button>
+                    </div>
+                    <div class="table-container"><table><thead><tr><th>Project Code</th><th>Project Name</th><th>Total Budget</th><th>Spent</th><th>Remaining</th><th>Usage</th></tr></thead><tbody>${projectStats.map(p => `<tr><td><strong>${p.code}</strong></td><td>${p.name}</td><td>₦${p.budget.toLocaleString()}</td><td>₦${p.spent.toLocaleString()}</td><td>₦${p.remaining.toLocaleString()}</td><td><div style="display: flex; align-items: center; gap: 12px;"><div class="budget-bar" style="flex: 1; margin: 0;"><div class="budget-fill ${p.percentUsed > 90 ? 'danger' : p.percentUsed > 70 ? 'warning' : ''}" style="width: ${p.percentUsed}%"></div></div><span style="font-weight: 600; min-width: 50px;">${p.percentUsed}%</span></div></td></tr>`).join('')}</tbody></table></div>
+
+                    <h3 style="margin-top:40px;margin-bottom:6px;font-family:'Archivo',sans-serif;">Payment & Retirement Status</h3>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">All payments with their linked retirement status side by side</p>
+                    <div class="table-container"><table><thead><tr>
+                        <th>Payment Ref</th><th>Staff</th><th>Project</th><th>Amount</th>
+                        <th>Payment Status</th><th>Paid Date</th>
+                        <th>Retirement Ref</th><th>Retirement Status</th><th>Retired Date</th>
+                        <th>Variance</th>
+                    </tr></thead><tbody>
+                    ${this.data.payments.map(p => {
+                        const ret = this.data.retirements.find(r => r.paymentRef === p.refNumber);
+                        const payBadge = p.status === 'paid' ? 'status-paid' : p.status === 'rejected' ? 'status-rejected' : 'status-pending';
+                        const retBadge = !ret ? '' : ret.status === 'approved' ? 'status-approved' : ret.status === 'rejected' ? 'status-rejected' : 'status-pending';
+                        const variance = ret && p.amount && ret.actualSpent != null ? (p.amount - ret.actualSpent) : null;
+                        return `<tr>
+                            <td style="font-weight:600;">${p.refNumber}</td>
+                            <td>${p.staffName}</td>
+                            <td>${p.projectCode || '-'}</td>
+                            <td>₦${Number(p.amount).toLocaleString()}</td>
+                            <td><span class="status-badge ${payBadge}">${p.status}</span></td>
+                            <td style="font-size:12px;">${p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '-'}</td>
+                            <td style="font-size:12px;">${ret ? ret.refNumber : '-'}</td>
+                            <td>${ret ? `<span class="status-badge ${retBadge}">${ret.status}</span>` : '<span style="font-size:12px;color:#999;">Not yet retired</span>'}</td>
+                            <td style="font-size:12px;">${ret && ret.approvedDate ? new Date(ret.approvedDate).toLocaleDateString() : '-'}</td>
+                            <td style="font-size:12px;${variance != null ? (variance > 0 ? 'color:#059669;' : variance < 0 ? 'color:#DC2626;' : '') : ''}">${variance != null ? (variance >= 0 ? '+' : '') + '₦' + Math.abs(variance).toLocaleString() : '-'}</td>
+                        </tr>`;
+                    }).join('')}
+                    </tbody></table></div>`;
             },
             
             renderSettings(content) {
@@ -1513,12 +1801,43 @@
             exportPaymentsReport() {
                 const payments = this.data.payments;
                 if (!payments.length) { alert('No payments available to export.'); return; }
-                let csv = [['Reference','Concept Note','Project Code','Staff Name','Amount','Status','Request Date','Paid Date','Processed By'].join(',')];
-                payments.forEach(p => { csv.push([p.refNumber || '',p.conceptNoteRef || '',p.projectCode || '',p.staffName || '',p.amount || 0,p.status || '',p.requestDate ? new Date(p.requestDate).toLocaleDateString() : '',p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '',p.processedBy || ''].join(',')); });
+                let csv = [['Reference','Concept Note','Project Code','Staff Name','Amount','Payment Status','Request Date','Paid Date','Processed By','Retirement Ref','Retirement Status','Actual Spent','Amount Returned','Retired Date'].join(',')];
+                payments.forEach(p => {
+                    const ret = this.data.retirements.find(r => r.paymentRef === p.refNumber);
+                    csv.push([p.refNumber||'',p.conceptNoteRef||'',p.projectCode||'',p.staffName||'',p.amount||0,p.status||'',
+                        p.requestDate?new Date(p.requestDate).toLocaleDateString():'',
+                        p.paidDate?new Date(p.paidDate).toLocaleDateString():'',
+                        p.processedBy||'',
+                        ret?ret.refNumber:'',ret?ret.status:'not retired',
+                        ret?ret.actualSpent:'',ret?ret.amountReturned:'',
+                        ret&&ret.approvedDate?new Date(ret.approvedDate).toLocaleDateString():''
+                    ].join(','));
+                });
                 const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.href = url; link.download = 'rahama_payments_report.csv';
+                link.href = url; link.download = 'rahama_payments_retirements_report.csv';
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            },
+
+            exportRetirementReport() {
+                const retirements = this.data.retirements;
+                if (!retirements.length) { alert('No retirements available to export.'); return; }
+                let csv = [['Retirement Ref','Payment Ref','Staff Name','Project','Actual Spent','Amount Returned','Status','Submitted Date','Approved By','Approved Date','Rejection Reason'].join(',')];
+                retirements.forEach(r => {
+                    const pay = this.data.payments.find(p => p.refNumber === r.paymentRef);
+                    csv.push([r.refNumber||'',r.paymentRef||'',r.staffName||'',pay?pay.projectCode||'':'',
+                        r.actualSpent||0,r.amountReturned||0,r.status||'',
+                        r.submittedDate?new Date(r.submittedDate).toLocaleDateString():'',
+                        r.approvedBy||'',r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'',
+                        (r.rejectionReason||'').replace(/,/g,' ')
+                    ].join(','));
+                });
+                const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = 'rahama_retirement_report.csv';
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
             },
@@ -1537,9 +1856,113 @@
                     retirements = ret || [];
                 }
 
-                const procurementSection = cn.requiresProcurement === 'yes' ? `\n================================================\nPROCUREMENT DETAILS\n================================================\n\nProcurement Completed: ${cn.procurementComplete ? new Date(cn.procurementComplete).toLocaleString() : 'N/A'}\nActual Procurement Cost: ${cn.actualProcurementCost != null ? '₦' + Number(cn.actualProcurementCost).toLocaleString() : 'N/A'}\nProcurement Variance: ${cn.procurementVariance != null ? (cn.procurementVariance >= 0 ? '+' : '') + '₦' + Number(cn.procurementVariance).toLocaleString() : 'N/A'}\nProcurement Notes: ${cn.procurementNotes || 'N/A'}\nGRR File: ${cn.grrFileName || 'N/A'}\nPO File: ${cn.poFileName || 'N/A'}\nRetirement Responsibility: ${cn.retirementresponsibility || 'staff'}\n` : '';
+                // Fetch document signatures for PO + GRR
+                const { data: docSigs = [] } = await supabaseClient
+                    .from('document_signatures')
+                    .select('*')
+                    .eq('relatedRef', cn.refNumber)
+                    .order('signedAt', { ascending: true });
 
-                const content = `RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE\n================================================\n\nFULL CONCEPT NOTE HISTORY RECORD\n------------------------------------------------\n\nReference Number: ${cn.refNumber}\nStaff Name: ${cn.staffName}\nProject Code: ${cn.projectCode}\nEstimated Cost: ₦${Number(cn.estimatedCost).toLocaleString()}\nSubmitted Date: ${new Date(cn.submittedDate).toLocaleString()}\nStatus: ${cn.status}\n\n================================================\nCONCEPT NOTE DETAILS\n================================================\n\nActivity Title:\n${cn.activityTitle}\n\nObjective:\n${cn.objective}\n\nDescription:\n${cn.description}\n\nRequires Procurement:\n${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}\n\n================================================\nAPPROVAL HISTORY\n================================================\n\nApproved By: ${cn.approvedBy || 'N/A'}\nApproved Date: ${cn.approvedDate ? new Date(cn.approvedDate).toLocaleString() : 'N/A'}\nBudget Owner Note: ${cn.budgetOwnerNote || 'N/A'}\nForwarded To ED: ${cn.forwardedToED ? new Date(cn.forwardedToED).toLocaleString() : 'N/A'}\nSent To Procurement: ${cn.sentToProcurement ? new Date(cn.sentToProcurement).toLocaleString() : 'N/A'}\n${procurementSection}\n================================================\nPAYMENT HISTORY\n================================================\n${payments.length === 0 ? 'No payment records found.\n' : payments.map(p => `\nPayment Ref: ${p.refNumber}\nAmount: ₦${Number(p.amount).toLocaleString()}\nStatus: ${p.status}\nRetirement Responsibility: ${p.retirementresponsibility || 'staff'}\nRequested: ${p.requestDate ? new Date(p.requestDate).toLocaleString() : 'N/A'}\nPaid: ${p.paidDate ? new Date(p.paidDate).toLocaleString() : 'N/A'}\nProcessed By: ${p.processedBy || 'N/A'}\n------------------------------------------------`).join('\n')}\n\n================================================\nRETIREMENT HISTORY\n================================================\n${retirements.length === 0 ? 'No retirement records found.\n' : retirements.map(r => `\nRetirement Ref: ${r.refNumber}\nPayment Ref: ${r.paymentRef}\nActual Spent: ₦${Number(r.actualSpent).toLocaleString()}\nReturned: ₦${Number(r.amountReturned).toLocaleString()}\nStatus: ${r.status}\nSubmitted: ${r.submittedDate ? new Date(r.submittedDate).toLocaleString() : 'N/A'}\nApproved By: ${r.approvedBy || 'N/A'}\nFinance Approved By: ${r.financeApprovedBy || 'N/A'}\nFinance Approved Date: ${r.financeApprovedDate ? new Date(r.financeApprovedDate).toLocaleString() : 'N/A'}\n------------------------------------------------`).join('\n')}`;
+                const S = '='.repeat(48);
+                const D = '-'.repeat(48);
+                const fmt = d => d ? new Date(d).toLocaleString() : 'N/A';
+                const money = n => n != null && n !== '' ? '\u20a6' + Number(n).toLocaleString() : 'N/A';
+
+                const poSigs = docSigs.filter(s => s.docType === 'purchase_order');
+                const grrSigs = docSigs.filter(s => s.docType === 'grr');
+                const vendorSig = grrSigs.find(s => s.signerRole === 'vendor');
+
+                const poSection = cn.requiresProcurement === 'yes' ? [
+                    '', S, 'PURCHASE ORDER (PO)', S, '',
+                    `PO Number:              ${cn.poNumber || 'N/A'}`,
+                    `PO Generated:           ${fmt(cn.poGeneratedAt)}`,
+                    `Authorised By:          ${cn.approvedBy || 'N/A'}`,
+                    `Authorised Date:        ${fmt(cn.budgetOwnerSignedAt)}`,
+                    `BO Signature On File:   ${poSigs.length > 0 ? 'YES — ' + poSigs.map(s => s.signerName + ' (' + fmt(s.signedAt) + ')').join(', ') : 'No digital signature recorded'}`,
+                    '',
+                    `Actual Cost:            ${money(cn.actualProcurementCost)}`,
+                    `Estimated Cost:         ${money(cn.estimatedCost)}`,
+                    `Variance:               ${cn.procurementVariance != null ? (cn.procurementVariance >= 0 ? '+' : '') + money(cn.procurementVariance) : 'N/A'}`,
+                    `Procurement Notes:      ${cn.procurementNotes || 'N/A'}`,
+                    D
+                ].join('\n') : '';
+
+                const grrSection = cn.requiresProcurement === 'yes' ? [
+                    '', S, 'GOODS / SERVICES RECEIVING REPORT (GRR)', S, '',
+                    `GRR Number:             ${cn.grrNumber || 'N/A'}`,
+                    `GRR File Attached:      ${cn.grrFileName || 'N/A'}`,
+                    `Vendor / Supplier:      ${cn.grrVendorName || 'N/A'}`,
+                    `Vendor Phone:           ${cn.grrVendorPhone || 'N/A'}`,
+                    `Vendor Signed At:       ${fmt(cn.grrVendorSignedAt)}`,
+                    `Vendor Sig On File:     ${vendorSig ? 'YES — signed ' + fmt(vendorSig.signedAt) + ' via ' + (vendorSig.pageContext || 'unknown') : 'Pending'}`,
+                    `Procurement Signed By:  ${grrSigs.filter(s => s.signerRole !== 'vendor').map(s => s.signerName).join(', ') || 'N/A'}`,
+                    D
+                ].join('\n') : '';
+
+                // Invoice + receipt from retirement records
+                const invoiceSection = retirements.length > 0 ? [
+                    '', S, 'INVOICES & RECEIPTS', S, '',
+                    ...retirements.map(r => [
+                        `Retirement Ref:         ${r.refNumber}`,
+                        `Invoice File:           ${r.invoiceFileName || r.receiptFileName || 'N/A'}`,
+                        `Invoice URL:            ${r.invoiceFileUrl || r.receiptFileUrl || 'N/A'}`,
+                        `Actual Spent:           ${money(r.actualSpent)}`,
+                        `Amount Returned:        ${money(r.amountReturned)}`,
+                        D
+                    ].join('\n'))
+                ].join('\n') : '';
+
+                const content = [
+                    'RAHAMA GIRL CHILD & WOMEN EMPOWERMENT INITIATIVE',
+                    S, 'FULL CONCEPT NOTE DOSSIER', `Generated: ${fmt(new Date())}`, S, '',
+                    `Reference Number:       ${cn.refNumber}`,
+                    `Staff Name:             ${cn.staffName}`,
+                    `Project Code:           ${cn.projectCode}`,
+                    `Estimated Cost:         ${money(cn.estimatedCost)}`,
+                    `Submitted Date:         ${fmt(cn.submittedDate)}`,
+                    `Overall Status:         ${cn.status.toUpperCase()}`,
+                    `Requires Procurement:   ${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}`,
+                    `Staff Signature:        ${cn.staffSignedAt ? 'Signed ' + fmt(cn.staffSignedAt) : 'Not recorded'}`,
+                    '', S, 'CONCEPT NOTE DETAILS', S, '',
+                    `Activity Title:\n${cn.activityTitle}`, '',
+                    `Objective:\n${cn.objective || 'N/A'}`, '',
+                    `Description:\n${cn.description || 'N/A'}`,
+                    '', S, 'APPROVAL HISTORY', S, '',
+                    `Budget Owner Approved By:   ${cn.approvedBy || 'N/A'}`,
+                    `Budget Owner Approved Date: ${fmt(cn.approvedDate)}`,
+                    `Budget Owner Note:          ${cn.budgetOwnerNote || 'N/A'}`,
+                    `BO Signature:               ${cn.budgetOwnerSignedAt ? 'Signed ' + fmt(cn.budgetOwnerSignedAt) : 'Not recorded'}`,
+                    `Forwarded To ED:             ${fmt(cn.forwardedToED)}`,
+                    `Sent To Procurement:         ${fmt(cn.sentToProcurement)}`,
+                    poSection,
+                    grrSection,
+                    '', S, 'PAYMENT HISTORY', S, '',
+                    payments.length === 0 ? 'No payment records.' : payments.map(p => [
+                        `Payment Ref:            ${p.refNumber}`,
+                        `Amount:                 ${money(p.amount)}`,
+                        `Status:                 ${p.status.toUpperCase()}`,
+                        `Retirement Resp.:       ${p.retirementresponsibility || 'staff'}`,
+                        `Requested:              ${fmt(p.requestDate)}`,
+                        `Paid:                   ${fmt(p.paidDate)}`,
+                        `Processed By:           ${p.processedBy || 'N/A'}`,
+                        D
+                    ].join('\n')).join('\n'),
+                    '', S, 'RETIREMENT HISTORY', S, '',
+                    retirements.length === 0 ? 'No retirement records.' : retirements.map(r => [
+                        `Retirement Ref:         ${r.refNumber}`,
+                        `Payment Ref:            ${r.paymentRef}`,
+                        `Status:                 ${r.status.toUpperCase()}`,
+                        `Actual Spent:           ${money(r.actualSpent)}`,
+                        `Amount Returned:        ${money(r.amountReturned)}`,
+                        `Submitted By:           ${r.submittedBy || 'N/A'}`,
+                        `Submitted Date:         ${fmt(r.submittedDate)}`,
+                        `Approved By:            ${r.approvedBy || 'N/A'}`,
+                        `Finance Approved By:    ${r.financeApprovedBy || 'N/A'}`,
+                        D
+                    ].join('\n')).join('\n'),
+                    invoiceSection,
+                    '', S, 'END OF DOSSIER', S
+                ].filter(x => x !== undefined).join('\n');
 
                 const blob = new Blob([content], { type: 'text/plain' });
                 const url = window.URL.createObjectURL(blob);
@@ -1547,6 +1970,683 @@
                 link.href = url; link.download = `${cn.refNumber}_Concept_Note_Full_History.txt`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
+            },
+
+
+
+            // ══════════════════════════════════════════════════════════════
+            // GRR VENDOR SIGNING — ON-DEVICE
+            // ══════════════════════════════════════════════════════════════
+            async vendorSignGRR(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+
+                // Build fullscreen overlay
+                let overlay = document.getElementById('vendorSignOverlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'vendorSignOverlay';
+                    overlay.className = 'vendor-sign-overlay';
+                    document.body.appendChild(overlay);
+                }
+
+                const grrNum = cn.grrNumber || ('GRR-' + refNumber);
+                const itemRows = cn.requiresProcurement === 'yes'
+                    ? `<tr><td>1</td><td>${cn.activityTitle}</td><td>${cn.description || '—'}</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td></tr>`
+                    : '<tr><td colspan="6" style="text-align:center;color:#999;">No procurement items</td></tr>';
+
+                overlay.innerHTML = `
+                    <div class="vendor-sign-header">
+                        <div style="width:36px;height:36px;background:rgba(255,255,255,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;">📦</div>
+                        <div>
+                            <h2>Goods / Services Receiving Report</h2>
+                            <div style="font-size:12px;opacity:.8;">RAHAMA Girl Child &amp; Women Empowerment Initiative — ${grrNum}</div>
+                        </div>
+                        <button onclick="document.getElementById('vendorSignOverlay').classList.remove('open')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+                    </div>
+                    <div class="vendor-sign-body">
+                        <div style="background:#f5f5f5;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${cn.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${cn.projectCode}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">GRR Number</div><div style="font-weight:600;margin-top:3px;">${grrNum}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Date</div><div style="font-weight:600;margin-top:3px;">${new Date().toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+                            </div>
+                        </div>
+
+                        <h4 style="font-family:'Archivo',sans-serif;margin-bottom:10px;">Items Delivered / Services Rendered</h4>
+                        <table class="vendor-items-table">
+                            <thead><tr><th>#</th><th>Description</th><th>Details</th><th style="text-align:right">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th></tr></thead>
+                            <tbody>${itemRows}</tbody>
+                            <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;padding:10px 12px;">Total Value</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td></tr></tfoot>
+                        </table>
+
+                        <div class="vendor-confirm-box">
+                            <strong>Vendor Confirmation</strong><br>
+                            By signing below, I confirm that the goods/services listed above have been delivered/rendered in satisfactory condition to RAHAMA.
+                        </div>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+                            <div class="form-group"><label style="font-size:13px;font-weight:600;">Vendor / Supplier Name <span class="required">*</span></label>
+                                <input type="text" id="vendorNameInput" placeholder="Full name of vendor representative" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;margin-top:6px;"></div>
+                            <div class="form-group"><label style="font-size:13px;font-weight:600;">Phone Number</label>
+                                <input type="tel" id="vendorPhoneInput" placeholder="e.g. 0811 234 5678" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;margin-top:6px;"></div>
+                        </div>
+
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Vendor Signature <span class="required">*</span></label>
+                        <canvas id="vendorSigCanvas" width="600" height="200"></canvas>
+                        <div style="font-size:11px;color:#777;margin-top:6px;text-align:center;">Draw signature above — use finger on touchscreen or mouse on desktop</div>
+
+                        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" onclick="app._submitVendorGRRSignature('${refNumber}')" style="flex:1;min-width:160px;">✓ Confirm &amp; Sign GRR</button>
+                            <button class="btn btn-secondary" onclick="app._clearVendorCanvas()" style="min-width:100px;">Clear</button>
+                            <button class="btn btn-secondary" onclick="app._showRemoteVendorSign('${refNumber}')" style="min-width:160px;border-color:#059669;color:#059669;">📱 Remote Sign Link</button>
+                        </div>
+                        <div id="vendorSignStatus" style="margin-top:16px;"></div>
+                    </div>`;
+
+                overlay.classList.add('open');
+                this._initVendorCanvas();
+            },
+
+            _initVendorCanvas() {
+                const c = document.getElementById('vendorSigCanvas');
+                if (!c) return;
+                const ctx = c.getContext('2d');
+                ctx.clearRect(0,0,c.width,c.height);
+                ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                let drawing = false, hasMark = false;
+                c._hasMark = false;
+                const pos = e => { const r=c.getBoundingClientRect(); const s=e.touches?e.touches[0]:e; return {x:(s.clientX-r.left)*(c.width/r.width),y:(s.clientY-r.top)*(c.height/r.height)}; };
+                const fresh = c.cloneNode(false);
+                c.parentNode.replaceChild(fresh, c);
+                const fc = document.getElementById('vendorSigCanvas');
+                fc._hasMark = false;
+                const fctx = fc.getContext('2d');
+                fctx.strokeStyle='#1a1a2e'; fctx.lineWidth=2.4; fctx.lineCap='round'; fctx.lineJoin='round';
+                let d2=false;
+                const p2 = e=>{const r=fc.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:(s.clientX-r.left)*(fc.width/r.width),y:(s.clientY-r.top)*(fc.height/r.height)};};
+                fc.addEventListener('mousedown', e=>{e.preventDefault();d2=true;const p=p2(e);fctx.beginPath();fctx.moveTo(p.x,p.y);});
+                fc.addEventListener('mousemove', e=>{e.preventDefault();if(!d2)return;fc._hasMark=true;const p=p2(e);fctx.lineTo(p.x,p.y);fctx.stroke();});
+                fc.addEventListener('mouseup',   e=>{d2=false;});
+                fc.addEventListener('mouseleave',e=>{d2=false;});
+                fc.addEventListener('touchstart',e=>{e.preventDefault();d2=true;const p=p2(e);fctx.beginPath();fctx.moveTo(p.x,p.y);},{passive:false});
+                fc.addEventListener('touchmove', e=>{e.preventDefault();if(!d2)return;fc._hasMark=true;const p=p2(e);fctx.lineTo(p.x,p.y);fctx.stroke();},{passive:false});
+                fc.addEventListener('touchend',  e=>{d2=false;});
+            },
+
+            _clearVendorCanvas() {
+                const c = document.getElementById('vendorSigCanvas');
+                if (!c) return;
+                const ctx = c.getContext('2d');
+                ctx.clearRect(0,0,c.width,c.height);
+                c._hasMark = false;
+            },
+
+            async _submitVendorGRRSignature(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                const vendorName = document.getElementById('vendorNameInput')?.value?.trim();
+                const vendorPhone = document.getElementById('vendorPhoneInput')?.value?.trim();
+                const fc = document.getElementById('vendorSigCanvas');
+                if (!vendorName) { alert('Please enter the vendor name before signing.'); return; }
+                if (!fc || !fc._hasMark) { alert('Please draw the vendor signature first.'); return; }
+                const sigData = fc.toDataURL('image/png');
+                const btn = document.querySelector('#vendorSignOverlay .btn.btn-primary');
+                if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+                try {
+                    const grrNum = cn.grrNumber || ('GRR-' + refNumber);
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef: grrNum, docType: 'grr', relatedRef: refNumber,
+                        signerName: vendorName, signerRole: 'vendor',
+                        signatureData: sigData, signedAt: new Date().toISOString(),
+                        pageContext: 'vendor_on_device',
+                        vendorPhone: vendorPhone || null
+                    }]);
+                    // also update concept_note with vendor name for the download
+                    await supabaseClient.from('concept_notes').update({
+                        grrVendorName: vendorName,
+                        grrVendorPhone: vendorPhone || null,
+                        grrVendorSignedAt: new Date().toISOString(),
+                        grrNumber: grrNum
+                    }).eq('refNumber', refNumber);
+                    await this._logAudit('document_signatures', grrNum, 'grr_vendor_signed', `Vendor: ${vendorName}`);
+                    document.getElementById('vendorSignStatus').innerHTML = '<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:14px 18px;color:#1B5E20;font-weight:600;">✓ GRR signed by vendor and recorded successfully.</div>';
+                    if (btn) btn.textContent = '✓ Signed';
+                    setTimeout(() => {
+                        document.getElementById('vendorSignOverlay')?.classList.remove('open');
+                        this.loadData();
+                    }, 2200);
+                } catch(e) {
+                    if (btn) { btn.disabled = false; btn.textContent = '✓ Confirm & Sign GRR'; }
+                    alert('Error saving signature: ' + e.message);
+                }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // REMOTE VENDOR SIGNING — Generate token + link + QR
+            // ══════════════════════════════════════════════════════════════
+            async _showRemoteVendorSign(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                // Create signing token in Supabase
+                const token = 'vst_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+                const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
+                try {
+                    await supabaseClient.from('grr_signing_tokens').insert([{
+                        token, cnRef: refNumber,
+                        grrNumber: cn.grrNumber || ('GRR-' + refNumber),
+                        activityTitle: cn.activityTitle,
+                        projectCode: cn.projectCode,
+                        estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
+                        description: cn.description || '',
+                        createdBy: this.currentUser,
+                        expiresAt, used: false
+                    }]);
+                } catch(e) { alert('Error creating signing link: ' + e.message); return; }
+
+                const signingUrl = window.location.origin + window.location.pathname + '?vendorSign=' + token;
+
+                let modal = document.getElementById('remoteSigModal');
+                if (!modal) {
+                    const ov = document.createElement('div');
+                    ov.id = 'remoteSigModalOv';
+                    ov.className = 'sig-modal-overlay';
+                    ov.innerHTML = '<div class="remote-sign-modal" id="remoteSigModal"></div>';
+                    document.body.appendChild(ov);
+                }
+                const ov = document.getElementById('remoteSigModalOv');
+                modal = document.getElementById('remoteSigModal');
+                modal.innerHTML = `
+                    <h3 style="font-family:'Archivo',sans-serif;margin-bottom:6px;">📱 Remote Vendor Signing Link</h3>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Share this link with the vendor. It expires in 48 hours and works on any smartphone — no login needed.</p>
+                    <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px;font-size:12px;word-break:break-all;margin-bottom:16px;font-family:monospace;">${signingUrl}</div>
+                    <div id="qrCodeDiv" style="display:flex;justify-content:center;margin-bottom:20px;"></div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${signingUrl}').then(()=>alert('Link copied!'))">📋 Copy Link</button>
+                        <a class="btn btn-secondary" href="https://wa.me/?text=${encodeURIComponent('Please sign the GRR for RAHAMA procurement. Use this link (valid 48h): ' + signingUrl)}" target="_blank" style="display:inline-flex;align-items:center;text-decoration:none;border-color:#25D366;color:#25D366;">💬 Share via WhatsApp</a>
+                        <button class="btn btn-secondary" onclick="document.getElementById('remoteSigModalOv').classList.remove('open')" style="margin-left:auto;">Close</button>
+                    </div>`;
+                ov.classList.add('open');
+                // Render QR
+                document.getElementById('qrCodeDiv').innerHTML = '';
+                try {
+                    new QRCode(document.getElementById('qrCodeDiv'), { text: signingUrl, width: 180, height: 180, colorDark: '#285B3C', colorLight: '#fff' });
+                } catch(e) { document.getElementById('qrCodeDiv').innerHTML = '<p style="font-size:12px;color:#999;">QR code unavailable — use link above</p>'; }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // VENDOR SIGN PAGE — opened via ?vendorSign=TOKEN (no login)
+            // ══════════════════════════════════════════════════════════════
+            async _renderVendorSignPage(token) {
+                document.body.style.margin = '0';
+                document.getElementById('app')?.remove();
+
+                const { data: tokenRow, error: tErr } = await supabaseClient
+                    .from('grr_signing_tokens').select('*').eq('token', token).single();
+
+                const container = document.createElement('div');
+                container.style.cssText = 'min-height:100vh;font-family:Arial,sans-serif;';
+                document.body.appendChild(container);
+
+                if (tErr || !tokenRow) {
+                    container.innerHTML = `<div style="background:#285B3C;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — GRR Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">❌</div><h3 style="color:#B71C1C;">Invalid or Expired Link</h3><p style="color:#555;margin-top:8px;">This signing link is invalid or has already been used. Please contact RAHAMA procurement for a new link.</p></div>`;
+                    return;
+                }
+                if (tokenRow.used) {
+                    container.innerHTML = `<div style="background:#285B3C;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — GRR Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">✅</div><h3 style="color:#285B3C;">Already Signed</h3><p style="color:#555;margin-top:8px;">This GRR has already been signed. Thank you.</p></div>`;
+                    return;
+                }
+                if (new Date(tokenRow.expiresAt) < new Date()) {
+                    container.innerHTML = `<div style="background:#285B3C;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — GRR Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">⏰</div><h3 style="color:#B71C1C;">Link Expired</h3><p style="color:#555;margin-top:8px;">This link expired on ${new Date(tokenRow.expiresAt).toLocaleString()}. Please contact RAHAMA procurement for a new one.</p></div>`;
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div style="background:#285B3C;color:#fff;padding:20px 24px;">
+                        <div style="font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — GRR Vendor Signing</div>
+                        <div style="font-size:12px;opacity:.8;margin-top:4px;">Goods / Services Receiving Report · ${tokenRow.grrNumber}</div>
+                    </div>
+                    <div style="max-width:640px;margin:0 auto;padding:24px;">
+                        <div style="background:#f5f5f5;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${tokenRow.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${tokenRow.projectCode}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">GRR Ref</div><div style="font-weight:600;margin-top:3px;">${tokenRow.grrNumber}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Value</div><div style="font-weight:600;margin-top:3px;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</div></div>
+                            </div>
+                        </div>
+                        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
+                            <thead><tr style="background:#285B3C;color:#fff;"><th style="padding:10px 12px;text-align:left;">#</th><th style="padding:10px 12px;text-align:left;">Description</th><th style="padding:10px 12px;text-align:right;">Total (₦)</th></tr></thead>
+                            <tbody><tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">1</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${tokenRow.activityTitle}${tokenRow.description ? ' — ' + tokenRow.description.substring(0,80) : ''}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr></tbody>
+                            <tfoot><tr><td colspan="2" style="text-align:right;font-weight:700;padding:10px 12px;">Total</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr></tfoot>
+                        </table>
+                        <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:10px;padding:14px 18px;font-size:13px;margin-bottom:20px;">
+                            <strong>Confirmation:</strong> By signing below, I confirm the goods/services above were delivered/rendered satisfactorily.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Your Full Name *</label>
+                            <input id="rvVendorName" type="text" placeholder="Vendor representative name" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Phone Number</label>
+                            <input id="rvVendorPhone" type="tel" placeholder="0811 234 5678" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+                        </div>
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Signature *</label>
+                        <canvas id="rvSigCanvas" width="580" height="200" style="border:2px solid #285B3C;border-radius:8px;width:100%;touch-action:none;cursor:crosshair;background:#fafafa;display:block;"></canvas>
+                        <div style="font-size:11px;color:#777;margin-top:6px;text-align:center;">Draw your signature using finger or mouse</div>
+                        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+                            <button id="rvSubmitBtn" style="flex:1;padding:14px 24px;background:#285B3C;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;" onclick="window._submitRemoteVendorSig('${token}')">✓ Submit Signature</button>
+                            <button style="padding:14px 18px;background:none;border:1px solid #ccc;border-radius:8px;font-size:14px;cursor:pointer;" onclick="window._clearRVCanvas()">Clear</button>
+                        </div>
+                        <div id="rvStatus" style="margin-top:16px;"></div>
+                    </div>`;
+
+                // Init canvas
+                const rv = document.getElementById('rvSigCanvas');
+                rv._hasMark = false;
+                const rctx = rv.getContext('2d');
+                rctx.strokeStyle='#1a1a2e'; rctx.lineWidth=2.4; rctx.lineCap='round'; rctx.lineJoin='round';
+                let rd=false;
+                const rp=e=>{const r=rv.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:(s.clientX-r.left)*(rv.width/r.width),y:(s.clientY-r.top)*(rv.height/r.height)};};
+                rv.addEventListener('mousedown', e=>{e.preventDefault();rd=true;const p=rp(e);rctx.beginPath();rctx.moveTo(p.x,p.y);});
+                rv.addEventListener('mousemove', e=>{e.preventDefault();if(!rd)return;rv._hasMark=true;const p=rp(e);rctx.lineTo(p.x,p.y);rctx.stroke();});
+                rv.addEventListener('mouseup',   ()=>rd=false);
+                rv.addEventListener('mouseleave',()=>rd=false);
+                rv.addEventListener('touchstart',e=>{e.preventDefault();rd=true;const p=rp(e);rctx.beginPath();rctx.moveTo(p.x,p.y);},{passive:false});
+                rv.addEventListener('touchmove', e=>{e.preventDefault();if(!rd)return;rv._hasMark=true;const p=rp(e);rctx.lineTo(p.x,p.y);rctx.stroke();},{passive:false});
+                rv.addEventListener('touchend',  ()=>rd=false);
+
+                window._clearRVCanvas = ()=>{ rctx.clearRect(0,0,rv.width,rv.height); rv._hasMark=false; };
+                window._submitRemoteVendorSig = async (tok) => {
+                    const name = document.getElementById('rvVendorName')?.value?.trim();
+                    const phone = document.getElementById('rvVendorPhone')?.value?.trim();
+                    if (!name) { alert('Please enter your name.'); return; }
+                    if (!rv._hasMark) { alert('Please draw your signature.'); return; }
+                    const btn = document.getElementById('rvSubmitBtn');
+                    if (btn) { btn.disabled=true; btn.textContent='Submitting…'; }
+                    try {
+                        const sigData = rv.toDataURL('image/png');
+                        const { data: tr } = await supabaseClient.from('grr_signing_tokens').select('*').eq('token',tok).single();
+                        await supabaseClient.from('document_signatures').insert([{
+                            docRef: tr.grrNumber, docType:'grr', relatedRef: tr.cnRef,
+                            signerName: name, signerRole:'vendor', signatureData: sigData,
+                            signedAt: new Date().toISOString(), pageContext:'vendor_remote',
+                            vendorPhone: phone || null
+                        }]);
+                        await supabaseClient.from('grr_signing_tokens').update({ used:true, vendorName:name, signedAt: new Date().toISOString() }).eq('token',tok);
+                        await supabaseClient.from('concept_notes').update({ grrVendorName:name, grrVendorPhone:phone||null, grrVendorSignedAt:new Date().toISOString() }).eq('refNumber', tr.cnRef);
+                        document.getElementById('rvStatus').innerHTML = '<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:16px 18px;color:#1B5E20;font-weight:600;font-size:15px;text-align:center;">✅ Signature received. Thank you — you may now close this page.</div>';
+                        if (btn) btn.textContent = '✓ Submitted';
+                    } catch(e) {
+                        if (btn) { btn.disabled=false; btn.textContent='✓ Submit Signature'; }
+                        alert('Error: ' + e.message);
+                    }
+                };
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // SIGNATURE PAD
+            // Returns base64 PNG data URL or null if cancelled.
+            // ══════════════════════════════════════════════════════════════
+            _showSignaturePad(title, declaration) {
+                return new Promise(resolve => {
+                    // Build or reuse overlay
+                    let overlay = document.getElementById('sigModalOverlay');
+                    if (!overlay) {
+                        overlay = document.createElement('div');
+                        overlay.id = 'sigModalOverlay';
+                        overlay.className = 'sig-modal-overlay';
+                        overlay.innerHTML = `
+                            <div class="sig-modal">
+                                <h3 id="sigModalTitle"></h3>
+                                <p id="sigModalDeclaration"></p>
+                                <canvas id="sigCanvas" width="480" height="180"></canvas>
+                                <div class="sig-canvas-hint">Draw your signature above using mouse or touch</div>
+                                <div class="sig-modal-actions">
+                                    <button class="btn btn-primary" id="sigConfirmBtn">✓ Confirm &amp; Sign</button>
+                                    <button class="btn btn-secondary" id="sigClearBtn">Clear</button>
+                                    <button class="btn btn-secondary" id="sigCancelBtn" style="margin-left:auto;">Cancel</button>
+                                </div>
+                            </div>`;
+                        document.body.appendChild(overlay);
+                    }
+
+                    document.getElementById('sigModalTitle').textContent = title;
+                    document.getElementById('sigModalDeclaration').textContent = declaration;
+                    overlay.classList.add('open');
+
+                    const canvas = document.getElementById('sigCanvas');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.strokeStyle = '#1a1a2e';
+                    ctx.lineWidth = 2.2;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+
+                    let drawing = false, hasMark = false;
+                    const pos = (e) => {
+                        const r = canvas.getBoundingClientRect();
+                        const src = e.touches ? e.touches[0] : e;
+                        return { x: (src.clientX - r.left) * (canvas.width / r.width), y: (src.clientY - r.top) * (canvas.height / r.height) };
+                    };
+                    const start = e => { e.preventDefault(); drawing = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+                    const move  = e => { e.preventDefault(); if (!drawing) return; hasMark = true; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+                    const stop  = e => { drawing = false; };
+
+                    // Clone canvas to remove old listeners
+                    const fresh = canvas.cloneNode(true);
+                    canvas.parentNode.replaceChild(fresh, canvas);
+                    const c2 = document.getElementById('sigCanvas');
+                    const ctx2 = c2.getContext('2d');
+                    ctx2.strokeStyle = '#1a1a2e'; ctx2.lineWidth = 2.2; ctx2.lineCap = 'round'; ctx2.lineJoin = 'round';
+                    let drawing2 = false, hasMark2 = false;
+                    const pos2 = (e) => { const r = c2.getBoundingClientRect(); const s = e.touches ? e.touches[0] : e; return { x: (s.clientX-r.left)*(c2.width/r.width), y:(s.clientY-r.top)*(c2.height/r.height) }; };
+                    c2.addEventListener('mousedown',  e => { e.preventDefault(); drawing2=true; const p=pos2(e); ctx2.beginPath(); ctx2.moveTo(p.x,p.y); });
+                    c2.addEventListener('mousemove',  e => { e.preventDefault(); if(!drawing2)return; hasMark2=true; const p=pos2(e); ctx2.lineTo(p.x,p.y); ctx2.stroke(); });
+                    c2.addEventListener('mouseup',    e => { drawing2=false; });
+                    c2.addEventListener('mouseleave', e => { drawing2=false; });
+                    c2.addEventListener('touchstart', e => { e.preventDefault(); drawing2=true; const p=pos2(e); ctx2.beginPath(); ctx2.moveTo(p.x,p.y); }, {passive:false});
+                    c2.addEventListener('touchmove',  e => { e.preventDefault(); if(!drawing2)return; hasMark2=true; const p=pos2(e); ctx2.lineTo(p.x,p.y); ctx2.stroke(); }, {passive:false});
+                    c2.addEventListener('touchend',   e => { drawing2=false; });
+
+                    const close = (result) => {
+                        overlay.classList.remove('open');
+                        resolve(result);
+                    };
+
+                    document.getElementById('sigClearBtn').onclick   = () => { ctx2.clearRect(0,0,c2.width,c2.height); hasMark2=false; };
+                    document.getElementById('sigCancelBtn').onclick  = () => close(null);
+                    document.getElementById('sigConfirmBtn').onclick = () => {
+                        if (!hasMark2) { alert('Please draw your signature first.'); return; }
+                        close(c2.toDataURL('image/png'));
+                    };
+                });
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // PO PREVIEW  (called from procurement upload screen + BO approval)
+            // ══════════════════════════════════════════════════════════════
+            _previewPODraft(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                const poNum = cn.poNumber || ('PO-' + refNumber + '-DRAFT');
+                const sigBlock = cn.budgetOwnerSignatureData
+                    ? `<div style="margin-top:8px;"><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;"><span style="font-size:11px;color:#555;">${cn.approvedBy || 'Budget Owner'} — ${cn.budgetOwnerSignedAt ? new Date(cn.budgetOwnerSignedAt).toLocaleString() : ''}</span></div>`
+                    : '<div style="height:60px;border-bottom:1px solid #333;width:220px;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Awaiting signature</span>';
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Purchase Order ${poNum}</title>
+<style>body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
+h1{color:#285B3C;font-size:20px;}table{width:100%;border-collapse:collapse;margin-top:16px;}
+th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;}
+td{padding:9px 12px;border-bottom:1px solid #ddd;}tr:nth-child(even){background:#f9f9f9;}
+.header-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;}
+.label{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;}
+.value{font-weight:600;font-size:14px;margin-top:2px;}
+.sig-section{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:32px;}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
+  <div><h1>PURCHASE ORDER</h1><div style="font-size:12px;color:#555;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div></div>
+  <div style="text-align:right;"><div class="label">PO Number</div><div class="value">${poNum}</div>
+  <div class="label" style="margin-top:8px;">Date</div><div class="value">${new Date(cn.poGeneratedAt||Date.now()).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+</div>
+<div class="header-grid">
+  <div><div class="label">Activity / Description</div><div class="value">${cn.activityTitle}</div></div>
+  <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
+  <div><div class="label">Concept Note Ref</div><div class="value">${cn.refNumber}</div></div>
+  <div><div class="label">Estimated Amount</div><div class="value">₦${Number(cn.estimatedCost).toLocaleString()}</div></div>
+  <div style="grid-column:1/-1"><div class="label">Objective</div><div class="value" style="font-weight:400;">${cn.objective||'—'}</div></div>
+</div>
+<table><thead><tr><th>Description</th><th>Qty</th><th>Unit Price (₦)</th><th>Total (₦)</th></tr></thead>
+<tbody><tr><td>${cn.activityTitle}</td><td>1</td><td>${Number(cn.estimatedCost).toLocaleString()}</td><td>${Number(cn.estimatedCost).toLocaleString()}</td></tr>
+</tbody><tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;">Total</td><td style="font-weight:700;">₦${Number(cn.estimatedCost).toLocaleString()}</td></tr></tfoot></table>
+<div class="sig-section">
+  <div><div class="label">Authorised By (Budget Owner)</div>${sigBlock}</div>
+  <div><div class="label">Received By (Procurement)</div><div style="height:60px;border-bottom:1px solid #333;width:220px;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Awaiting procurement signature</span></div>
+</div>
+<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">This document was generated by RAHAMA Financial Management System. Ref: ${poNum}</div>
+</body></html>`;
+                const w = window.open('','_blank','width=800,height=700');
+                if (w) { w.document.write(html); w.document.close(); }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // GRR PREVIEW
+            // ══════════════════════════════════════════════════════════════
+            _previewGRRDraft(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                const grrNum = cn.grrNumber || ('GRR-' + refNumber + '-DRAFT');
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GRR ${grrNum}</title>
+<style>body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
+h1{color:#285B3C;font-size:20px;}table{width:100%;border-collapse:collapse;margin-top:16px;}
+th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;}
+td{padding:9px 12px;border-bottom:1px solid #ddd;}
+.label{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;}
+.value{font-weight:600;font-size:14px;margin-top:2px;}
+.sig-section{margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
+  <div><h1>GOODS / SERVICES RECEIVING REPORT</h1><div style="font-size:12px;color:#555;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div></div>
+  <div style="text-align:right;"><div class="label">GRR Number</div><div class="value">${grrNum}</div>
+  <div class="label" style="margin-top:8px;">Date</div><div class="value">${new Date().toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+</div>
+<table><thead><tr><th>Item Description</th><th>Qty Ordered</th><th>Qty Received</th><th>Condition</th><th>Remarks</th></tr></thead>
+<tbody><tr><td>${cn.activityTitle}</td><td>1</td><td>___</td><td>Good ☐&nbsp;&nbsp;Damaged ☐</td><td>___________________</td></tr>
+</tbody></table>
+<div class="sig-section" style="margin-top:48px;">
+  <div><div class="label">Received By (Staff)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+  <div><div class="label">Inspected By (Procurement)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+  <div><div class="label">Approved By (Budget Owner)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+</div>
+<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">RAHAMA FMS — GRR Ref: ${grrNum} | CN Ref: ${refNumber}</div>
+</body></html>`;
+                const w = window.open('','_blank','width=800,height=700');
+                if (w) { w.document.write(html); w.document.close(); }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // SIGNING VIEW (post-procurement PO signing)
+            // ══════════════════════════════════════════════════════════════
+            async showSigningView(docRef, docType, paymentRef) {
+                const content = document.getElementById('mainContent');
+                const cn = this.data.conceptNotes.find(c =>
+                    this.data.payments.find(p => p.refNumber === paymentRef && p.conceptNoteRef === c.refNumber)
+                    || c.refNumber === paymentRef);
+
+                const sigData = await this._showSignaturePad(
+                    docType === 'purchase_order' ? 'Sign Purchase Order' : 'Sign GRR',
+                    `I, ${this.currentUser}, confirm the ${docType === 'purchase_order' ? 'purchase order' : 'GRR'} ${docRef} is accurate and authorised.`
+                );
+                if (!sigData) { this.showView('approvals'); return; }
+
+                try {
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef, docType, relatedRef: paymentRef,
+                        signerName: this.currentUser,
+                        signerRole: this.data.roles[this.currentUser] || 'unknown',
+                        signatureData: sigData,
+                        signedAt: new Date().toISOString(),
+                        pageContext: 'procurement_complete'
+                    }]);
+                    await this._logAudit('document_signatures', docRef, 'signed', `${docType} signed by ${this.currentUser}`);
+                    alert(docType === 'purchase_order' ? 'PO signed. Now initiating GRR signing...' : 'GRR signed and recorded.');
+                    if (docType === 'purchase_order') {
+                        await this.showSigningView('GRR-' + paymentRef, 'grr', paymentRef);
+                    } else {
+                        this.showView('approvals');
+                    }
+                } catch(e) { alert('Signing error: ' + e.message); }
+            },
+
+            async initPOSigning(paymentRef)  { /* PO signing initiated via showSigningView after procurement complete */ },
+            async initGRRSigning(paymentRef) { /* GRR signing initiated chain after PO */ },
+
+            // ══════════════════════════════════════════════════════════════
+            // AUDIT TRAIL VIEW
+            // ══════════════════════════════════════════════════════════════
+
+            async resolveVarianceEscalation(refNumber, action) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber)
+                    || (await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single()).data;
+                if (!cn) { alert('Concept note not found.'); return; }
+
+                const over = cn.estimatedCost > 0
+                    ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '?';
+
+                if (action === 'approve') {
+                    // Require BO signature before approving excess
+                    const sigData = await this._showSignaturePad(
+                        'Approve Variance Excess',
+                        `I, ${this.currentUser}, approve the cost increase of ${over}% for ${refNumber} (₦${Number(cn.estimatedCost).toLocaleString()} → ₦${Number(cn.actualProcurementCost).toLocaleString()}).`
+                    );
+                    if (!sigData) return;
+
+                    try {
+                        // Create payment at actual procurement cost and move to finance
+                        const payRecord = {
+                            refNumber: 'PAY' + Date.now(),
+                            conceptNoteId: cn.id,
+                            conceptNoteRef: cn.refNumber,
+                            projectCode: cn.projectCode,
+                            staffName: cn.staffName,
+                            amount: cn.actualProcurementCost,
+                            paymentMethod: 'bank_transfer',
+                            justification: `Variance approved by ${this.currentUser} (${over}% over). Estimated: ₦${Number(cn.estimatedCost).toLocaleString()} | Actual: ₦${Number(cn.actualProcurementCost).toLocaleString()}. ${cn.varianceJustification}`,
+                            accountName: cn.accountName, accountNumber: cn.accountNumber, bankName: cn.bankName,
+                            status: 'pending',
+                            requestDate: new Date().toISOString(),
+                            procurementComplete: true,
+                            retirementresponsibility: 'procurement'
+                        };
+                        const { data: payData, error: payError } = await supabaseClient.from('payments').insert([payRecord]).select();
+                        if (payError) throw payError;
+
+                        await supabaseClient.from('concept_notes').update({
+                            status: 'approved',
+                            currentApprover: 'finance',
+                            procurementComplete: new Date().toISOString(),
+                            approvedBy: this.currentUser,
+                            approvedDate: new Date().toISOString(),
+                            varianceApprovedBy: this.currentUser,
+                            varianceApprovedAt: new Date().toISOString(),
+                            varianceApprovalSignature: sigData
+                        }).eq('refNumber', refNumber);
+
+                        await supabaseClient.from('document_signatures').insert([{
+                            docRef: refNumber, docType: 'variance_approval', relatedRef: refNumber,
+                            signerName: this.currentUser, signerRole: this.getUserRole(),
+                            signatureData: sigData, signedAt: new Date().toISOString(),
+                            pageContext: 'variance_escalation_approval'
+                        }]);
+
+                        await this._logAudit('concept_notes', refNumber, 'variance_approved',
+                            `${over}% variance approved by ${this.currentUser}. Payment ${payData[0].refNumber} created.`);
+                        this.clearCache();
+                        alert(`✅ Variance approved.\n\nPayment of ₦${Number(cn.actualProcurementCost).toLocaleString()} forwarded to Finance for processing.`);
+                        this.showView('approvals');
+                    } catch(e) { alert('Error: ' + e.message); }
+
+                } else {
+                    // Reject — send back to procurement with reason
+                    const reason = prompt(
+                        `Reject variance for ${refNumber}?\n\n` +
+                        `Procurement will be sent back to re-source at or within the original estimate of ₦${Number(cn.estimatedCost).toLocaleString()}.\n\n` +
+                        `Enter rejection reason for procurement:`
+                    );
+                    if (reason === null) return;
+                    if (!reason.trim()) { alert('Please provide a rejection reason.'); return; }
+
+                    try {
+                        await supabaseClient.from('concept_notes').update({
+                            status: 'variance_rejected',
+                            currentApprover: 'procurement',
+                            rejectionReason: reason.trim(),
+                            rejectedBy: this.currentUser,
+                            rejectedDate: new Date().toISOString()
+                        }).eq('refNumber', refNumber);
+
+                        await this._logAudit('concept_notes', refNumber, 'variance_rejected',
+                            `Rejected by ${this.currentUser}. Reason: ${reason.trim()}`);
+                        this.clearCache();
+                        alert(`Variance rejected. Procurement has been notified to re-source within the original budget.`);
+                        this.showView('approvals');
+                    } catch(e) { alert('Error: ' + e.message); }
+                }
+            },
+
+            async renderAuditTrail(content) {
+                const role = this.data.roles[this.currentUser];
+                const isAdmin = ['budgetOwner','ed','finance'].includes(role);
+
+                content.innerHTML = `<div class="header"><h2>🔍 Audit Trail</h2><p>Complete record of all actions taken in the system</p></div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
+                        <input id="auditSearch" type="text" placeholder="Search ref, user, action…" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;flex:1;min-width:200px;" oninput="app._filterAudit()">
+                        <select id="auditActionFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" onchange="app._filterAudit()">
+                            <option value="">All Actions</option>
+                            <option value="submitted">Submitted</option>
+                            <option value="approve">Approved</option>
+                            <option value="reject">Rejected</option>
+                            <option value="paid">Paid</option>
+                            <option value="signed">Signed</option>
+                            <option value="procurement_complete">Procurement Complete</option>
+                        </select>
+                        <select id="auditTableFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" onchange="app._filterAudit()">
+                            <option value="">All Tables</option>
+                            <option value="concept_notes">Concept Notes</option>
+                            <option value="payments">Payments</option>
+                            <option value="retirements">Retirements</option>
+                            <option value="document_signatures">Signatures</option>
+                        </select>
+                    </div>
+                    <div id="auditContent"><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><p style="margin-top:16px;color:var(--text-muted);">Loading audit trail…</p></div></div>`;
+
+                let query = supabaseClient.from('audit_log').select('*').order('changedAt', { ascending: false }).limit(200);
+                if (!isAdmin) query = query.eq('changedBy', this.currentUser);
+                const { data, error } = await query;
+
+                if (error) { document.getElementById('auditContent').innerHTML = `<div class="empty-state"><p>Error loading audit trail: ${error.message}</p></div>`; return; }
+
+                this._auditData = data || [];
+                this._renderAuditRows(this._auditData);
+            },
+
+            _renderAuditRows(rows) {
+                const el = document.getElementById('auditContent');
+                if (!rows || rows.length === 0) {
+                    el.innerHTML = '<div class="empty-state"><p>No audit records found.</p></div>';
+                    return;
+                }
+                const actionClass = a => a.includes('reject') ? 'reject' : a.includes('paid') ? 'paid' : '';
+                el.innerHTML = `
+                    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+                        <div class="audit-row head">
+                            <span>When</span><span>Table</span><span>Ref</span><span>Details</span><span>By</span>
+                        </div>
+                        ${rows.map(r => `
+                        <div class="audit-row">
+                            <span style="color:var(--text-muted);font-size:12px;">${new Date(r.changedAt).toLocaleString()}</span>
+                            <span style="font-size:12px;">${r.tableName || '—'}</span>
+                            <span style="font-weight:600;font-size:12px;">${r.refNumber || '—'}</span>
+                            <span>
+                                <span class="audit-action-badge ${actionClass(r.action||'')}">${r.action||'—'}</span>
+                                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${r.details ? r.details.substring(0,120) : ''}</span>
+                            </span>
+                            <span style="font-size:12px;font-weight:600;">${r.changedBy||'—'}</span>
+                        </div>`).join('')}
+                    </div>
+                    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">Showing ${rows.length} record${rows.length===1?'':'s'}</div>`;
+            },
+
+            _filterAudit() {
+                if (!this._auditData) return;
+                const q  = (document.getElementById('auditSearch')?.value||'').toLowerCase();
+                const ac = document.getElementById('auditActionFilter')?.value||'';
+                const tc = document.getElementById('auditTableFilter')?.value||'';
+                const filtered = this._auditData.filter(r => {
+                    if (ac && !(r.action||'').includes(ac)) return false;
+                    if (tc && r.tableName !== tc) return false;
+                    if (q && !`${r.refNumber} ${r.changedBy} ${r.action} ${r.details}`.toLowerCase().includes(q)) return false;
+                    return true;
+                });
+                this._renderAuditRows(filtered);
             },
 
             async _logAudit(table, refNumber, action, details) {
@@ -1584,6 +2684,7 @@
                         case 'a': e.preventDefault(); app.showView('approvals'); break;
                         case 'p': e.preventDefault(); app.showView('payment'); break;
                         case 'r': e.preventDefault(); app.showView('retirement'); break;
+                        case 't': e.preventDefault(); app.showView('auditTrail'); break;
                     }
                 }
             });
