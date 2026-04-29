@@ -1675,27 +1675,9 @@
                             </div>
                         </div>` : ''}
                         <div id="cnLinkedDocs_${cn.refNumber}" style="display:none;"></div>
-                        <script>
-                        (async () => {
-                            const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef','${cn.refNumber}');
-                            const payRefs = (payResp.data||[]).map(p=>p.refNumber);
-                            if (!payRefs.length) return;
-                            const retResp = await supabaseClient.from('retirements').select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName').in('paymentRef',payRefs);
-                            const rets = retResp.data||[];
-                            const el = document.getElementById('cnLinkedDocs_${cn.refNumber}');
-                            if (!el || !rets.some(r=>r.receiptFileUrl||r.invoiceFileUrl)) return;
-                            el.style.display='block';
-                            el.innerHTML = \`<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">
-                                <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>
-                                <div style="display:flex;flex-wrap:wrap;gap:10px;">\${rets.map(r=>\`
-                                    \${r.receiptFileUrl ? \`<button type="button" class="btn btn-secondary" onclick="app.downloadFile('\${r.receiptFileUrl}','\${r.receiptFileName||'receipt'}')">📎 Receipt (\${r.refNumber})</button>\` : ''}
-                                    \${r.invoiceFileUrl ? \`<button type="button" class="btn btn-secondary" onclick="app.downloadFile('\${r.invoiceFileUrl}','\${r.invoiceFileName||'invoice'}')">🧾 Invoice (\${r.refNumber})</button>\` : ''}
-                                \`).join('')}</div>
-                            </div>\`;
-                        })();
-                        </script>
                         <div class="btn-group full-width"><button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}<button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button></div>
                     </div>`;
+                setTimeout(() => app._loadLinkedDocs(cn.refNumber), 0);
             },
             
             async viewConceptNoteFromPayment(paymentRef) {
@@ -2647,6 +2629,26 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                     return true;
                 });
                 this._renderAuditRows(filtered);
+            },
+
+            async _loadLinkedDocs(refNumber) {
+                try {
+                    const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', refNumber);
+                    const payRefs = (payResp.data || []).map(p => p.refNumber);
+                    if (!payRefs.length) return;
+                    const retResp = await supabaseClient.from('retirements').select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName').in('paymentRef', payRefs);
+                    const rets = retResp.data || [];
+                    const el = document.getElementById('cnLinkedDocs_' + refNumber);
+                    if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl)) return;
+                    el.style.display = 'block';
+                    el.innerHTML = `<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">
+                        <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:10px;">${rets.map(r => `
+                            ${r.receiptFileUrl ? `<button type="button" class="btn btn-secondary" onclick="app.downloadFile('${r.receiptFileUrl}','${r.receiptFileName||'receipt'}')">📎 Receipt (${r.refNumber})</button>` : ''}
+                            ${r.invoiceFileUrl ? `<button type="button" class="btn btn-secondary" onclick="app.downloadFile('${r.invoiceFileUrl}','${r.invoiceFileName||'invoice'}')">🧾 Invoice (${r.refNumber})</button>` : ''}
+                        `).join('')}</div>
+                    </div>`;
+                } catch(e) { console.warn('_loadLinkedDocs error:', e.message); }
             },
 
             async _logAudit(table, refNumber, action, details) {
