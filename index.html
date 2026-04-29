@@ -1226,21 +1226,21 @@
                             </tr></thead><tbody>
                             ${varCNs.map(cn => {
                                 const over = cn.estimatedCost > 0 ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '—';
-                                return `<tr style="background:#FFF8E1;">
-                                    <td style="font-weight:600;">${cn.refNumber}</td>
-                                    <td>${cn.staffName}</td>
-                                    <td>${cn.activityTitle}</td>
-                                    <td>${cn.projectCode}</td>
-                                    <td>₦${Number(cn.estimatedCost).toLocaleString()}</td>
-                                    <td style="font-weight:600;color:#C62626;">₦${Number(cn.actualProcurementCost).toLocaleString()}</td>
-                                    <td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+${over}%</span></td>
-                                    <td style="font-size:12px;max-width:200px;">${cn.varianceJustification || '—'}</td>
-                                    <td style="font-size:12px;">${cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—'}</td>
-                                    <td>
-                                        <button class="action-btn approve" onclick="app.resolveVarianceEscalation('${cn.refNumber}', 'approve')" style="margin-bottom:6px;">✓ Approve Excess</button>
-                                        <button class="action-btn reject"  onclick="app.resolveVarianceEscalation('${cn.refNumber}', 'reject')">✗ Reject — Re-source</button>
-                                    </td>
-                                </tr>`;
+                                return '<tr style="background:#FFF8E1;">'
+                                    + '<td style="font-weight:600;">' + cn.refNumber + '</td>'
+                                    + '<td>' + cn.staffName + '</td>'
+                                    + '<td>' + cn.activityTitle + '</td>'
+                                    + '<td>' + cn.projectCode + '</td>'
+                                    + '<td>₦' + Number(cn.estimatedCost).toLocaleString() + '</td>'
+                                    + '<td style="font-weight:600;color:#C62626;">₦' + Number(cn.actualProcurementCost).toLocaleString() + '</td>'
+                                    + '<td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+' + over + '%</span></td>'
+                                    + '<td style="font-size:12px;max-width:200px;">' + (cn.varianceJustification || '—') + '</td>'
+                                    + '<td style="font-size:12px;">' + (cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—') + '</td>'
+                                    + '<td>'
+                                    + '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')" style="margin-bottom:6px;">✓ Approve Excess</button>'
+                                    + '<button class="action-btn reject" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'reject\')">✗ Reject — Re-source</button>'
+                                    + '</td>'
+                                    + '</tr>';
                             }).join('')}
                             </tbody></table></div>
                         </div>`;
@@ -1608,8 +1608,9 @@
                     await this.initPOSigning(newPayRef);
                     await this.initGRRSigning(newPayRef);
 
-                    await this._logAudit('concept_notes', refNumber, 'procurement_complete',
-                        `Completed by ${this.currentUser}. Actual cost: ₦${actualCost.toLocaleString()}`);
+                    // Non-blocking audit — must not interrupt procurement success
+                    this._logAudit('concept_notes', refNumber, 'procurement_complete',
+                        `Completed by ${this.currentUser}. Actual cost: \u20a6${actualCost.toLocaleString()}`).catch(() => {});
 
                     alert('Procurement completed!\n\nPurchase Order and GRR signing workflows have been initiated.\nYou will now be taken to sign the PO first.');
                     await this.showSigningView(`PO-${newPayRef}`, 'purchase_order', newPayRef);
@@ -1677,7 +1678,26 @@
                         <div id="cnLinkedDocs_${cn.refNumber}" style="display:none;"></div>
                         <div class="btn-group full-width"><button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}<button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button></div>
                     </div>`;
-                setTimeout(() => app._loadLinkedDocs(cn.refNumber), 0);
+                // Load linked retirement documents asynchronously after rendering
+                (async () => {
+                    const cnRef = cn.refNumber;
+                    const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef);
+                    const payRefs = (payResp.data || []).map(p => p.refNumber);
+                    if (!payRefs.length) return;
+                    const retResp = await supabaseClient.from('retirements').select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName').in('paymentRef', payRefs);
+                    const rets = retResp.data || [];
+                    const el = document.getElementById('cnLinkedDocs_' + cnRef);
+                    if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl)) return;
+                    el.style.display = 'block';
+                    el.innerHTML = '<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">'
+                        + '<label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>'
+                        + '<div style="display:flex;flex-wrap:wrap;gap:10px;">'
+                        + rets.map(r =>
+                            (r.receiptFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.receiptFileUrl + '\',\'' + (r.receiptFileName || 'receipt') + '\')">📎 Receipt (' + r.refNumber + ')</button>' : '')
+                            + (r.invoiceFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.invoiceFileUrl + '\',\'' + (r.invoiceFileName || 'invoice') + '\')">🧾 Invoice (' + r.refNumber + ')</button>' : '')
+                        ).join('')
+                        + '</div></div>';
+                })();
             },
             
             async viewConceptNoteFromPayment(paymentRef) {
@@ -2631,29 +2651,11 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                 this._renderAuditRows(filtered);
             },
 
-            async _loadLinkedDocs(refNumber) {
-                try {
-                    const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', refNumber);
-                    const payRefs = (payResp.data || []).map(p => p.refNumber);
-                    if (!payRefs.length) return;
-                    const retResp = await supabaseClient.from('retirements').select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName').in('paymentRef', payRefs);
-                    const rets = retResp.data || [];
-                    const el = document.getElementById('cnLinkedDocs_' + refNumber);
-                    if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl)) return;
-                    el.style.display = 'block';
-                    el.innerHTML = `<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">
-                        <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>
-                        <div style="display:flex;flex-wrap:wrap;gap:10px;">${rets.map(r => `
-                            ${r.receiptFileUrl ? `<button type="button" class="btn btn-secondary" onclick="app.downloadFile('${r.receiptFileUrl}','${r.receiptFileName||'receipt'}')">📎 Receipt (${r.refNumber})</button>` : ''}
-                            ${r.invoiceFileUrl ? `<button type="button" class="btn btn-secondary" onclick="app.downloadFile('${r.invoiceFileUrl}','${r.invoiceFileName||'invoice'}')">🧾 Invoice (${r.refNumber})</button>` : ''}
-                        `).join('')}</div>
-                    </div>`;
-                } catch(e) { console.warn('_loadLinkedDocs error:', e.message); }
-            },
-
             async _logAudit(table, refNumber, action, details) {
+                // Audit log is non-critical — errors here must NEVER interrupt
+                // main flows (e.g. RLS policy mismatches on the audit_log table).
                 try {
-                    const { error } = await supabaseClient.from('audit_log').insert([{
+                    const result = await supabaseClient.from('audit_log').insert([{
                         tableName: table,
                         refNumber,
                         action,
@@ -2661,10 +2663,13 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                         changedBy: this.currentUser,
                         changedAt: new Date().toISOString()
                     }]);
-                    if (error) console.warn('Audit log write failed:', error.message);
+                    if (result && result.error) {
+                        console.warn('Audit log write failed (non-fatal):', result.error.message);
+                    }
                 } catch(e) {
-                    console.warn('Audit log write failed:', e.message);
+                    console.warn('Audit log write failed (non-fatal):', e.message);
                 }
+                // Always resolves — never rejects
             },
 
             async createNotification(recipientName, message, type, refNumber) {
