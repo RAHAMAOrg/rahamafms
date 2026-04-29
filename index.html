@@ -222,6 +222,8 @@
                 <li><button onclick="app.showView('retirement')" data-view="retirement">Submit Retirement</button></li>
                 <li><button onclick="app.showView('approvals')" data-view="approvals">My Approvals</button></li>
                 <li><button id="reportsBtn" onclick="app.showView('reports')" data-view="reports">Reports & Budget</button></li>
+                <li><button id="auditTrailBtn" onclick="app.showView('auditTrail')" data-view="auditTrail" style="display:none;">🔍 Audit Trail</button></li>
+                <li><button id="superAdminBtn" onclick="app.showView('superAdmin')" data-view="superAdmin" style="display:none;">👁 System Overview</button></li>
                 <li><button onclick="app.showView('settings')" data-view="settings">Settings</button></li>
                 <li><button onclick="window.location.href='grants-tracker.html'" style="color:#059669;font-weight:600;">📊 Project Tracker</button></li>
             </ul>
@@ -286,6 +288,13 @@
                     const btn = document.getElementById('reportsBtn');
                     if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
                         if (btn) btn.style.display = 'none';
+                    }
+                    // Budget Owner and ED get Audit Trail + System Overview (super admin)
+                    const auditBtn = document.getElementById('auditTrailBtn');
+                    const superBtn = document.getElementById('superAdminBtn');
+                    if (role === 'budgetOwner' || role === 'ed') {
+                        if (auditBtn) auditBtn.style.display = '';
+                        if (superBtn) superBtn.style.display = '';
                     }
                 }
                 this.showView('dashboard');
@@ -482,6 +491,7 @@
                     switch(viewName) {
                         case 'dashboard': this.renderDashboard(content); break;
                         case 'auditTrail': this.renderAuditTrail(content).catch(e => console.error(e)); break;
+                        case 'superAdmin': this.renderSuperAdminView(content).catch(e => console.error(e)); break;
                         case 'conceptNote': this.renderConceptNoteForm(content).catch(e => console.error(e)); break;
                         case 'payment': this.renderPaymentForm(content); break;
                         case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
@@ -1226,21 +1236,21 @@
                             </tr></thead><tbody>
                             ${varCNs.map(cn => {
                                 const over = cn.estimatedCost > 0 ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '—';
-                                return '<tr style="background:#FFF8E1;">'
-                                    + '<td style="font-weight:600;">' + cn.refNumber + '</td>'
-                                    + '<td>' + cn.staffName + '</td>'
-                                    + '<td>' + cn.activityTitle + '</td>'
-                                    + '<td>' + cn.projectCode + '</td>'
-                                    + '<td>₦' + Number(cn.estimatedCost).toLocaleString() + '</td>'
-                                    + '<td style="font-weight:600;color:#C62626;">₦' + Number(cn.actualProcurementCost).toLocaleString() + '</td>'
-                                    + '<td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+' + over + '%</span></td>'
-                                    + '<td style="font-size:12px;max-width:200px;">' + (cn.varianceJustification || '—') + '</td>'
-                                    + '<td style="font-size:12px;">' + (cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—') + '</td>'
-                                    + '<td>'
-                                    + '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')" style="margin-bottom:6px;">✓ Approve Excess</button>'
-                                    + '<button class="action-btn reject" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'reject\')">✗ Reject — Re-source</button>'
-                                    + '</td>'
-                                    + '</tr>';
+                                return '<tr style="background:#FFF8E1;">' +
+                                    '<td style="font-weight:600;">' + cn.refNumber + '</td>' +
+                                    '<td>' + cn.staffName + '</td>' +
+                                    '<td>' + cn.activityTitle + '</td>' +
+                                    '<td>' + cn.projectCode + '</td>' +
+                                    '<td>₦' + Number(cn.estimatedCost).toLocaleString() + '</td>' +
+                                    '<td style="font-weight:600;color:#C62626;">₦' + Number(cn.actualProcurementCost).toLocaleString() + '</td>' +
+                                    '<td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+' + over + '%</span></td>' +
+                                    '<td style="font-size:12px;max-width:200px;">' + (cn.varianceJustification || '—') + '</td>' +
+                                    '<td style="font-size:12px;">' + (cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—') + '</td>' +
+                                    '<td>' +
+                                        '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')" style="margin-bottom:6px;">✓ Approve Excess</button>' +
+                                        '<button class="action-btn reject" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'reject\')">✗ Reject — Re-source</button>' +
+                                    '</td>' +
+                                '</tr>';
                             }).join('')}
                             </tbody></table></div>
                         </div>`;
@@ -1442,6 +1452,17 @@
                         <div class="form-group"><label>Account Name <span class="required">*</span></label><input type="text" id="accountName" required placeholder="Name as it appears on bank account"></div>
                         <div class="form-group"><label>Account Number <span class="required">*</span></label><input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number"></div>
                         <div class="form-group full-width"><label>Bank Name <span class="required">*</span></label><select id="bankName" required><option value="">Select Bank</option>${bankOptions}</select></div>
+
+                        <div class="form-group full-width">
+                            <h3 style="margin:24px 0 16px;font-family:'Archivo',sans-serif;">Vendor / Supplier Details</h3>
+                            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">These will appear on the PO and GRR documents</p>
+                        </div>
+                        <div class="form-group"><label>Vendor / Supplier Name <span class="required">*</span></label><input type="text" id="vendorName" required placeholder="Full name of vendor or company"></div>
+                        <div class="form-group"><label>Vendor Phone Number <span class="required">*</span></label><input type="text" id="vendorPhone" required placeholder="e.g. 08012345678"></div>
+                        <div class="form-group full-width"><label>Vendor Address / Contact Details</label><textarea id="vendorAddress" rows="2" placeholder="Vendor address, email, or other contact info (optional)"></textarea></div>
+                        <div class="form-group"><label>Goods / Services Supplied <span class="required">*</span></label><input type="text" id="vendorItemsSupplied" required placeholder="Brief description of what was purchased"></div>
+                        <div class="form-group"><label>Invoice / Receipt Number</label><input type="text" id="vendorInvoiceNo" placeholder="Vendor's invoice or receipt number (if available)"></div>
+
                         <div class="btn-group full-width">
                             <button type="submit" class="btn btn-primary" id="procurementSubmitBtn">Complete &amp; Generate Documents →</button>
                             <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">Cancel</button>
@@ -1507,6 +1528,16 @@
                 if (!this.validateAccountNumber(accountNumber)) {
                     alert('Account number must be exactly 10 digits'); return; }
 
+                const vendorName      = document.getElementById('vendorName')?.value?.trim();
+                const vendorPhone     = document.getElementById('vendorPhone')?.value?.trim();
+                const vendorAddress   = document.getElementById('vendorAddress')?.value?.trim();
+                const vendorItems     = document.getElementById('vendorItemsSupplied')?.value?.trim();
+                const vendorInvoiceNo = document.getElementById('vendorInvoiceNo')?.value?.trim();
+
+                if (!vendorName)  { alert('Please enter the vendor / supplier name.'); return; }
+                if (!vendorPhone) { alert('Please enter the vendor phone number.'); return; }
+                if (!vendorItems) { alert('Please describe the goods / services supplied.'); return; }
+
                 const variance = cn.estimatedCost - actualCost;
                 const overPct = cn.estimatedCost > 0 ? ((actualCost - cn.estimatedCost) / cn.estimatedCost) : 0;
 
@@ -1561,15 +1592,32 @@
                 try {
                     submitBtn.disabled = true; submitBtn.textContent = 'Processing...';
 
+                    // Generate project-based PO and GRR numbers
+                    const projCode  = (cn.projectCode || 'GEN').replace(/[^A-Z0-9]/gi,'').toUpperCase();
+                    const yearMonth = new Date().toISOString().slice(0,7).replace('-',''); // e.g. 202506
+                    const serial    = Date.now().toString().slice(-5);
+                    const poNumber  = `PO-${projCode}-${yearMonth}-${serial}`;
+                    const grrNumber = `GRR-${projCode}-${yearMonth}-${serial}`;
+                    const now       = new Date().toISOString();
+
                     const { error: cnError } = await supabaseClient.from('concept_notes').update({
                         status: 'approved',
-                        approvedDate: new Date().toISOString(),
+                        approvedDate: now,
                         approvedBy: this.currentUser,
-                        procurementComplete: new Date().toISOString(),
+                        procurementComplete: now,
                         retirementresponsibility: 'procurement',
                         procurementNotes: notes,
                         actualProcurementCost: actualCost,
-                        procurementVariance: variance
+                        procurementVariance: variance,
+                        poNumber,
+                        poGeneratedAt: now,
+                        grrNumber,
+                        grrGeneratedAt: now,
+                        grrVendorName: vendorName,
+                        grrVendorPhone: vendorPhone,
+                        vendorAddress: vendorAddress || null,
+                        vendorItemsSupplied: vendorItems,
+                        vendorInvoiceNo: vendorInvoiceNo || null
                     }).eq('refNumber', refNumber);
                     if (cnError) throw cnError;
 
@@ -1581,10 +1629,10 @@
                         staffName: cn.staffName,
                         amount: actualCost,
                         paymentMethod: 'bank_transfer',
-                        justification: `Procurement completed by ${this.currentUser}. Estimated: ₦${cn.estimatedCost.toLocaleString()} | Actual: ₦${actualCost.toLocaleString()} | Variance: ${variance >= 0 ? '+' : ''}₦${variance.toLocaleString()}. ${notes}`,
+                        justification: `Procurement completed by ${this.currentUser}. PO: ${poNumber} | GRR: ${grrNumber} | Vendor: ${vendorName} | Items: ${vendorItems} | Estimated: ₦${cn.estimatedCost.toLocaleString()} | Actual: ₦${actualCost.toLocaleString()} | Variance: ${variance >= 0 ? '+' : ''}₦${variance.toLocaleString()}. ${notes}`,
                         accountName, accountNumber, bankName,
                         status: 'pending',
-                        requestDate: new Date().toISOString(),
+                        requestDate: now,
                         procurementComplete: true,
                         retirementresponsibility: 'procurement'
                     };
@@ -1597,23 +1645,29 @@
                     const cnIdx = this.data.conceptNotes.findIndex(c => c.refNumber === refNumber);
                     if (cnIdx !== -1) Object.assign(this.data.conceptNotes[cnIdx], {
                         status: 'approved', approvedBy: this.currentUser,
-                        procurementComplete: payRecord.requestDate,
+                        procurementComplete: now,
                         retirementresponsibility: 'procurement',
                         procurementNotes: notes,
                         actualProcurementCost: actualCost,
-                        procurementVariance: variance
+                        procurementVariance: variance,
+                        poNumber, grrNumber,
+                        grrVendorName: vendorName,
+                        grrVendorPhone: vendorPhone
                     });
                     this.clearCache();
 
-                    await this.initPOSigning(newPayRef);
-                    await this.initGRRSigning(newPayRef);
+                    await this._logAudit('concept_notes', refNumber, 'procurement_complete',
+                        `Completed by ${this.currentUser}. PO: ${poNumber} | GRR: ${grrNumber} | Vendor: ${vendorName} | Actual cost: ₦${actualCost.toLocaleString()}`);
 
-                    // Non-blocking audit — must not interrupt procurement success
-                    this._logAudit('concept_notes', refNumber, 'procurement_complete',
-                        `Completed by ${this.currentUser}. Actual cost: \u20a6${actualCost.toLocaleString()}`).catch(() => {});
+                    // Notify the requester (staff) to sign the PO first
+                    await this.createNotification(cn.staffName,
+                        `Procurement is complete for ${refNumber} (${cn.activityTitle}). PO ${poNumber} is ready for your signature. Please open the concept note to sign.`,
+                        'info', refNumber);
 
-                    alert('Procurement completed!\n\nPurchase Order and GRR signing workflows have been initiated.\nYou will now be taken to sign the PO first.');
-                    await this.showSigningView(`PO-${newPayRef}`, 'purchase_order', newPayRef);
+                    alert(`Procurement completed!\n\nPO Number: ${poNumber}\nGRR Number: ${grrNumber}\nVendor: ${vendorName}\n\nSigning chain initiated:\n• PO: Staff → Budget Owner → Finance\n• GRR: Procurement → Staff → Vendor → Finance\n\nYou will now be taken to sign the GRR (Procurement step).`);
+
+                    // Procurement signs GRR first (received by procurement)
+                    await this.showSigningView(grrNumber, 'grr', newPayRef, 'procurement_received', refNumber);
 
                 } catch (error) {
                     console.error('Procurement error:', error);
@@ -1676,27 +1730,38 @@
                             </div>
                         </div>` : ''}
                         <div id="cnLinkedDocs_${cn.refNumber}" style="display:none;"></div>
-                        <div class="btn-group full-width"><button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}<button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button></div>
+                        <div class="btn-group full-width" style="flex-wrap:wrap;gap:8px;">
+                            <button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>
+                            ${(this.currentUser === cn.staffName || this.data.roles[this.currentUser] === 'staff') && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._staffSignPO('${cn.refNumber}')" style="border-color:#059669;color:#059669;">✍️ Sign PO (Staff)</button>` : ''}
+                            ${(this.currentUser === cn.staffName || this.data.roles[this.currentUser] === 'staff') && cn.requiresProcurement === 'yes' && cn.grrNumber ? `<button class="btn btn-secondary" onclick="app._staffVerifyGRR('${cn.refNumber}')" style="border-color:#047857;color:#047857;">✅ Verify GRR (Staff)</button>` : ''}
+                            ${this.data.roles[this.currentUser] === 'budgetOwner' && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (Budget Owner)</button>` : ''}
+                            ${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' && cn.grrNumber ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}
+                            <button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button>
+                        </div>
                     </div>`;
-                // Load linked retirement documents asynchronously after rendering
+
+                // Load linked retirement documents asynchronously after render
                 (async () => {
-                    const cnRef = cn.refNumber;
-                    const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef);
-                    const payRefs = (payResp.data || []).map(p => p.refNumber);
-                    if (!payRefs.length) return;
-                    const retResp = await supabaseClient.from('retirements').select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName').in('paymentRef', payRefs);
-                    const rets = retResp.data || [];
-                    const el = document.getElementById('cnLinkedDocs_' + cnRef);
-                    if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl)) return;
-                    el.style.display = 'block';
-                    el.innerHTML = '<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">'
-                        + '<label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>'
-                        + '<div style="display:flex;flex-wrap:wrap;gap:10px;">'
-                        + rets.map(r =>
-                            (r.receiptFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.receiptFileUrl + '\',\'' + (r.receiptFileName || 'receipt') + '\')">📎 Receipt (' + r.refNumber + ')</button>' : '')
-                            + (r.invoiceFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.invoiceFileUrl + '\',\'' + (r.invoiceFileName || 'invoice') + '\')">🧾 Invoice (' + r.refNumber + ')</button>' : '')
-                        ).join('')
-                        + '</div></div>';
+                    try {
+                        const payResp = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cn.refNumber);
+                        const payRefs = (payResp.data || []).map(p => p.refNumber);
+                        if (!payRefs.length) return;
+                        const retResp = await supabaseClient.from('retirements')
+                            .select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName')
+                            .in('paymentRef', payRefs);
+                        const rets = retResp.data || [];
+                        const el = document.getElementById('cnLinkedDocs_' + cn.refNumber);
+                        if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl)) return;
+                        el.style.display = 'block';
+                        el.innerHTML = '<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">' +
+                            '<label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>' +
+                            '<div style="display:flex;flex-wrap:wrap;gap:10px;">' +
+                            rets.map(function(r) {
+                                return (r.receiptFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.receiptFileUrl + '\',\'' + (r.receiptFileName || 'receipt') + '\')">📎 Receipt (' + r.refNumber + ')</button> ' : '') +
+                                       (r.invoiceFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.invoiceFileUrl + '\',\'' + (r.invoiceFileName || 'invoice') + '\')">🧾 Invoice (' + r.refNumber + ')</button> ' : '');
+                            }).join('') +
+                            '</div></div>';
+                    } catch(e) { console.warn('Could not load retirement docs:', e); }
                 })();
             },
             
@@ -1870,34 +1935,60 @@
                 const fmt = d => d ? new Date(d).toLocaleString() : 'N/A';
                 const money = n => n != null && n !== '' ? '\u20a6' + Number(n).toLocaleString() : 'N/A';
 
-                const poSigs = docSigs.filter(s => s.docType === 'purchase_order');
+                const poSigs  = docSigs.filter(s => s.docType === 'purchase_order');
                 const grrSigs = docSigs.filter(s => s.docType === 'grr');
                 const vendorSig = grrSigs.find(s => s.signerRole === 'vendor');
 
+                // PO signing chain breakdown
+                const poStaffSig  = poSigs.find(s => s.pageContext === 'staff_po');
+                const poBoSig     = poSigs.find(s => s.pageContext === 'budget_owner_po' || s.signerRole === 'budgetOwner');
+                const poFinSig    = poSigs.find(s => s.pageContext === 'finance_sign' || s.signerRole === 'finance');
+                const grrProcSig  = grrSigs.find(s => s.pageContext === 'procurement_received');
+                const grrStaffSig = grrSigs.find(s => s.pageContext === 'staff_grr_verify');
+                const grrFinSig   = grrSigs.find(s => s.pageContext === 'finance_sign' || (s.signerRole === 'finance' && s.docType === 'grr'));
+
+                const sigLine = (label, sig, fallbackDate) => {
+                    if (sig) return `${label}: ${sig.signerName} — signed ${fmt(sig.signedAt)}`;
+                    if (fallbackDate) return `${label}: Recorded ${fmt(fallbackDate)} (pre-digital)`;
+                    return `${label}: Pending`;
+                };
+
                 const poSection = cn.requiresProcurement === 'yes' ? [
                     '', S, 'PURCHASE ORDER (PO)', S, '',
-                    `PO Number:              ${cn.poNumber || 'N/A'}`,
+                    `PO Number:              ${cn.poNumber || 'PENDING — not yet generated'}`,
                     `PO Generated:           ${fmt(cn.poGeneratedAt)}`,
-                    `Authorised By:          ${cn.approvedBy || 'N/A'}`,
-                    `Authorised Date:        ${fmt(cn.budgetOwnerSignedAt)}`,
-                    `BO Signature On File:   ${poSigs.length > 0 ? 'YES — ' + poSigs.map(s => s.signerName + ' (' + fmt(s.signedAt) + ')').join(', ') : 'No digital signature recorded'}`,
+                    '',
+                    'SIGNING CHAIN:',
+                    sigLine('  1. Staff (Requester)',    poStaffSig,  null),
+                    sigLine('  2. Budget Owner',         poBoSig,     cn.budgetOwnerSignedAt),
+                    sigLine('  3. Finance',              poFinSig,    null),
                     '',
                     `Actual Cost:            ${money(cn.actualProcurementCost)}`,
                     `Estimated Cost:         ${money(cn.estimatedCost)}`,
                     `Variance:               ${cn.procurementVariance != null ? (cn.procurementVariance >= 0 ? '+' : '') + money(cn.procurementVariance) : 'N/A'}`,
-                    `Procurement Notes:      ${cn.procurementNotes || 'N/A'}`,
+                    `Procurement Notes:      ${cn.procurementNotes || 'None'}`,
                     D
                 ].join('\n') : '';
 
                 const grrSection = cn.requiresProcurement === 'yes' ? [
                     '', S, 'GOODS / SERVICES RECEIVING REPORT (GRR)', S, '',
-                    `GRR Number:             ${cn.grrNumber || 'N/A'}`,
-                    `GRR File Attached:      ${cn.grrFileName || 'N/A'}`,
-                    `Vendor / Supplier:      ${cn.grrVendorName || 'N/A'}`,
-                    `Vendor Phone:           ${cn.grrVendorPhone || 'N/A'}`,
-                    `Vendor Signed At:       ${fmt(cn.grrVendorSignedAt)}`,
-                    `Vendor Sig On File:     ${vendorSig ? 'YES — signed ' + fmt(vendorSig.signedAt) + ' via ' + (vendorSig.pageContext || 'unknown') : 'Pending'}`,
-                    `Procurement Signed By:  ${grrSigs.filter(s => s.signerRole !== 'vendor').map(s => s.signerName).join(', ') || 'N/A'}`,
+                    `GRR Number:             ${cn.grrNumber || 'PENDING — not yet generated'}`,
+                    `GRR File Attached:      ${cn.grrFileName || 'Not uploaded (digital GRR in system)'}`,
+                    '',
+                    'VENDOR DETAILS:',
+                    `  Vendor / Supplier:    ${cn.grrVendorName || 'Not recorded'}`,
+                    `  Vendor Phone:         ${cn.grrVendorPhone || 'Not recorded'}`,
+                    `  Vendor Address:       ${cn.vendorAddress || 'Not recorded'}`,
+                    `  Items / Services:     ${cn.vendorItemsSupplied || 'Not recorded'}`,
+                    `  Invoice / Receipt No: ${cn.vendorInvoiceNo || 'Not recorded'}`,
+                    '',
+                    'SIGNING CHAIN:',
+                    sigLine('  1. Procurement (Received By)',      grrProcSig,  null),
+                    sigLine('  2. Programme Staff (Verified By)',  grrStaffSig, null),
+                    vendorSig
+                        ? `  3. Vendor:                 ${cn.grrVendorName || vendorSig.signerName} — signed ${fmt(vendorSig.signedAt)}`
+                        : `  3. Vendor:                 Pending`,
+                    sigLine('  4. Finance',                        grrFinSig,   null),
                     D
                 ].join('\n') : '';
 
@@ -2394,14 +2485,17 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}tr:nth-child(even){background:
   <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
   <div><div class="label">Concept Note Ref</div><div class="value">${cn.refNumber}</div></div>
   <div><div class="label">Estimated Amount</div><div class="value">₦${Number(cn.estimatedCost).toLocaleString()}</div></div>
+  <div><div class="label">Vendor / Supplier</div><div class="value">${cn.grrVendorName||'___________________________'}</div></div>
+  <div><div class="label">Vendor Phone</div><div class="value">${cn.grrVendorPhone||'___________________________'}</div></div>
   <div style="grid-column:1/-1"><div class="label">Objective</div><div class="value" style="font-weight:400;">${cn.objective||'—'}</div></div>
 </div>
 <table><thead><tr><th>Description</th><th>Qty</th><th>Unit Price (₦)</th><th>Total (₦)</th></tr></thead>
 <tbody><tr><td>${cn.activityTitle}</td><td>1</td><td>${Number(cn.estimatedCost).toLocaleString()}</td><td>${Number(cn.estimatedCost).toLocaleString()}</td></tr>
 </tbody><tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;">Total</td><td style="font-weight:700;">₦${Number(cn.estimatedCost).toLocaleString()}</td></tr></tfoot></table>
-<div class="sig-section">
-  <div><div class="label">Authorised By (Budget Owner)</div>${sigBlock}</div>
-  <div><div class="label">Received By (Procurement)</div><div style="height:60px;border-bottom:1px solid #333;width:220px;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Awaiting procurement signature</span></div>
+<div class="sig-section" style="grid-template-columns:1fr 1fr 1fr;">
+  <div><div class="label">1. Staff (Requester)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Signature</span></div>
+  <div><div class="label">2. Budget Owner (Authorisation)</div>${sigBlock}</div>
+  <div><div class="label">3. Finance (Confirmation)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Awaiting Finance</span></div>
 </div>
 <div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">This document was generated by RAHAMA Financial Management System. Ref: ${poNum}</div>
 </body></html>`;
@@ -2430,15 +2524,25 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
   <div style="text-align:right;"><div class="label">GRR Number</div><div class="value">${grrNum}</div>
   <div class="label" style="margin-top:8px;">Date</div><div class="value">${new Date().toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
 </div>
-<table><thead><tr><th>Item Description</th><th>Qty Ordered</th><th>Qty Received</th><th>Condition</th><th>Remarks</th></tr></thead>
-<tbody><tr><td>${cn.activityTitle}</td><td>1</td><td>___</td><td>Good ☐&nbsp;&nbsp;Damaged ☐</td><td>___________________</td></tr>
-</tbody></table>
-<div class="sig-section" style="margin-top:48px;">
-  <div><div class="label">Received By (Staff)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
-  <div><div class="label">Inspected By (Procurement)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
-  <div><div class="label">Approved By (Budget Owner)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;padding:16px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;">
+  <div><div class="label">Vendor / Supplier</div><div class="value">${cn.grrVendorName||'___________________________'}</div></div>
+  <div><div class="label">Vendor Phone</div><div class="value">${cn.grrVendorPhone||'___________________________'}</div></div>
+  <div><div class="label">Vendor Address / Contact</div><div class="value">${cn.vendorAddress||'___________________________'}</div></div>
+  <div><div class="label">Invoice / Receipt No.</div><div class="value">${cn.vendorInvoiceNo||'___________________________'}</div></div>
+  <div style="grid-column:1/-1"><div class="label">Concept Note / Activity</div><div class="value">${cn.activityTitle}</div></div>
+  <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
+  <div><div class="label">Concept Note Ref</div><div class="value">${refNumber}</div></div>
 </div>
-<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">RAHAMA FMS — GRR Ref: ${grrNum} | CN Ref: ${refNumber}</div>
+<table><thead><tr><th>Item / Service Description</th><th>Qty Ordered</th><th>Qty Received</th><th>Unit Cost (₦)</th><th>Total (₦)</th><th>Condition</th></tr></thead>
+<tbody><tr><td>${cn.vendorItemsSupplied||cn.activityTitle}</td><td>1</td><td>___</td><td>${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td><td>${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td><td>Good ☐&nbsp;Damaged ☐</td></tr>
+</tbody><tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;">Total Received</td><td style="font-weight:700;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td><td></td></tr></tfoot></table>
+<div class="sig-section" style="margin-top:48px;grid-template-columns:1fr 1fr 1fr 1fr;">
+  <div><div class="label">1. Received By (Procurement)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+  <div><div class="label">2. Verified By (Programme Staff)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+  <div><div class="label">3. Vendor Representative</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">${cn.grrVendorName||'Name &amp; Signature'}</span></div>
+  <div><div class="label">4. Finance Confirmation</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+</div>
+<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">RAHAMA FMS — GRR Ref: ${grrNum} | CN Ref: ${refNumber} | PO Ref: ${cn.poNumber||'N/A'}</div>
 </body></html>`;
                 const w = window.open('','_blank','width=800,height=700');
                 if (w) { w.document.write(html); w.document.close(); }
@@ -2447,16 +2551,36 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
             // ══════════════════════════════════════════════════════════════
             // SIGNING VIEW (post-procurement PO signing)
             // ══════════════════════════════════════════════════════════════
-            async showSigningView(docRef, docType, paymentRef) {
-                const content = document.getElementById('mainContent');
-                const cn = this.data.conceptNotes.find(c =>
-                    this.data.payments.find(p => p.refNumber === paymentRef && p.conceptNoteRef === c.refNumber)
-                    || c.refNumber === paymentRef);
+            // showSigningView — handles multi-step signing chain for PO and GRR
+            // pageContext values: 'procurement_received' | 'staff_po' | 'staff_grr_verify' | 'budget_owner_po' | 'finance_sign'
+            async showSigningView(docRef, docType, paymentRef, pageContext, cnRef) {
+                // Resolve concept note
+                let cn = null;
+                if (cnRef) {
+                    cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                }
+                if (!cn) {
+                    const pay = this.data.payments.find(p => p.refNumber === paymentRef);
+                    if (pay) cn = this.data.conceptNotes.find(c => c.refNumber === pay.conceptNoteRef);
+                }
 
-                const sigData = await this._showSignaturePad(
-                    docType === 'purchase_order' ? 'Sign Purchase Order' : 'Sign GRR',
-                    `I, ${this.currentUser}, confirm the ${docType === 'purchase_order' ? 'purchase order' : 'GRR'} ${docRef} is accurate and authorised.`
-                );
+                const roleLabels = {
+                    'procurement_received': 'Received By (Procurement)',
+                    'staff_po':             'Staff Authorisation (Requester)',
+                    'staff_grr_verify':     'Verified By Programme Staff',
+                    'budget_owner_po':      'Budget Owner Authorisation',
+                    'finance_sign':         'Finance Confirmation'
+                };
+
+                const title = docType === 'purchase_order'
+                    ? `Sign Purchase Order — ${roleLabels[pageContext] || 'Sign'}`
+                    : `Sign GRR — ${roleLabels[pageContext] || 'Sign'}`;
+
+                const declaration = docType === 'purchase_order'
+                    ? `I, ${this.currentUser}, confirm that Purchase Order ${docRef} is accurate, the procurement was duly authorised, and the details therein are correct.`
+                    : `I, ${this.currentUser}, confirm that the goods/services described in GRR ${docRef} were ${pageContext === 'procurement_received' ? 'received by RAHAMA procurement' : pageContext === 'staff_grr_verify' ? 'verified by programme staff and match what was requested' : 'confirmed as received and complete'}.`;
+
+                const sigData = await this._showSignaturePad(title, declaration);
                 if (!sigData) { this.showView('approvals'); return; }
 
                 try {
@@ -2466,20 +2590,101 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                         signerRole: this.data.roles[this.currentUser] || 'unknown',
                         signatureData: sigData,
                         signedAt: new Date().toISOString(),
-                        pageContext: 'procurement_complete'
+                        pageContext: pageContext || 'sign'
                     }]);
-                    await this._logAudit('document_signatures', docRef, 'signed', `${docType} signed by ${this.currentUser}`);
-                    alert(docType === 'purchase_order' ? 'PO signed. Now initiating GRR signing...' : 'GRR signed and recorded.');
-                    if (docType === 'purchase_order') {
-                        await this.showSigningView('GRR-' + paymentRef, 'grr', paymentRef);
-                    } else {
+                    await this._logAudit('document_signatures', docRef, 'signed',
+                        `${docType} signed by ${this.currentUser} (${pageContext})`);
+
+                    // ── SIGNING CHAIN LOGIC ──────────────────────────────────
+                    // GRR Step 1: Procurement received → notify staff to verify
+                    if (pageContext === 'procurement_received') {
+                        if (cn) {
+                            await this.createNotification(cn.staffName,
+                                `GRR ${docRef} has been signed by Procurement (received). Please open concept note ${cn.refNumber} to verify goods/services received and sign the GRR.`,
+                                'info', cn.refNumber);
+                        }
+                        alert('GRR signed (Procurement received). Staff has been notified to verify and sign.');
+                        // Notify staff to sign PO too
+                        if (cn) {
+                            await this.createNotification(cn.staffName,
+                                `Purchase Order ${cn.poNumber || docRef.replace('GRR','PO')} for ${cn.refNumber} is awaiting your signature. Please open the concept note to sign.`,
+                                'info', cn.refNumber);
+                        }
                         this.showView('approvals');
+                        return;
                     }
+
+                    // PO Step 1: Staff signs PO → notify Budget Owner
+                    if (pageContext === 'staff_po') {
+                        const boUsers = Object.entries(this.data.roles)
+                            .filter(([,r]) => r === 'budgetOwner').map(([u]) => u);
+                        for (const bo of boUsers) {
+                            await this.createNotification(bo,
+                                `Purchase Order ${docRef} has been signed by staff (${this.currentUser}) and is awaiting your authorisation. Please open concept note ${cn ? cn.refNumber : ''} to sign.`,
+                                'info', cn ? cn.refNumber : paymentRef);
+                        }
+                        alert('PO signed. Budget Owner has been notified to authorise.');
+                        this.showView('approvals');
+                        return;
+                    }
+
+                    // GRR Step 2: Staff verifies GRR → prompt vendor signing
+                    if (pageContext === 'staff_grr_verify') {
+                        alert('GRR verified by staff. Vendor signing is the next step — use the "Vendor Sign GRR" button to get vendor signature.');
+                        this.showView('approvals');
+                        return;
+                    }
+
+                    // Budget Owner signs PO → notify Finance
+                    if (pageContext === 'budget_owner_po') {
+                        const finUsers = Object.entries(this.data.roles)
+                            .filter(([,r]) => r === 'finance').map(([u]) => u);
+                        for (const fin of finUsers) {
+                            await this.createNotification(fin,
+                                `Purchase Order ${docRef} has been fully signed (Staff + Budget Owner) for concept note ${cn ? cn.refNumber : ''}. Payment of ₦${cn ? Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString() : ''} is awaiting Finance processing.`,
+                                'info', cn ? cn.refNumber : paymentRef);
+                        }
+                        alert('PO fully signed. Finance has been notified for payment processing.');
+                        this.showView('approvals');
+                        return;
+                    }
+
+                    // Default fallback
+                    alert('Document signed successfully.');
+                    this.showView('approvals');
+
                 } catch(e) { alert('Signing error: ' + e.message); }
             },
 
-            async initPOSigning(paymentRef)  { /* PO signing initiated via showSigningView after procurement complete */ },
-            async initGRRSigning(paymentRef) { /* GRR signing initiated chain after PO */ },
+            // Staff signs PO (requester authorisation)
+            async _staffSignPO(cnRef) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn || !cn.poNumber) { alert('PO not generated yet.'); return; }
+                const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) { alert('Payment record not found.'); return; }
+                await this.showSigningView(cn.poNumber, 'purchase_order', pay.refNumber, 'staff_po', cnRef);
+            },
+
+            // Staff verifies GRR (programme staff verification)
+            async _staffVerifyGRR(cnRef) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn || !cn.grrNumber) { alert('GRR not generated yet.'); return; }
+                const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) { alert('Payment record not found.'); return; }
+                await this.showSigningView(cn.grrNumber, 'grr', pay.refNumber, 'staff_grr_verify', cnRef);
+            },
+
+            // Budget Owner authorises PO
+            async _boSignPO(cnRef) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn || !cn.poNumber) { alert('PO not generated yet.'); return; }
+                const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) { alert('Payment record not found.'); return; }
+                await this.showSigningView(cn.poNumber, 'purchase_order', pay.refNumber, 'budget_owner_po', cnRef);
+            },
+
+            async initPOSigning(paymentRef)  { /* PO signing now driven by notifications and staff signing buttons */ },
+            async initGRRSigning(paymentRef) { /* GRR signing now driven by notifications and procurement/staff signing buttons */ },
 
             // ══════════════════════════════════════════════════════════════
             // AUDIT TRAIL VIEW
@@ -2574,6 +2779,144 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                 }
             },
 
+            async renderSuperAdminView(content) {
+                const role = this.data.roles[this.currentUser];
+                if (!['budgetOwner','ed'].includes(role)) {
+                    content.innerHTML = '<div class="empty-state"><h3>Access Denied</h3><p>System Overview is only available to the Budget Owner and Executive Director.</p></div>';
+                    return;
+                }
+
+                content.innerHTML = '<div class="header"><h2>👁 System Overview</h2><p>Loading all data…</p></div><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
+
+                const [cnRes, payRes, retRes, sigRes] = await Promise.all([
+                    supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }),
+                    supabaseClient.from('payments').select('*').order('requestDate', { ascending: false }),
+                    supabaseClient.from('retirements').select('*').order('submittedDate', { ascending: false }),
+                    supabaseClient.from('document_signatures').select('*').order('signedAt', { ascending: false })
+                ]);
+
+                const cns  = cnRes.data  || [];
+                const pays = payRes.data || [];
+                const rets = retRes.data || [];
+                const sigs = sigRes.data || [];
+
+                const fmt   = d => d ? new Date(d).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' }) : '—';
+                const money = n => n != null ? '₦' + Number(n).toLocaleString() : '—';
+
+                const totalPaid  = pays.filter(p => p.status === 'paid').reduce((s,p) => s + Number(p.amount||0), 0);
+                const pendingCNs = cns.filter(c => ['pending','variance_review'].includes(c.status)).length;
+                const inProc     = cns.filter(c => c.currentApprover === 'procurement').length;
+                const pendingPay = pays.filter(p => p.status === 'pending').length;
+                const pendingRet = rets.filter(r => r.status === 'pending').length;
+
+                const staffActivity = {};
+                cns.forEach(c => {
+                    if (!staffActivity[c.staffName]) staffActivity[c.staffName] = { cns:0, pending:0, paid:0, retired:0 };
+                    staffActivity[c.staffName].cns++;
+                    if (['pending','variance_review'].includes(c.status)) staffActivity[c.staffName].pending++;
+                });
+                pays.filter(p => p.status === 'paid').forEach(p => {
+                    if (staffActivity[p.staffName]) staffActivity[p.staffName].paid += Number(p.amount||0);
+                });
+                rets.filter(r => r.status === 'approved').forEach(r => {
+                    if (staffActivity[r.staffName]) staffActivity[r.staffName].retired++;
+                });
+
+                const sc = s => ({ approved:'#059669', pending:'#E65100', rejected:'#C62626', paid:'#059669', variance_review:'#7B1FA2' }[s] || '#6B7280');
+                const badge = (s) => '<span style="background:' + sc(s) + '20;color:' + sc(s) + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + s.toUpperCase() + '</span>';
+
+                content.innerHTML =
+                '<div class="header"><h2>👁 System Overview</h2>' +
+                '<p>Full visibility across all roles — as of ' + new Date().toLocaleString('en-NG') + '</p></div>' +
+
+                // Stats
+                '<div class="stats-grid" style="margin-bottom:32px;">' +
+                '<div class="stat-card"><div class="stat-label">Total Concept Notes</div><div class="stat-value">' + cns.length + '</div><div class="stat-sub">' + pendingCNs + ' awaiting action · ' + inProc + ' in procurement</div></div>' +
+                '<div class="stat-card"><div class="stat-label">Total Disbursed</div><div class="stat-value" style="color:#059669;">' + money(totalPaid) + '</div><div class="stat-sub">' + pays.filter(p=>p.status==="paid").length + ' payments processed</div></div>' +
+                '<div class="stat-card"><div class="stat-label">Pending Payments</div><div class="stat-value" style="color:#C62626;">' + pendingPay + '</div><div class="stat-sub">' + pendingRet + ' retirements pending review</div></div>' +
+                '<div class="stat-card"><div class="stat-label">Document Signatures</div><div class="stat-value">' + sigs.length + '</div><div class="stat-sub">' + sigs.filter(s=>s.signerRole==="vendor").length + ' vendor · ' + sigs.filter(s=>s.docType==="purchase_order").length + ' PO · ' + sigs.filter(s=>s.docType==="grr").length + ' GRR</div></div>' +
+                '</div>' +
+
+                // Staff activity table
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
+                '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:16px;">👥 Staff Activity Breakdown</h3>' +
+                '<div class="table-container"><table><thead><tr><th>Staff</th><th>Concept Notes</th><th>Pending</th><th>Total Received</th><th>Retirements</th></tr></thead><tbody>' +
+                Object.entries(staffActivity).sort((a,b) => b[1].cns - a[1].cns).map(function(e) {
+                    var name = e[0], d = e[1];
+                    return '<tr><td style="font-weight:600;">' + name + '</td>' +
+                        '<td>' + d.cns + '</td>' +
+                        '<td>' + (d.pending > 0 ? '<span style="background:#FFF3E0;color:#E65100;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + d.pending + '</span>' : '—') + '</td>' +
+                        '<td style="color:#059669;font-weight:600;">' + (d.paid > 0 ? money(d.paid) : '—') + '</td>' +
+                        '<td>' + (d.retired > 0 ? d.retired + ' approved' : '—') + '</td></tr>';
+                }).join('') +
+                '</tbody></table></div></div>' +
+
+                // All concept notes
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
+                '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:4px;">📄 All Concept Notes (' + cns.length + ')</h3>' +
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Every submission — click View for full details and signing actions</p>' +
+                '<div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Estimated</th><th>Actual</th><th>Status</th><th>Current Step</th><th>Submitted</th><th></th></tr></thead><tbody>' +
+                cns.map(function(cn) {
+                    var step = cn.currentApprover === "procurement" ? "Procurement" :
+                        cn.currentApprover === "finance" ? "Finance" :
+                        cn.currentApprover === "budgetOwner" ? "Budget Owner" :
+                        cn.currentApprover === "ed" ? "ED" :
+                        cn.status === "approved" ? (cn.procurementComplete ? "Payment/Retirement" : "Approved") :
+                        cn.status === "rejected" ? "Rejected" : "—";
+                    return '<tr>' +
+                        '<td style="font-weight:600;font-size:12px;">' + cn.refNumber + '</td>' +
+                        '<td>' + cn.staffName + '</td>' +
+                        '<td style="max-width:150px;font-size:12px;">' + (cn.activityTitle||"").substring(0,45) + (cn.activityTitle && cn.activityTitle.length > 45 ? "…" : "") + '</td>' +
+                        '<td style="font-size:12px;">' + (cn.projectCode||"—") + '</td>' +
+                        '<td>' + money(cn.estimatedCost) + '</td>' +
+                        '<td>' + (cn.actualProcurementCost ? money(cn.actualProcurementCost) : "—") + '</td>' +
+                        '<td>' + badge(cn.status) + '</td>' +
+                        '<td style="font-size:12px;">' + step + '</td>' +
+                        '<td style="font-size:12px;">' + fmt(cn.submittedDate) + '</td>' +
+                        '<td><button class="action-btn" onclick="app.viewConceptNoteDetails(\'' + cn.refNumber + '\')" style="min-width:55px;font-size:11px;">View</button></td>' +
+                    '</tr>';
+                }).join('') +
+                '</tbody></table></div></div>' +
+
+                // All payments
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
+                '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:4px;">💳 All Payments (' + pays.length + ')</h3>' +
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Complete payment ledger across all staff</p>' +
+                '<div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Bank</th><th>Status</th><th>Requested</th><th>Processed</th></tr></thead><tbody>' +
+                pays.map(function(p) {
+                    return '<tr>' +
+                        '<td style="font-weight:600;font-size:12px;">' + p.refNumber + '</td>' +
+                        '<td>' + p.staffName + '</td>' +
+                        '<td style="font-weight:600;color:#059669;">' + money(p.amount) + '</td>' +
+                        '<td style="font-size:12px;">' + (p.projectCode||"—") + '</td>' +
+                        '<td style="font-size:11px;color:var(--text-muted);">' + (p.bankName ? p.bankName + " · " + (p.accountNumber||"") : "—") + '</td>' +
+                        '<td>' + badge(p.status) + '</td>' +
+                        '<td style="font-size:12px;">' + fmt(p.requestDate) + '</td>' +
+                        '<td style="font-size:12px;">' + (p.paidDate ? fmt(p.paidDate) : "—") + '</td>' +
+                    '</tr>';
+                }).join('') +
+                '</tbody></table></div></div>' +
+
+                // All retirements
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;">' +
+                '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:4px;">🧾 All Retirements (' + rets.length + ')</h3>' +
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Full retirement history</p>' +
+                '<div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Status</th><th>Submitted</th><th>Reviewed</th></tr></thead><tbody>' +
+                rets.map(function(r) {
+                    return '<tr>' +
+                        '<td style="font-weight:600;font-size:12px;">' + r.refNumber + '</td>' +
+                        '<td>' + r.staffName + '</td>' +
+                        '<td style="font-size:12px;">' + r.paymentRef + '</td>' +
+                        '<td style="font-weight:600;">' + money(r.actualSpent) + '</td>' +
+                        '<td>' + money(r.amountReturned) + '</td>' +
+                        '<td>' + badge(r.status) + '</td>' +
+                        '<td style="font-size:12px;">' + fmt(r.submittedDate) + '</td>' +
+                        '<td style="font-size:12px;">' + (r.approvedDate ? fmt(r.approvedDate) : r.rejectedDate ? fmt(r.rejectedDate) : "—") + '</td>' +
+                    '</tr>';
+                }).join('') +
+                '</tbody></table></div></div>';
+            },
+
             async renderAuditTrail(content) {
                 const role = this.data.roles[this.currentUser];
                 const isAdmin = ['budgetOwner','ed','finance'].includes(role);
@@ -2652,10 +2995,8 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
             },
 
             async _logAudit(table, refNumber, action, details) {
-                // Audit log is non-critical — errors here must NEVER interrupt
-                // main flows (e.g. RLS policy mismatches on the audit_log table).
                 try {
-                    const result = await supabaseClient.from('audit_log').insert([{
+                    const { error } = await supabaseClient.from('audit_log').insert([{
                         tableName: table,
                         refNumber,
                         action,
@@ -2663,13 +3004,10 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                         changedBy: this.currentUser,
                         changedAt: new Date().toISOString()
                     }]);
-                    if (result && result.error) {
-                        console.warn('Audit log write failed (non-fatal):', result.error.message);
-                    }
+                    if (error) console.warn('Audit log write failed:', error.message);
                 } catch(e) {
-                    console.warn('Audit log write failed (non-fatal):', e.message);
+                    console.warn('Audit log write failed:', e.message);
                 }
-                // Always resolves — never rejects
             },
 
             async createNotification(recipientName, message, type, refNumber) {
