@@ -1226,21 +1226,21 @@
                             </tr></thead><tbody>
                             ${varCNs.map(cn => {
                                 const over = cn.estimatedCost > 0 ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '—';
-                                return \`<tr style="background:#FFF8E1;">
-                                    <td style="font-weight:600;">\${cn.refNumber}</td>
-                                    <td>\${cn.staffName}</td>
-                                    <td>\${cn.activityTitle}</td>
-                                    <td>\${cn.projectCode}</td>
-                                    <td>₦\${Number(cn.estimatedCost).toLocaleString()}</td>
-                                    <td style="font-weight:600;color:#C62626;">₦\${Number(cn.actualProcurementCost).toLocaleString()}</td>
-                                    <td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+\${over}%</span></td>
-                                    <td style="font-size:12px;max-width:200px;">\${cn.varianceJustification || '—'}</td>
-                                    <td style="font-size:12px;">\${cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—'}</td>
+                                return `<tr style="background:#FFF8E1;">
+                                    <td style="font-weight:600;">${cn.refNumber}</td>
+                                    <td>${cn.staffName}</td>
+                                    <td>${cn.activityTitle}</td>
+                                    <td>${cn.projectCode}</td>
+                                    <td>₦${Number(cn.estimatedCost).toLocaleString()}</td>
+                                    <td style="font-weight:600;color:#C62626;">₦${Number(cn.actualProcurementCost).toLocaleString()}</td>
+                                    <td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+${over}%</span></td>
+                                    <td style="font-size:12px;max-width:200px;">${cn.varianceJustification || '—'}</td>
+                                    <td style="font-size:12px;">${cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—'}</td>
                                     <td>
-                                        <button class="action-btn approve" onclick="app.resolveVarianceEscalation('\${cn.refNumber}', 'approve')" style="margin-bottom:6px;">✓ Approve Excess</button>
-                                        <button class="action-btn reject"  onclick="app.resolveVarianceEscalation('\${cn.refNumber}', 'reject')">✗ Reject — Re-source</button>
+                                        <button class="action-btn approve" onclick="app.resolveVarianceEscalation('${cn.refNumber}', 'approve')" style="margin-bottom:6px;">✓ Approve Excess</button>
+                                        <button class="action-btn reject"  onclick="app.resolveVarianceEscalation('${cn.refNumber}', 'reject')">✗ Reject — Re-source</button>
                                     </td>
-                                </tr>\`;
+                                </tr>`;
                             }).join('')}
                             </tbody></table></div>
                         </div>`;
