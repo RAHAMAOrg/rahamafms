@@ -689,14 +689,24 @@
                 const submitBtn = form.querySelector('[type="submit"]');
                 if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting...'; }
                 try {
-                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: 'budgetOwner', submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
+                    // If the submitter is the Budget Owner, route directly to ED (can't self-approve)
+                    const submitterRole = this.getUserRole();
+                    const firstApprover = submitterRole === 'budgetOwner' ? 'ed' : 'budgetOwner';
+                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, implementationDate: formData.get('ImplementationDate') || null, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
                     const { data, error } = await supabaseClient.from('concept_notes').insert([conceptNote]).select();
                     if (error) throw error;
                     this.data.conceptNotes.unshift(data[0]); this.clearCache();
-                    // Notify budget owner(s)
-                    const budgetOwners = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
-                    for (const bo of budgetOwners) {
-                        await this.createNotification(bo, `New concept note ${data[0].refNumber} submitted by ${this.currentUser} for review.`, 'info', data[0].refNumber);
+                    // Notify the right approver
+                    if (firstApprover === 'ed') {
+                        const edUsers = Object.entries(this.data.roles).filter(([,r]) => r === 'ed').map(([n]) => n);
+                        for (const ed of edUsers) {
+                            await this.createNotification(ed, `New concept note ${data[0].refNumber} submitted by ${this.currentUser} (Budget Owner) for your approval.`, 'info', data[0].refNumber);
+                        }
+                    } else {
+                        const budgetOwners = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
+                        for (const bo of budgetOwners) {
+                            await this.createNotification(bo, `New concept note ${data[0].refNumber} submitted by ${this.currentUser} for review.`, 'info', data[0].refNumber);
+                        }
                     }
                     alert('Concept note submitted successfully!'); this.showView('dashboard');
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting concept note: ' + error.message); if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Concept Note'; } }
@@ -781,32 +791,16 @@
             async renderRetirementForm(content) {
                 const userRole = this.getUserRole();
 
-                // Procurement does not retire — all accountability is in documents uploaded
-                // during procurement completion (PO, Invoice, GRR, Receipt)
-                if (userRole === 'procurement') {
-                    content.innerHTML = `
-                        <div class="header"><h2>Submit Retirement</h2></div>
-                        <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:32px;max-width:560px;">
-                            <div style="font-size:40px;margin-bottom:16px;">✅</div>
-                            <h3 style="font-family:'Archivo',sans-serif;margin-bottom:10px;color:#1B5E20;">No Retirement Required for Procurement</h3>
-                            <p style="font-size:14px;color:#2E7D32;line-height:1.6;">
-                                Procurement activities are fully accounted for through the documents uploaded during completion —
-                                <strong>Purchase Order, Invoice, GRR, and Receipt</strong>.
-                                Finance reviews and pays directly from those documents.
-                            </p>
-                            <p style="font-size:13px;color:#388E3C;margin-top:12px;">If you have a document variance query, contact the Budget Owner directly.</p>
-                            <button class="btn btn-primary" style="margin-top:20px;" onclick="app.showView('approvals')">← Back to Approvals</button>
-                        </div>`;
-                    return;
-                }
+                // Procurement CAN retire — they upload the vendor receipt after Finance pays them
 
                 let freshPayments = [];
                 let freshRetirements = [];
 
                 try {
-                    if (false) {
-                        // procurement path removed
-                        freshPayments = [];
+                    if (userRole === 'procurement') {
+                        // Procurement sees ALL paid payments where they are responsible for retirement
+                        const { data: allPaid } = await supabaseClient.from('payments').select('*').eq('status', 'paid').eq('retirementresponsibility', 'procurement');
+                        freshPayments = allPaid || [];
                     } else {
                         const { data: staffPay } = await supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).eq('status', 'paid');
                         freshPayments = staffPay || [];
@@ -1255,8 +1249,8 @@
                             </tbody></table></div>
                         </div>`;
                     })()}
-                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">→ Forward to ED (>₦1M)</button>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementReceiptUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementReceiptUrl}','${lc.procurementReceiptName||'receipt'}')" style="border-color:#1B5E20;color:#1B5E20;">📎 Procurement Receipt</button><br>` : ''; })()}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">→ Forward to ED (>₦1M)</button>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
                     ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.projectCode || '-'}</td><td><span class="status-badge ${p.status === 'paid' ? 'status-paid' : 'status-rejected'}">${p.status === 'paid' ? 'Processed' : 'Rejected'}</span></td><td>${p.status === 'paid' ? (p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '-') : (p.rejectedDate ? new Date(p.rejectedDate).toLocaleDateString() : '-')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
@@ -1321,7 +1315,7 @@
                             signerRole: this.data.roles[this.currentUser] || 'approver',
                             signatureData: boSigData,
                             signedAt: now,
-                            pageContext: 'concept_note_approval'
+                            pageContext: 'budget_owner_po'
                         }]);
                         if (confirm('Purchase Order ' + updates.poNumber + ' has been generated and your signature recorded.\n\nWould you like to preview the PO now?')) {
                             this._previewPODraft(refNumber);
@@ -1476,7 +1470,7 @@
                                         onchange="app._handleProcFile(this,'procInvoiceArea','Invoice')">
                                 </div>
                                 <div>
-                                    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Upload Receipt / Payment Evidence</label>
+                                    <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Upload Receipt / Payment Evidence <span style="font-size:12px;font-weight:400;color:var(--text-muted);">(optional — can be added via Retirement after payment)</span></label>
                                     <div class="file-upload-area" id="procReceiptArea" onclick="document.getElementById('procReceiptFile').click()">
                                         <p>📎 Click to upload payment receipt</p>
                                         <span class="form-hint">PDF, JPG, PNG — Max 5MB</span>
@@ -1781,7 +1775,8 @@
                             <button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>
                             ${(this.currentUser === cn.staffName || this.data.roles[this.currentUser] === 'staff') && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._staffSignPO('${cn.refNumber}')" style="border-color:#059669;color:#059669;">✍️ Sign PO (Staff)</button>` : ''}
                             ${(this.currentUser === cn.staffName || this.data.roles[this.currentUser] === 'staff') && cn.requiresProcurement === 'yes' && cn.grrNumber ? `<button class="btn btn-secondary" onclick="app._staffVerifyGRR('${cn.refNumber}')" style="border-color:#047857;color:#047857;">✅ Verify GRR (Staff)</button>` : ''}
-                            ${this.data.roles[this.currentUser] === 'budgetOwner' && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (Budget Owner)</button>` : ''}
+                            ${this.data.roles[this.currentUser] === 'budgetOwner' && cn.staffName !== this.currentUser && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (Budget Owner)</button>` : ''}
+                            ${this.data.roles[this.currentUser] === 'ed' && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (ED)</button>` : ''}
                             ${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' && cn.grrNumber ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}
                             <button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button>
                         </div>
@@ -2054,7 +2049,6 @@
                     <td>${r.invoiceFileUrl?`<a href="${r.invoiceFileUrl}" target="_blank">🧾 Invoice</a>`:'—'}</td>
                 </tr>`).join('');
 
-                // Build HTML dossier with signature images
                 const htmlContent = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>Dossier — ${cn.refNumber}</title>
 <style>
@@ -2088,6 +2082,7 @@ tr:nth-child(even) td{background:#f9f9f9;}
   <div><div class="lbl">Project Code</div><div class="val">${cn.projectCode}</div></div>
   <div><div class="lbl">Staff Member (Requester)</div><div class="val">${cn.staffName}</div></div>
   <div><div class="lbl">Submitted</div><div class="val">${fmtD(cn.submittedDate)}</div></div>
+  <div><div class="lbl">Implementation Date</div><div class="val">${cn.implementationDate?fmtD(cn.implementationDate):'—'}</div></div>
   <div><div class="lbl">Estimated Cost</div><div class="val" style="color:#285B3C;">${money(cn.estimatedCost)}</div></div>
   <div><div class="lbl">Requires Procurement?</div><div class="val">${cn.requiresProcurement==='yes'?'Yes':'No'}</div></div>
   <div><div class="lbl">Staff Signed</div><div class="val">${cn.staffSignedAt?'✓ '+fmtD(cn.staffSignedAt):'Not recorded'}</div></div>
@@ -2676,16 +2671,29 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
                         return;
                     }
 
-                    // PO Step 1: Staff signs PO → notify Budget Owner
+                    // PO Step 1: Staff signs PO → notify Budget Owner (or ED if BO was the submitter)
                     if (pageContext === 'staff_po') {
-                        const boUsers = Object.entries(this.data.roles)
-                            .filter(([,r]) => r === 'budgetOwner').map(([u]) => u);
-                        for (const bo of boUsers) {
-                            await this.createNotification(bo,
-                                `Purchase Order ${docRef} has been signed by staff (${this.currentUser}) and is awaiting your authorisation. Please open concept note ${cn ? cn.refNumber : ''} to sign.`,
-                                'info', cn ? cn.refNumber : paymentRef);
+                        const cnStaffRole = cn ? (this.data.roles[cn.staffName] || 'staff') : 'staff';
+                        if (cnStaffRole === 'budgetOwner') {
+                            // BO submitted this CN — ED must authorise the PO
+                            const edUsers = Object.entries(this.data.roles)
+                                .filter(([,r]) => r === 'ed').map(([u]) => u);
+                            for (const ed of edUsers) {
+                                await this.createNotification(ed,
+                                    `Purchase Order ${docRef} has been signed by staff and is awaiting your authorisation (submitted by Budget Owner). Please open concept note ${cn ? cn.refNumber : ''} to sign.`,
+                                    'info', cn ? cn.refNumber : paymentRef);
+                            }
+                            alert('PO signed. ED has been notified to authorise (Budget Owner submitted this CN).');
+                        } else {
+                            const boUsers = Object.entries(this.data.roles)
+                                .filter(([,r]) => r === 'budgetOwner').map(([u]) => u);
+                            for (const bo of boUsers) {
+                                await this.createNotification(bo,
+                                    `Purchase Order ${docRef} has been signed by staff (${this.currentUser}) and is awaiting your authorisation. Please open concept note ${cn ? cn.refNumber : ''} to sign.`,
+                                    'info', cn ? cn.refNumber : paymentRef);
+                            }
+                            alert('PO signed. Budget Owner has been notified to authorise.');
                         }
-                        alert('PO signed. Budget Owner has been notified to authorise.');
                         this.showView('approvals');
                         return;
                     }
@@ -2740,6 +2748,7 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
             async _boSignPO(cnRef) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
                 if (!cn || !cn.poNumber) { alert('PO not generated yet.'); return; }
+                if (cn.staffName === this.currentUser) { alert('You cannot authorise a PO for a concept note you submitted.'); return; }
                 const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
                 if (!pay) { alert('Payment record not found.'); return; }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay.refNumber, 'budget_owner_po', cnRef);
