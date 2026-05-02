@@ -1767,10 +1767,52 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                     if (!payment.accountName || !payment.accountNumber || !payment.bankName) { alert('Error: Account details not provided by staff member.'); return; }
                     if (!confirm(`Process payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) return;
                 }
+
+                // Require Finance signature before processing
+                const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
+                const finSigData = await this._showSignaturePad(
+                    'Finance Officer Signature',
+                    `I, ${this.currentUser}, confirm payment of ₦${payment.amount.toLocaleString()} for ${payment.conceptNoteRef||refNumber} has been duly processed and authorised.`
+                );
+                if (!finSigData) return; // cancelled
+
                 try {
-                    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
-                    const { error } = await supabaseClient.from('payments').update({ status: 'paid', paidDate: new Date().toISOString(), processedBy: this.currentUser, retirementresponsibility: conceptNote?.retirementresponsibility || payment.retirementresponsibility || 'staff' }).eq('refNumber', refNumber);
+                    const now = new Date().toISOString();
+                    const { error } = await supabaseClient.from('payments').update({
+                        status: 'paid',
+                        paidDate: now,
+                        processedBy: this.currentUser,
+                        retirementresponsibility: conceptNote?.retirementresponsibility || payment.retirementresponsibility || 'staff'
+                    }).eq('refNumber', refNumber);
                     if (error) throw error;
+
+                    // Record Finance signature on PO if it exists
+                    if (conceptNote?.poNumber) {
+                        await supabaseClient.from('document_signatures').insert([{
+                            docRef: conceptNote.poNumber,
+                            docType: 'purchase_order',
+                            relatedRef: conceptNote.refNumber,
+                            signerName: this.currentUser,
+                            signerRole: 'finance',
+                            signatureData: finSigData,
+                            signedAt: now,
+                            pageContext: 'finance_sign'
+                        }]);
+                    }
+                    // Record Finance signature on GRR if it exists
+                    if (conceptNote?.grrNumber) {
+                        await supabaseClient.from('document_signatures').insert([{
+                            docRef: conceptNote.grrNumber,
+                            docType: 'grr',
+                            relatedRef: conceptNote.refNumber,
+                            signerName: this.currentUser,
+                            signerRole: 'finance',
+                            signatureData: finSigData,
+                            signedAt: now,
+                            pageContext: 'finance_sign'
+                        }]);
+                    }
+
                     await this._logAudit('payments', refNumber, 'paid', `Processed by ${this.currentUser}. Amount: ₦${payment.amount.toLocaleString()}`);
                     await this.createNotification(payment.staffName, `Your payment of ₦${payment.amount.toLocaleString()} (${refNumber}) has been processed!`, 'success', refNumber);
                     alert(`Payment of ₦${payment.amount.toLocaleString()} processed successfully!`); await this.loadData(); this.showView('approvals');
@@ -2056,7 +2098,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">PO Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
                     ${sigBlock('1. Staff (Requester)', poStaffSig, cn.staffName, null)}
-                    ${sigBlock('2. Budget Owner', poBoSig, cn.approvedBy, cn.budgetOwnerSignedAt)}
+                    ${sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.approvedBy, cn.budgetOwnerSignedAt)}
                     ${sigBlock('3. Finance', poFinSig, null, null)}
                 </div>
                 <h2 style="font-size:14px;border-bottom:2px solid #285B3C;padding-bottom:6px;margin-top:8px;color:#285B3C;">GRR — Goods/Services Receiving Report</h2>
@@ -2067,7 +2109,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 </div>
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">GRR Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    ${sigBlock('1. Procurement (Received)', grrProcSig, null, null)}
+                    ${sigBlock('1. Procurement (Received)', grrProcSig, cn.approvedBy && cn.requiresProcurement === 'yes' ? cn.approvedBy : null, cn.procurementComplete||null)}
                     ${sigBlock('2. Programme Staff (Verified)', grrStaffSig, cn.staffName, null)}
                     ${sigBlock('3. Vendor', vendorSig, cn.grrVendorName, cn.grrVendorSignedAt)}
                     ${sigBlock('4. Finance', grrFinSig, null, null)}
@@ -2128,7 +2170,7 @@ tr:nth-child(even) td{background:#f9f9f9;}
   <div><div class="lbl">Project Code</div><div class="val">${cn.projectCode}</div></div>
   <div><div class="lbl">Staff Member (Requester)</div><div class="val">${cn.staffName}</div></div>
   <div><div class="lbl">Submitted</div><div class="val">${fmtD(cn.submittedDate)}</div></div>
-  <div><div class="lbl">Implementation Date</div><div class="val">${cn.ImplementationDate?fmtD(cn.ImplementationDate):'—'}</div></div>
+  <div><div class="lbl">Implementation Date</div><div class="val">${cn.implementation_date?fmtD(cn.implementation_date):'—'}</div></div>
   <div><div class="lbl">Estimated Cost</div><div class="val" style="color:#285B3C;">${money(cn.estimatedCost)}</div></div>
   <div><div class="lbl">Requires Procurement?</div><div class="val">${cn.requiresProcurement==='yes'?'Yes':'No'}</div></div>
   <div><div class="lbl">Staff Signed</div><div class="val">${cn.staffSignedAt?'✓ '+fmtD(cn.staffSignedAt):'Not recorded'}</div></div>
@@ -2149,7 +2191,7 @@ ${cn.staffSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Staff 
   <div><div class="lbl">Sent to Procurement</div><div class="val">${fmtD(cn.sentToProcurement)}</div></div>
   <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${cn.rejectionReason||'—'}</div></div>
 </div>
-${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Budget Owner Signature</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.approvedBy||'Budget Owner'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
+${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
 ${procSection}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Paid</th><th>Processed By</th></tr></thead><tbody>${payRows}</tbody></table>`}
@@ -2572,93 +2614,225 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             // ══════════════════════════════════════════════════════════════
             // PO PREVIEW  (called from procurement upload screen + BO approval)
             // ══════════════════════════════════════════════════════════════
-            _previewPODraft(refNumber) {
+            async _previewPODraft(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
                 const poNum = cn.poNumber || ('PO-' + refNumber + '-DRAFT');
-                const sigBlock = cn.budgetOwnerSignatureData
-                    ? `<div style="margin-top:8px;"><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;"><span style="font-size:11px;color:#555;">${cn.approvedBy || 'Budget Owner'} — ${cn.budgetOwnerSignedAt ? new Date(cn.budgetOwnerSignedAt).toLocaleString() : ''}</span></div>`
-                    : '<div style="height:60px;border-bottom:1px solid #333;width:220px;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Awaiting signature</span>';
+
+                // Fetch all signatures for this PO from document_signatures
+                const { data: sigs } = await supabaseClient
+                    .from('document_signatures')
+                    .select('*')
+                    .eq('docRef', poNum);
+                const allSigs = sigs || [];
+
+                const staffSig   = allSigs.find(s => s.pageContext === 'staff_po');
+                const boSig      = allSigs.find(s => s.pageContext === 'budget_owner_po')
+                               || (cn.budgetOwnerSignatureData
+                                   ? { signatureData: cn.budgetOwnerSignatureData, signerName: cn.approvedBy, signedAt: cn.budgetOwnerSignedAt }
+                                   : null);
+                const finSig     = allSigs.find(s => s.pageContext === 'finance_sign');
+
+                const _sigBox = (label, sig) => sig
+                    ? `<div>
+                         <div class="label">${label}</div>
+                         <img src="${sig.signatureData}" style="height:64px;display:block;margin-top:8px;border-bottom:2px solid #285B3C;">
+                         <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
+                         <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleString('en-NG') : ''}</span>
+                       </div>`
+                    : `<div>
+                         <div class="label">${label}</div>
+                         <div style="height:64px;border-bottom:2px dashed #ccc;margin-top:8px;"></div>
+                         <span style="font-size:11px;color:#aaa;">Awaiting signature</span>
+                       </div>`;
+
+                // Multi-vendor rows if vendorsJson present, else single row
+                let vendors = [];
+                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e){}
+                const itemRows = vendors.length > 0
+                    ? vendors.map(v => `<tr><td>${v.items||cn.activityTitle}</td><td>${v.name}</td><td>${v.invoiceNo||'—'}</td><td style="text-align:right;">₦${Number(v.amount||0).toLocaleString()}</td></tr>`).join('')
+                    : `<tr><td>${cn.activityTitle}</td><td>${cn.grrVendorName||'—'}</td><td>${cn.vendorInvoiceNo||'—'}</td><td style="text-align:right;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td></tr>`;
+                const totalAmt = vendors.length > 0
+                    ? vendors.reduce((s,v) => s+(v.amount||0), 0)
+                    : Number(cn.actualProcurementCost||cn.estimatedCost);
+
                 const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Purchase Order ${poNum}</title>
-<style>body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
-h1{color:#285B3C;font-size:20px;}table{width:100%;border-collapse:collapse;margin-top:16px;}
-th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;}
-td{padding:9px 12px;border-bottom:1px solid #ddd;}tr:nth-child(even){background:#f9f9f9;}
-.header-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;}
-.label{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;}
-.value{font-weight:600;font-size:14px;margin-top:2px;}
-.sig-section{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:32px;}
+<style>
+  @media print { body{margin:20px;} .no-print{display:none;} }
+  body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
+  h1{color:#285B3C;font-size:22px;margin:0;}
+  table{width:100%;border-collapse:collapse;margin-top:16px;}
+  th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;font-size:12px;}
+  td{padding:9px 12px;border-bottom:1px solid #ddd;vertical-align:top;}
+  tr:nth-child(even){background:#f9f9f9;}
+  tfoot td{background:#E8F5E9;font-weight:700;}
+  .header-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+  .label{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+  .value{font-weight:600;font-size:13px;}
+  .sig-grid{margin-top:48px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;}
+  .stamp{display:inline-block;border:3px solid #285B3C;border-radius:50%;width:80px;height:80px;line-height:80px;text-align:center;color:#285B3C;font-weight:700;font-size:11px;margin-top:8px;}
 </style></head><body>
-<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
-  <div><h1>PURCHASE ORDER</h1><div style="font-size:12px;color:#555;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div></div>
-  <div style="text-align:right;"><div class="label">PO Number</div><div class="value">${poNum}</div>
-  <div class="label" style="margin-top:8px;">Date</div><div class="value">${new Date(cn.poGeneratedAt||Date.now()).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+<button class="no-print" onclick="window.print()" style="margin-bottom:20px;padding:10px 24px;background:#285B3C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🖨 Print / Save as PDF</button>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
+  <div>
+    <h1>PURCHASE ORDER</h1>
+    <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
+  </div>
+  <div style="text-align:right;">
+    <div class="label">PO Number</div><div class="value" style="font-size:16px;color:#285B3C;">${poNum}</div>
+    <div class="label" style="margin-top:8px;">Date Issued</div>
+    <div class="value">${new Date(cn.poGeneratedAt||Date.now()).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div>
+  </div>
 </div>
 <div class="header-grid">
   <div><div class="label">Activity / Description</div><div class="value">${cn.activityTitle}</div></div>
   <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
   <div><div class="label">Concept Note Ref</div><div class="value">${cn.refNumber}</div></div>
-  <div><div class="label">Estimated Amount</div><div class="value">₦${Number(cn.estimatedCost).toLocaleString()}</div></div>
-  <div><div class="label">Vendor / Supplier</div><div class="value">${cn.grrVendorName||'___________________________'}</div></div>
-  <div><div class="label">Vendor Phone</div><div class="value">${cn.grrVendorPhone||'___________________________'}</div></div>
+  <div><div class="label">Staff / Requester</div><div class="value">${cn.staffName}</div></div>
   <div style="grid-column:1/-1"><div class="label">Objective</div><div class="value" style="font-weight:400;">${cn.objective||'—'}</div></div>
 </div>
-<table><thead><tr><th>Description</th><th>Qty</th><th>Unit Price (₦)</th><th>Total (₦)</th></tr></thead>
-<tbody><tr><td>${cn.activityTitle}</td><td>1</td><td>${Number(cn.estimatedCost).toLocaleString()}</td><td>${Number(cn.estimatedCost).toLocaleString()}</td></tr>
-</tbody><tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;">Total</td><td style="font-weight:700;">₦${Number(cn.estimatedCost).toLocaleString()}</td></tr></tfoot></table>
-<div class="sig-section" style="grid-template-columns:1fr 1fr 1fr;">
-  <div><div class="label">1. Staff (Requester)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Signature</span></div>
-  <div><div class="label">2. Budget Owner (Authorisation)</div>${sigBlock}</div>
-  <div><div class="label">3. Finance (Confirmation)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Awaiting Finance</span></div>
+<table>
+  <thead><tr><th>Description / Items</th><th>Vendor / Supplier</th><th>Invoice No.</th><th style="text-align:right;">Amount (₦)</th></tr></thead>
+  <tbody>${itemRows}</tbody>
+  <tfoot><tr><td colspan="3" style="text-align:right;">Total Authorised</td><td style="text-align:right;">₦${totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+</table>
+<div class="sig-grid">
+  ${_sigBox('1. Staff / Requester', staffSig)}
+  ${_sigBox('2. Budget Owner / Authorisation', boSig)}
+  ${_sigBox('3. Finance Confirmation', finSig)}
 </div>
-<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">This document was generated by RAHAMA Financial Management System. Ref: ${poNum}</div>
+<div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
+  Generated by RAHAMA Financial Management System · PO Ref: ${poNum} · CN Ref: ${refNumber}
+  ${allSigs.length > 0 ? ' · <strong style="color:#285B3C;">✓ Digitally signed</strong>' : ' · <em>Pending signatures</em>'}
+</div>
 </body></html>`;
-                const w = window.open('','_blank','width=800,height=700');
+                const w = window.open('','_blank','width=860,height=780');
                 if (w) { w.document.write(html); w.document.close(); }
             },
 
             // ══════════════════════════════════════════════════════════════
             // GRR PREVIEW
             // ══════════════════════════════════════════════════════════════
-            _previewGRRDraft(refNumber) {
+            async _previewGRRDraft(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
                 const grrNum = cn.grrNumber || ('GRR-' + refNumber + '-DRAFT');
+
+                // Fetch all signatures for this GRR from document_signatures
+                const { data: sigs } = await supabaseClient
+                    .from('document_signatures')
+                    .select('*')
+                    .eq('docRef', grrNum);
+                const allSigs = sigs || [];
+
+                const procSig  = allSigs.find(s => s.pageContext === 'procurement_received');
+                const staffSig = allSigs.find(s => s.pageContext === 'staff_grr_verify');
+                const finSig   = allSigs.find(s => s.pageContext === 'finance_sign');
+
+                // Vendor sig: prefer document_signatures, fall back to concept note fields (remote sign)
+                const vendorSigFromDb = allSigs.find(s => s.signerRole === 'vendor');
+                const vendorSig = vendorSigFromDb
+                    || (cn.grrVendorSignedAt
+                        ? { signatureData: null, signerName: cn.grrVendorName, signedAt: cn.grrVendorSignedAt }
+                        : null);
+
+                const _sigBox = (label, sig) => {
+                    if (!sig) return `<div>
+                        <div class="label">${label}</div>
+                        <div style="height:64px;border-bottom:2px dashed #ccc;margin-top:8px;"></div>
+                        <span style="font-size:11px;color:#aaa;">Awaiting signature</span>
+                    </div>`;
+                    if (sig.signatureData) return `<div>
+                        <div class="label">${label}</div>
+                        <img src="${sig.signatureData}" style="height:64px;display:block;margin-top:8px;border-bottom:2px solid #285B3C;max-width:100%;">
+                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
+                        <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleString('en-NG') : ''}</span>
+                    </div>`;
+                    // Vendor signed remotely (no canvas sig image, but name+timestamp)
+                    return `<div>
+                        <div class="label">${label}</div>
+                        <div style="height:64px;border-bottom:2px solid #285B3C;margin-top:8px;display:flex;align-items:flex-end;padding-bottom:4px;">
+                            <span style="font-size:13px;font-style:italic;color:#285B3C;">✓ Signed remotely</span>
+                        </div>
+                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
+                        <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleString('en-NG') : ''}</span>
+                    </div>`;
+                };
+
+                // Multi-vendor rows if vendorsJson present, else single row
+                let vendors = [];
+                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e){}
+                const itemRows = vendors.length > 0
+                    ? vendors.map(v => `<tr>
+                        <td>${v.items||cn.activityTitle}</td>
+                        <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
+                        <td>${v.invoiceNo||'—'}</td>
+                        <td>1</td><td>___</td>
+                        <td style="text-align:right;">₦${Number(v.amount||0).toLocaleString()}</td>
+                        <td>Good ☐ Damaged ☐</td>
+                      </tr>`).join('')
+                    : `<tr>
+                        <td>${cn.vendorItemsSupplied||cn.activityTitle}</td>
+                        <td>${cn.grrVendorName||'—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td>
+                        <td>${cn.vendorInvoiceNo||'—'}</td>
+                        <td>1</td><td>___</td>
+                        <td style="text-align:right;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td>
+                        <td>Good ☐ Damaged ☐</td>
+                      </tr>`;
+                const totalAmt = vendors.length > 0
+                    ? vendors.reduce((s,v) => s+(v.amount||0), 0)
+                    : Number(cn.actualProcurementCost||cn.estimatedCost);
+
                 const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GRR ${grrNum}</title>
-<style>body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
-h1{color:#285B3C;font-size:20px;}table{width:100%;border-collapse:collapse;margin-top:16px;}
-th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;}
-td{padding:9px 12px;border-bottom:1px solid #ddd;}
-.label{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;}
-.value{font-weight:600;font-size:14px;margin-top:2px;}
-.sig-section{margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;}
+<style>
+  @media print { body{margin:20px;} .no-print{display:none;} }
+  body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
+  h1{color:#285B3C;font-size:20px;margin:0;}
+  table{width:100%;border-collapse:collapse;margin-top:16px;}
+  th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;font-size:12px;}
+  td{padding:9px 12px;border-bottom:1px solid #ddd;vertical-align:top;}
+  tfoot td{background:#E8F5E9;font-weight:700;}
+  .label{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+  .value{font-weight:600;font-size:13px;}
+  .sig-grid{margin-top:48px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:24px;}
 </style></head><body>
-<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
-  <div><h1>GOODS / SERVICES RECEIVING REPORT</h1><div style="font-size:12px;color:#555;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div></div>
-  <div style="text-align:right;"><div class="label">GRR Number</div><div class="value">${grrNum}</div>
-  <div class="label" style="margin-top:8px;">Date</div><div class="value">${new Date().toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+<button class="no-print" onclick="window.print()" style="margin-bottom:20px;padding:10px 24px;background:#285B3C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🖨 Print / Save as PDF</button>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
+  <div>
+    <h1>GOODS / SERVICES RECEIVING REPORT</h1>
+    <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
+  </div>
+  <div style="text-align:right;">
+    <div class="label">GRR Number</div><div class="value" style="font-size:16px;color:#285B3C;">${grrNum}</div>
+    <div class="label" style="margin-top:8px;">Date</div>
+    <div class="value">${new Date(cn.grrGeneratedAt||Date.now()).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div>
+    <div class="label" style="margin-top:8px;">PO Ref</div>
+    <div class="value">${cn.poNumber||'N/A'}</div>
+  </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;padding:16px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;">
-  <div><div class="label">Vendor / Supplier</div><div class="value">${cn.grrVendorName||'___________________________'}</div></div>
-  <div><div class="label">Vendor Phone</div><div class="value">${cn.grrVendorPhone||'___________________________'}</div></div>
-  <div><div class="label">Vendor Address / Contact</div><div class="value">${cn.vendorAddress||'___________________________'}</div></div>
-  <div><div class="label">Invoice / Receipt No.</div><div class="value">${cn.vendorInvoiceNo||'___________________________'}</div></div>
-  <div style="grid-column:1/-1"><div class="label">Concept Note / Activity</div><div class="value">${cn.activityTitle}</div></div>
+  <div><div class="label">Concept Note / Activity</div><div class="value">${cn.activityTitle}</div></div>
   <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
-  <div><div class="label">Concept Note Ref</div><div class="value">${refNumber}</div></div>
+  <div><div class="label">CN Ref</div><div class="value">${refNumber}</div></div>
+  <div><div class="label">Staff / Requester</div><div class="value">${cn.staffName}</div></div>
 </div>
-<table><thead><tr><th>Item / Service Description</th><th>Qty Ordered</th><th>Qty Received</th><th>Unit Cost (₦)</th><th>Total (₦)</th><th>Condition</th></tr></thead>
-<tbody><tr><td>${cn.vendorItemsSupplied||cn.activityTitle}</td><td>1</td><td>___</td><td>${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td><td>${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td><td>Good ☐&nbsp;Damaged ☐</td></tr>
-</tbody><tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;">Total Received</td><td style="font-weight:700;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td><td></td></tr></tfoot></table>
-<div class="sig-section" style="margin-top:48px;grid-template-columns:1fr 1fr 1fr 1fr;">
-  <div><div class="label">1. Received By (Procurement)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
-  <div><div class="label">2. Verified By (Programme Staff)</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
-  <div><div class="label">3. Vendor Representative</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">${cn.grrVendorName||'Name &amp; Signature'}</span></div>
-  <div><div class="label">4. Finance Confirmation</div><div style="height:60px;border-bottom:1px solid #333;margin-top:8px;"></div><span style="font-size:11px;color:#999;">Name &amp; Signature</span></div>
+<table>
+  <thead><tr><th>Item / Service Description</th><th>Vendor &amp; Phone</th><th>Invoice No.</th><th>Qty Ordered</th><th>Qty Received</th><th style="text-align:right;">Cost (₦)</th><th>Condition</th></tr></thead>
+  <tbody>${itemRows}</tbody>
+  <tfoot><tr><td colspan="5" style="text-align:right;">Total Received</td><td style="text-align:right;">₦${totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td></td></tr></tfoot>
+</table>
+<div class="sig-grid">
+  ${_sigBox('1. Received By (Procurement)', procSig)}
+  ${_sigBox('2. Verified By (Programme Staff)', staffSig)}
+  ${_sigBox('3. Vendor Representative', vendorSig)}
+  ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
-<div style="margin-top:32px;font-size:11px;color:#999;border-top:1px solid #eee;padding-top:12px;">RAHAMA FMS — GRR Ref: ${grrNum} | CN Ref: ${refNumber} | PO Ref: ${cn.poNumber||'N/A'}</div>
+<div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
+  Generated by RAHAMA Financial Management System · GRR Ref: ${grrNum} · CN Ref: ${refNumber} · PO Ref: ${cn.poNumber||'N/A'}
+  ${allSigs.length > 0 ? ' · <strong style="color:#285B3C;">✓ Digitally signed</strong>' : ' · <em>Pending signatures</em>'}
+</div>
 </body></html>`;
-                const w = window.open('','_blank','width=800,height=700');
+                const w = window.open('','_blank','width=1000,height=780');
                 if (w) { w.document.write(html); w.document.close(); }
             },
 
