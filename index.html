@@ -296,6 +296,9 @@
                         if (auditBtn) auditBtn.style.display = '';
                         if (superBtn) superBtn.style.display = '';
                     }
+                    if (role === 'finance') {
+                        if (auditBtn) auditBtn.style.display = '';
+                    }
                 }
                 this.showView('dashboard');
                 this.loadData().catch(error => console.error('Background data load error:', error));
@@ -409,6 +412,30 @@
                             const rMap = new Map();
                             [...this.data.retirements, ...allPendingRet].forEach(r => rMap.set(r.id||r.refNumber, r));
                             this.data.retirements = Array.from(rMap.values());
+                        }
+                        // Load ALL concept notes that Finance has ever touched (paid or rejected payments, approved retirements)
+                        const { data: allFinancePay } = await supabaseClient.from('payments').select('*').eq('processedBy', this.currentUser);
+                        const { data: allFinanceRejPay } = await supabaseClient.from('payments').select('*').eq('rejectedBy', this.currentUser);
+                        const { data: allFinanceRet } = await supabaseClient.from('retirements').select('*').eq('approvedBy', this.currentUser);
+                        const allFinancePayments = [...(allFinancePay||[]), ...(allFinanceRejPay||[])];
+                        if (allFinancePayments.length) {
+                            const pMap = new Map();
+                            [...this.data.payments, ...allFinancePayments].forEach(p => pMap.set(p.refNumber, p));
+                            this.data.payments = Array.from(pMap.values());
+                        }
+                        // Collect all CN refs Finance has ever been involved with
+                        const allFinanceCNRefs = [
+                            ...this.data.payments.map(p => p.conceptNoteRef),
+                            ...(allFinanceRet||[]).map(r => r.paymentRef)
+                        ].filter(Boolean);
+                        const uniqueCNRefs = [...new Set(allFinanceCNRefs)];
+                        if (uniqueCNRefs.length > 0) {
+                            const { data: linkedCNs } = await supabaseClient.from('concept_notes').select('*').in('refNumber', uniqueCNRefs);
+                            if (linkedCNs) {
+                                const cMap = new Map();
+                                [...this.data.conceptNotes, ...linkedCNs].forEach(c => cMap.set(c.refNumber, c));
+                                this.data.conceptNotes = Array.from(cMap.values());
+                            }
                         }
                         const pendingPaymentRefs = this.data.payments.filter(p => p.status === 'pending' && p.conceptNoteRef).map(p => p.conceptNoteRef);
                         if (pendingPaymentRefs.length > 0) {
@@ -731,6 +758,7 @@
                             await this.createNotification(bo, `New concept note ${data[0].refNumber} submitted by ${this.currentUser} for review.`, 'info', data[0].refNumber);
                         }
                     }
+                    await this._logAudit('concept_notes', data[0].refNumber, 'submitted', `Submitted by ${this.currentUser}. Activity: ${conceptNote.activityTitle}. Amount: ₦${Number(conceptNote.estimatedCost).toLocaleString()}. Project: ${conceptNote.projectCode}. Requires procurement: ${conceptNote.requiresProcurement}. Sent to: ${firstApprover}.`);
                     alert('Concept note submitted successfully!'); this.showView('dashboard');
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting concept note: ' + error.message); if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Concept Note'; } }
             },
@@ -1177,6 +1205,11 @@
         this.data.retirements.unshift(savedRetirement);
     }
     this.clearCache();
+                    // Notify Finance and BO that a retirement needs review
+                    const financeUsers = Object.entries(this.data.roles).filter(([,r]) => r === 'finance').map(([n]) => n);
+                    for (const f of financeUsers) {
+                        await this.createNotification(f, `Retirement ${savedRetirement.refNumber} submitted by ${this.currentUser} is pending your review.`, 'info', savedRetirement.paymentRef);
+                    }
                     alert('Retirement submitted successfully!'); this.showView('dashboard');
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting retirement: ' + error.message); }
             },
@@ -1234,6 +1267,16 @@
                         const { data: rejectedRet } = await supabaseClient.from('retirements').select('*').eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50);
                         historyPayments = [...(processedPay || []), ...(rejectedPay || [])];
                         historyRetirements = [...(approvedRet || []), ...(rejectedRet || [])];
+                        // Also load CNs linked to processed payments so Finance can view/dossier them
+                        const processedCNRefs = [...new Set(historyPayments.map(p => p.conceptNoteRef).filter(Boolean))];
+                        if (processedCNRefs.length > 0) {
+                            const { data: processedCNs } = await supabaseClient.from('concept_notes').select('*').in('refNumber', processedCNRefs);
+                            if (processedCNs) {
+                                const cMap = new Map();
+                                [...this.data.conceptNotes, ...processedCNs].forEach(c => cMap.set(c.refNumber, c));
+                                this.data.conceptNotes = Array.from(cMap.values());
+                            }
+                        }
                     }
                 } catch (e) { console.error('History load error:', e); }
                 
@@ -1276,8 +1319,8 @@
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
-                    ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.projectCode || '-'}</td><td><span class="status-badge ${p.status === 'paid' ? 'status-paid' : 'status-rejected'}">${p.status === 'paid' ? 'Processed' : 'Rejected'}</span></td><td>${p.status === 'paid' ? (p.paidDate ? new Date(p.paidDate).toLocaleDateString() : '-') : (p.rejectedDate ? new Date(p.rejectedDate).toLocaleDateString() : '-')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
-                    ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Amount Spent</th><th>Outcome</th><th>Date</th></tr></thead><tbody>${historyRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td><span class="status-badge ${r.status === 'approved' ? 'status-approved' : 'status-rejected'}">${r.status === 'approved' ? 'Approved' : 'Rejected'}</span></td><td>${r.status === 'approved' ? (r.approvedDate ? new Date(r.approvedDate).toLocaleDateString() : '-') : (r.rejectedDate ? new Date(r.rejectedDate).toLocaleDateString() : '-')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+                    ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+                    ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected.</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Retirement Ref</th><th>Payment Ref</th><th>Staff</th><th>Amount Spent</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyRetirements.map(r => { const linkedCN = app.data.conceptNotes.find(c => app.data.payments.find(p => p.refNumber===r.paymentRef && p.conceptNoteRef===c.refNumber)); const cnRef = linkedCN?.refNumber; return `<tr><td>${r.refNumber}</td><td>${r.paymentRef}</td><td>${r.staffName}</td><td>₦${Number(r.actualSpent||0).toLocaleString()}</td><td><span class="status-badge ${r.status==='approved'?'status-approved':'status-rejected'}">${r.status==='approved'?'Approved':'Rejected'}</span></td><td>${r.status==='approved'?(r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'-'):(r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
             },
             
             async approveConceptNote(refNumber, action) {
@@ -1307,41 +1350,46 @@
               switch(action) {
     case 'approve_under_1m':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now };
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'approve_with_note':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now };
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
     case 'ed_approve':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now };
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
 }
                 try {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
                     if (error) throw error;
                     Object.assign(cn, updates); this.clearCache();
-                    await this._logAudit('concept_notes', refNumber, action, JSON.stringify(updates));
+                    await this._logAudit('concept_notes', refNumber, action, (() => {
+                        if (action === 'forward_to_ed') return `Forwarded to ED by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}.`;
+                        if (updates.sentToProcurement) return `Approved by ${this.currentUser} → sent to Procurement. Amount: ₦${cn.estimatedCost.toLocaleString()}. PO: ${updates.poNumber||'N/A'}.`;
+                        if (updates.status === 'approved') return `Approved by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}. Project: ${cn.projectCode}.`;
+                        return `Action: ${action} by ${this.currentUser}.`;
+                    })());
 
-                    // ── If PO was generated, record signature and offer preview ──
+                    // ── If PO was generated, record BO/ED signature against CN ref so dossier finds it ──
                     if (boSigData && updates.poNumber) {
                         await supabaseClient.from('document_signatures').insert([{
                             docRef: updates.poNumber,
                             docType: 'purchase_order',
-                            relatedRef: refNumber,
+                            relatedRef: refNumber,          // CN ref — dossier queries by this
                             signerName: this.currentUser,
-                            signerRole: this.data.roles[this.currentUser] || 'approver',
+                            signerRole: action === 'ed_approve' ? 'ed' : 'budgetOwner',
                             signatureData: boSigData,
                             signedAt: now,
                             pageContext: 'budget_owner_po'
                         }]);
                         if (confirm('Purchase Order ' + updates.poNumber + ' has been generated and your signature recorded.\n\nWould you like to preview the PO now?')) {
-                            this._previewPODraft(refNumber);
+                            await this._previewPODraft(refNumber);
                         }
                     }
                     const isFullyApproved = updates.status === 'approved';
@@ -1369,7 +1417,7 @@
                 try {
                     const { error } = await supabaseClient.from('concept_notes').update({ status: 'rejected', rejectedDate: new Date().toISOString(), rejectedBy: this.currentUser, rejectionReason: reason }).eq('refNumber', refNumber);
                     if (error) throw error;
-                    await this._logAudit('concept_notes', refNumber, 'rejected', `Reason: ${reason}`);
+                    await this._logAudit('concept_notes', refNumber, 'rejected', `Rejected by ${this.currentUser}. Staff: ${cn.staffName}. Amount: ₦${Number(cn.estimatedCost).toLocaleString()}. Reason: ${reason}`);
                     await this.createNotification(cn.staffName, `Your concept note ${refNumber} was rejected: "${reason}"`, 'danger', refNumber);
                     await this.loadData(); alert('Concept note rejected.'); this.showView('approvals');
                 } catch (error) { console.error('Reject error:', error); alert('Error rejecting concept note: ' + error.message); }
@@ -1813,7 +1861,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                         }]);
                     }
 
-                    await this._logAudit('payments', refNumber, 'paid', `Processed by ${this.currentUser}. Amount: ₦${payment.amount.toLocaleString()}`);
+                    await this._logAudit('payments', refNumber, 'paid', `Processed by ${this.currentUser}. Amount: ₦${payment.amount.toLocaleString()}. Staff: ${payment.staffName}. Account: ${payment.accountName||'Batch'} — ${payment.bankName||''}${payment.accountNumber?' ('+payment.accountNumber+')':''}. CN Ref: ${payment.conceptNoteRef||'N/A'}.`);
                     await this.createNotification(payment.staffName, `Your payment of ₦${payment.amount.toLocaleString()} (${refNumber}) has been processed!`, 'success', refNumber);
                     alert(`Payment of ₦${payment.amount.toLocaleString()} processed successfully!`); await this.loadData(); this.showView('approvals');
                 } catch (error) { console.error('Payment error:', error); alert('Error processing payment: ' + error.message); }
@@ -1911,20 +1959,51 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
             },
             
             async approveRetirement(refNumber) {
+                const retirement = this.data.retirements.find(r => r.refNumber === refNumber);
+                if (!retirement) return;
+                // Require Finance signature before approving
+                const sigData = await this._showSignaturePad(
+                    'Finance Officer Signature',
+                    `I, ${this.currentUser}, confirm retirement ${refNumber} has been reviewed and approved. Amount spent: ₦${Number(retirement.actualSpent||0).toLocaleString()}.`
+                );
+                if (!sigData) return; // cancelled
                 try {
-                    const { error } = await supabaseClient.from('retirements').update({ status: 'approved', approvedDate: new Date().toISOString(), approvedBy: this.currentUser }).eq('refNumber', refNumber);
+                    const now = new Date().toISOString();
+                    const { error } = await supabaseClient.from('retirements').update({
+                        status: 'approved', approvedDate: now, approvedBy: this.currentUser,
+                        approverSignatureData: sigData, approverSignedAt: now
+                    }).eq('refNumber', refNumber);
                     if (error) throw error;
-                    await this._logAudit('retirements', refNumber, 'approved', `Approved by ${this.currentUser}`);
+                    // Record in document_signatures against the retirement ref and its payment ref
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef: refNumber,
+                        docType: 'retirement',
+                        relatedRef: retirement.paymentRef || refNumber,
+                        signerName: this.currentUser,
+                        signerRole: 'finance',
+                        signatureData: sigData,
+                        signedAt: now,
+                        pageContext: 'retirement_approved'
+                    }]);
+                    await this._logAudit('retirements', refNumber, 'retirement_approved', `Approved by ${this.currentUser}. Staff: ${retirement.staffName}. Amount spent: ₦${Number(retirement.actualSpent||0).toLocaleString()}. Amount returned: ₦${Number(retirement.amountReturned||0).toLocaleString()}. Payment ref: ${retirement.paymentRef||'N/A'}.`);
+                    // Notify the staff member
+                    await this.createNotification(retirement.staffName, `Your retirement ${refNumber} has been approved by Finance.`, 'success', retirement.paymentRef || refNumber);
                     alert('Retirement approved successfully!'); await this.loadData(); this.showView('approvals');
                 } catch (error) { console.error('Approval error:', error); alert('Error approving retirement: ' + error.message); }
             },
-            
+
             async rejectRetirement(refNumber) {
+                const retirement = this.data.retirements.find(r => r.refNumber === refNumber);
                 const reason = prompt('Please provide a reason for rejection:'); if (!reason) return;
                 try {
-                    const { error } = await supabaseClient.from('retirements').update({ status: 'rejected', rejectedDate: new Date().toISOString(), rejectedBy: this.currentUser, rejectionReason: reason }).eq('refNumber', refNumber);
+                    const { error } = await supabaseClient.from('retirements').update({
+                        status: 'rejected', rejectedDate: new Date().toISOString(),
+                        rejectedBy: this.currentUser, rejectionReason: reason
+                    }).eq('refNumber', refNumber);
                     if (error) throw error;
-                    await this._logAudit('retirements', refNumber, 'rejected', `Reason: ${reason}`);
+                    await this._logAudit('retirements', refNumber, 'retirement_rejected', `Rejected by ${this.currentUser}. Staff: ${retirement?.staffName||'N/A'}. Amount spent: ₦${Number(retirement?.actualSpent||0).toLocaleString()}. Reason: ${reason}. Payment ref: ${retirement?.paymentRef||'N/A'}.`);
+                    // Notify the staff member
+                    if (retirement) await this.createNotification(retirement.staffName, `Your retirement ${refNumber} was rejected: "${reason}". Please resubmit with corrections.`, 'danger', retirement.paymentRef || refNumber);
                     alert('Retirement rejected.'); await this.loadData(); this.showView('approvals');
                 } catch (error) { console.error('Reject error:', error); alert('Error rejecting retirement: ' + error.message); }
             },
@@ -2051,9 +2130,19 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                     const { data: ret = [] } = await supabaseClient.from('retirements').select('*').in('paymentRef', paymentRefs);
                     retirements = ret || [];
                 }
-                const { data: docSigs = [] } = await supabaseClient
+
+                // Fetch ALL signatures: by CN ref, payment refs, and by PO/GRR docRef
+                const docRefs = [cn.refNumber, ...(cn.poNumber ? [cn.poNumber] : []), ...(cn.grrNumber ? [cn.grrNumber] : []), ...paymentRefs];
+                const { data: docSigsRaw = [] } = await supabaseClient
                     .from('document_signatures').select('*')
-                    .eq('relatedRef', cn.refNumber).order('signedAt', { ascending: true });
+                    .in('relatedRef', [cn.refNumber, ...paymentRefs]);
+                const { data: docSigsByDocRef = [] } = docRefs.length > 0
+                    ? await supabaseClient.from('document_signatures').select('*').in('docRef', docRefs)
+                    : { data: [] };
+                // Merge deduplicated by id
+                const sigMap = new Map();
+                [...(docSigsRaw||[]), ...(docSigsByDocRef||[])].forEach(s => sigMap.set(s.id, s));
+                const docSigs = Array.from(sigMap.values()).sort((a,b) => new Date(a.signedAt)-new Date(b.signedAt));
 
                 const fmt  = d => d ? new Date(d).toLocaleString('en-NG') : 'N/A';
                 const fmtD = d => d ? new Date(d).toLocaleDateString('en-NG', { day:'numeric', month:'long', year:'numeric' }) : 'N/A';
@@ -2098,7 +2187,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">PO Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
                     ${sigBlock('1. Staff (Requester)', poStaffSig, cn.staffName, null)}
-                    ${sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.approvedBy, cn.budgetOwnerSignedAt)}
+                    ${sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.budgetOwnerApprovedBy || cn.approvedBy, cn.budgetOwnerSignedAt)}
                     ${sigBlock('3. Finance', poFinSig, null, null)}
                 </div>
                 <h2 style="font-size:14px;border-bottom:2px solid #285B3C;padding-bottom:6px;margin-top:8px;color:#285B3C;">GRR — Goods/Services Receiving Report</h2>
@@ -2191,7 +2280,7 @@ ${cn.staffSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Staff 
   <div><div class="lbl">Sent to Procurement</div><div class="val">${fmtD(cn.sentToProcurement)}</div></div>
   <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${cn.rejectionReason||'—'}</div></div>
 </div>
-${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
+${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
 ${procSection}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Paid</th><th>Processed By</th></tr></thead><tbody>${payRows}</tbody></table>`}
@@ -2629,7 +2718,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 const staffSig   = allSigs.find(s => s.pageContext === 'staff_po');
                 const boSig      = allSigs.find(s => s.pageContext === 'budget_owner_po')
                                || (cn.budgetOwnerSignatureData
-                                   ? { signatureData: cn.budgetOwnerSignatureData, signerName: cn.approvedBy, signedAt: cn.budgetOwnerSignedAt }
+                                   ? { signatureData: cn.budgetOwnerSignatureData, signerName: cn.budgetOwnerApprovedBy || cn.approvedBy, signedAt: cn.budgetOwnerSignedAt }
                                    : null);
                 const finSig     = allSigs.find(s => s.pageContext === 'finance_sign');
 
@@ -2872,16 +2961,18 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 if (!sigData) { this.showView('approvals'); return; }
 
                 try {
+                    const resolvedCnRef = cnRef || cn?.refNumber || paymentRef;
                     await supabaseClient.from('document_signatures').insert([{
-                        docRef, docType, relatedRef: paymentRef,
+                        docRef, docType, relatedRef: resolvedCnRef,
                         signerName: this.currentUser,
                         signerRole: this.data.roles[this.currentUser] || 'unknown',
                         signatureData: sigData,
                         signedAt: new Date().toISOString(),
                         pageContext: pageContext || 'sign'
                     }]);
+                    const sigLabel = {'procurement_received':'Received by Procurement','staff_po':'Staff signed PO','staff_grr_verify':'Programme Staff verified GRR','budget_owner_po':'Budget Owner/ED authorised PO','finance_sign':'Finance confirmed'}[pageContext] || pageContext;
                     await this._logAudit('document_signatures', docRef, 'signed',
-                        `${docType} signed by ${this.currentUser} (${pageContext})`);
+                        `${sigLabel} — ${docType === 'purchase_order' ? 'Purchase Order' : 'GRR'} ${docRef}. Signed by ${this.currentUser}. CN Ref: ${resolvedCnRef}.`);;
 
                     // ── SIGNING CHAIN LOGIC ──────────────────────────────────
                     // GRR Step 1: Procurement received → notify staff to verify
@@ -3225,27 +3316,35 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 
                 content.innerHTML = `<div class="header"><h2>🔍 Audit Trail</h2><p>Complete record of all actions taken in the system</p></div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
-                        <input id="auditSearch" type="text" placeholder="Search ref, user, action…" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;flex:1;min-width:200px;" oninput="app._filterAudit()">
+                        <input id="auditSearch" type="text" placeholder="Search ref, user, action, details…" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;flex:1;min-width:200px;" oninput="app._filterAudit()">
                         <select id="auditActionFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" onchange="app._filterAudit()">
                             <option value="">All Actions</option>
                             <option value="submitted">Submitted</option>
                             <option value="approve">Approved</option>
                             <option value="reject">Rejected</option>
-                            <option value="paid">Paid</option>
-                            <option value="signed">Signed</option>
+                            <option value="forward_to_ed">Forwarded to ED</option>
+                            <option value="paid">Payment Processed</option>
+                            <option value="signed">Document Signed</option>
+                            <option value="grr_vendor_signed">Vendor Signed GRR</option>
                             <option value="procurement_complete">Procurement Complete</option>
+                            <option value="variance_escalated">Variance Escalated</option>
+                            <option value="variance_approved">Variance Approved</option>
+                            <option value="variance_rejected">Variance Rejected</option>
+                            <option value="retirement_approved">Retirement Approved</option>
                         </select>
                         <select id="auditTableFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" onchange="app._filterAudit()">
-                            <option value="">All Tables</option>
+                            <option value="">All Records</option>
                             <option value="concept_notes">Concept Notes</option>
                             <option value="payments">Payments</option>
                             <option value="retirements">Retirements</option>
                             <option value="document_signatures">Signatures</option>
                         </select>
+                        <input id="auditDateFrom" type="date" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" oninput="app._filterAudit()" title="From date">
+                        <input id="auditDateTo" type="date" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" oninput="app._filterAudit()" title="To date">
                     </div>
                     <div id="auditContent"><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><p style="margin-top:16px;color:var(--text-muted);">Loading audit trail…</p></div></div>`;
 
-                let query = supabaseClient.from('audit_log').select('*').order('changedAt', { ascending: false }).limit(200);
+                let query = supabaseClient.from('audit_log').select('*').order('changedAt', { ascending: false }).limit(500);
                 if (!isAdmin) query = query.eq('changedBy', this.currentUser);
                 const { data, error } = await query;
 
@@ -3261,20 +3360,41 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     el.innerHTML = '<div class="empty-state"><p>No audit records found.</p></div>';
                     return;
                 }
-                const actionClass = a => a.includes('reject') ? 'reject' : a.includes('paid') ? 'paid' : '';
+                const actionLabel = a => ({
+                    'submitted':            '📝 Submitted',
+                    'approve_under_1m':     '✅ Approved',
+                    'approve_with_note':    '✅ Approved (Note)',
+                    'ed_approve':           '✅ ED Approved',
+                    'forward_to_ed':        '→ Forwarded to ED',
+                    'rejected':             '✗ Rejected',
+                    'paid':                 '💳 Payment Processed',
+                    'signed':               '✍️ Signed',
+                    'grr_vendor_signed':    '✍️ Vendor Signed GRR',
+                    'procurement_complete': '📦 Procurement Complete',
+                    'variance_escalated':   '⚠️ Variance Escalated',
+                    'variance_approved':    '✅ Variance Approved',
+                    'variance_rejected':    '✗ Variance Rejected',
+                    'retirement_approved':  '✅ Retirement Approved',
+                    'retirement_rejected':  '✗ Retirement Rejected',
+                }[a] || a);
+                const actionCls = a => a.includes('reject') ? 'status-rejected' : ['paid','approve','signed','complete','vendor_signed','retirement_approved','variance_approved'].some(k => a.includes(k)) ? 'status-approved' : 'status-pending';
+
                 el.innerHTML = `
                     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
-                        <div class="audit-row head">
-                            <span>When</span><span>Table</span><span>Ref</span><span>Details</span><span>By</span>
+                        <div style="display:grid;grid-template-columns:140px 130px 140px 1fr 120px;gap:0;background:var(--primary);color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;">
+                            <span>When</span><span>Record</span><span>Ref</span><span>Action &amp; Details</span><span>By</span>
                         </div>
                         ${rows.map(r => `
-                        <div class="audit-row">
-                            <span style="color:var(--text-muted);font-size:12px;">${new Date(r.changedAt).toLocaleString()}</span>
-                            <span style="font-size:12px;">${r.tableName || '—'}</span>
-                            <span style="font-weight:600;font-size:12px;">${r.refNumber || '—'}</span>
+                        <div style="display:grid;grid-template-columns:140px 130px 140px 1fr 120px;gap:0;padding:12px 16px;border-bottom:1px solid var(--border);align-items:start;">
+                            <span style="color:var(--text-muted);font-size:11px;line-height:1.5;">
+                                ${new Date(r.changedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}<br>
+                                <span style="font-size:10px;">${new Date(r.changedAt).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}</span>
+                            </span>
+                            <span style="font-size:11px;color:var(--text-muted);padding-right:8px;">${r.tableName||'—'}</span>
+                            <span style="font-weight:700;font-size:12px;color:var(--primary);padding-right:8px;">${r.refNumber||'—'}</span>
                             <span>
-                                <span class="audit-action-badge ${actionClass(r.action||'')}">${r.action||'—'}</span>
-                                <span style="font-size:12px;color:var(--text-muted);margin-left:8px;">${r.details ? r.details.substring(0,120) : ''}</span>
+                                <span class="status-badge ${actionCls(r.action||'')}" style="font-size:11px;margin-bottom:4px;display:inline-block;">${actionLabel(r.action||'—')}</span>
+                                ${r.details ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.5;">${r.details}</div>` : ''}
                             </span>
                             <span style="font-size:12px;font-weight:600;">${r.changedBy||'—'}</span>
                         </div>`).join('')}
@@ -3284,12 +3404,16 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 
             _filterAudit() {
                 if (!this._auditData) return;
-                const q  = (document.getElementById('auditSearch')?.value||'').toLowerCase();
-                const ac = document.getElementById('auditActionFilter')?.value||'';
-                const tc = document.getElementById('auditTableFilter')?.value||'';
+                const q    = (document.getElementById('auditSearch')?.value||'').toLowerCase();
+                const ac   = document.getElementById('auditActionFilter')?.value||'';
+                const tc   = document.getElementById('auditTableFilter')?.value||'';
+                const from = document.getElementById('auditDateFrom')?.value;
+                const to   = document.getElementById('auditDateTo')?.value;
                 const filtered = this._auditData.filter(r => {
                     if (ac && !(r.action||'').includes(ac)) return false;
                     if (tc && r.tableName !== tc) return false;
+                    if (from && new Date(r.changedAt) < new Date(from)) return false;
+                    if (to   && new Date(r.changedAt) > new Date(to + 'T23:59:59')) return false;
                     if (q && !`${r.refNumber} ${r.changedBy} ${r.action} ${r.details}`.toLowerCase().includes(q)) return false;
                     return true;
                 });
