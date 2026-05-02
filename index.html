@@ -1742,7 +1742,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 }
                 try {
                     const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
-                    const { error } = await supabaseClient.from('payments').update({ status: 'paid', paidDate: new Date().toISOString(), processedBy: this.currentUser, retirementresponsibility: conceptNote?.retirementresponsibility || 'staff' }).eq('refNumber', refNumber);
+                    const { error } = await supabaseClient.from('payments').update({ status: 'paid', paidDate: new Date().toISOString(), processedBy: this.currentUser, retirementresponsibility: conceptNote?.retirementresponsibility || payment.retirementresponsibility || 'staff' }).eq('refNumber', refNumber);
                     if (error) throw error;
                     await this._logAudit('payments', refNumber, 'paid', `Processed by ${this.currentUser}. Amount: ₦${payment.amount.toLocaleString()}`);
                     await this.createNotification(payment.staffName, `Your payment of ₦${payment.amount.toLocaleString()} (${refNumber}) has been processed!`, 'success', refNumber);
@@ -2342,7 +2342,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             // ══════════════════════════════════════════════════════════════
             async _renderVendorSignPage(token) {
                 document.body.style.margin = '0';
-                document.getElementById('app')?.remove();
+               document.querySelector('.app')?.remove();
 
                 const { data: tokenRow, error: tErr } = await supabaseClient
                     .from('grr_signing_tokens').select('*').eq('token', token).single();
@@ -3096,7 +3096,72 @@ td{padding:9px 12px;border-bottom:1px solid #ddd;}
             async createNotification(recipientName, message, type, refNumber) {
                 await supabaseClient.from('notifications').insert([{ recipientName, message, type, refNumber, isRead: false, createdAt: new Date().toISOString() }]);
             },
+_addVendorBlock() {
+    app._vendorCount = (app._vendorCount || 1) + 1;
+    const id = app._vendorCount;
+    const s = 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;';
+    const container = document.getElementById('vendorBlocksContainer');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.id = 'vendorBlock_' + id;
+    div.style.cssText = 'background:#F0FDF4;border:1px solid #A7F3D0;border-radius:10px;padding:16px;margin-bottom:12px;';
+    div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <strong style="color:#047857;font-size:13px;">Vendor ${id}</strong>
+            <button type="button" onclick="app._removeVendorBlock(${id})" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:13px;font-weight:600;">✕ Remove</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Name *</label><input type="text" id="vName_${id}" placeholder="Vendor/company name" style="${s}"></div>
+            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Phone *</label><input type="text" id="vPhone_${id}" placeholder="e.g. 08012345678" style="${s}"></div>
+            <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods/Services Supplied *</label><input type="text" id="vItems_${id}" placeholder="What was purchased" style="${s}"></div>
+            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Invoice No.</label><input type="text" id="vInvoice_${id}" placeholder="Invoice number" style="${s}"></div>
+            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Amount (₦)</label><input type="number" id="vAmount_${id}" min="0" step="0.01" placeholder="0" style="${s}" oninput="app._recalcVendorTotal()"></div>
+            <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address/Contact</label><textarea id="vAddress_${id}" rows="2" placeholder="Optional" style="${s}resize:vertical;min-height:60px;"></textarea></div>
+        </div>`;
+    container.appendChild(div);
+},
 
+_removeVendorBlock(id) {
+    const block = document.getElementById('vendorBlock_' + id);
+    if (block) block.remove();
+    app._recalcVendorTotal();
+},
+
+_recalcVendorTotal() {
+    let total = 0, count = 0;
+    document.querySelectorAll('[id^="vAmount_"]').forEach(el => {
+        const v = parseFloat(el.value) || 0;
+        if (v > 0) { total += v; count++; }
+    });
+    const display = document.getElementById('vendorTotalDisplay');
+    if (!display) return;
+    if (count > 1) {
+        display.style.display = 'block';
+        display.textContent = `Combined total across ${count} vendors: ₦${total.toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2})}`;
+    } else {
+        display.style.display = 'none';
+    }
+},
+
+_collectVendors() {
+    const vendors = [];
+    document.querySelectorAll('[id^="vendorBlock_"]').forEach(block => {
+        const m = block.id.match(/vendorBlock_(\d+)/);
+        if (!m) return;
+        const id = m[1];
+        const name = document.getElementById('vName_' + id)?.value?.trim();
+        if (!name) return;
+        vendors.push({
+            name,
+            phone:     document.getElementById('vPhone_'   + id)?.value?.trim() || '',
+            items:     document.getElementById('vItems_'   + id)?.value?.trim() || '',
+            invoiceNo: document.getElementById('vInvoice_' + id)?.value?.trim() || '',
+            amount:    parseFloat(document.getElementById('vAmount_'  + id)?.value) || 0,
+            address:   document.getElementById('vAddress_' + id)?.value?.trim() || ''
+        });
+    });
+    return vendors;
+},
             logout() {
                 if (confirm('Are you sure you want to logout?')) { localStorage.removeItem('pms_user'); window.location.href = 'https://rahamaorg.github.io/appraisal-system/'; }
             }
