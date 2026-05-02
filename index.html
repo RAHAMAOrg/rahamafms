@@ -1281,24 +1281,24 @@
                 const now = new Date().toISOString();
                 const poNumber = 'PO-' + refNumber + '-' + Date.now();
 
-                switch(action) {
-                    case 'approve_under_1m':
-                        updates = cn.requiresProcurement === 'yes'
-                            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
-                            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now };
-                        break;
-                    case 'approve_with_note':
-                        updates = cn.requiresProcurement === 'yes'
-                            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
-                            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now };
-                        break;
-                    case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
-                    case 'ed_approve':
-                        updates = cn.requiresProcurement === 'yes'
-                            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
-                            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now };
-                        break;
-                }
+              switch(action) {
+    case 'approve_under_1m':
+        updates = cn.requiresProcurement === 'yes'
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now };
+        break;
+    case 'approve_with_note':
+        updates = cn.requiresProcurement === 'yes'
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now };
+        break;
+    case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
+    case 'ed_approve':
+        updates = cn.requiresProcurement === 'yes'
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now };
+        break;
+}
                 try {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
                     if (error) throw error;
@@ -1446,17 +1446,27 @@
                         <div class="form-group"><label>Account Name <span class="required">*</span></label><input type="text" id="accountName" required placeholder="Name as it appears on bank account"></div>
                         <div class="form-group"><label>Account Number <span class="required">*</span></label><input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number"></div>
                         <div class="form-group full-width"><label>Bank Name <span class="required">*</span></label><select id="bankName" required><option value="">Select Bank</option>${bankOptions}</select></div>
-
                         <div class="form-group full-width">
-                            <h3 style="margin:24px 0 16px;font-family:'Archivo',sans-serif;">Vendor / Supplier Details</h3>
-                            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">These will appear on the PO and GRR documents</p>
-                        </div>
-                        <div class="form-group"><label>Vendor / Supplier Name <span class="required">*</span></label><input type="text" id="vendorName" required placeholder="Full name of vendor or company"></div>
-                        <div class="form-group"><label>Vendor Phone Number <span class="required">*</span></label><input type="text" id="vendorPhone" required placeholder="e.g. 08012345678"></div>
-                        <div class="form-group full-width"><label>Vendor Address / Contact Details</label><textarea id="vendorAddress" rows="2" placeholder="Vendor address, email, or other contact info (optional)"></textarea></div>
-                        <div class="form-group"><label>Goods / Services Supplied <span class="required">*</span></label><input type="text" id="vendorItemsSupplied" required placeholder="Brief description of what was purchased"></div>
-                        <div class="form-group"><label>Invoice / Receipt Number</label><input type="text" id="vendorInvoiceNo" placeholder="Vendor's invoice or receipt number (if available)"></div>
-
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="font-family:'Archivo',sans-serif;margin:0;">Vendor / Supplier Details</h3>
+        <button type="button" onclick="app._addVendorBlock()" style="padding:8px 16px;background:#ECFDF5;border:1px dashed #6EE7B7;border-radius:6px;color:#047857;font-size:13px;font-weight:600;cursor:pointer;">+ Add Another Vendor</button>
+    </div>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">For activities with multiple vendors/suppliers, add each separately</p>
+    <div id="vendorBlocksContainer">
+        <div id="vendorBlock_1" style="background:#F0FDF4;border:1px solid #A7F3D0;border-radius:10px;padding:16px;margin-bottom:12px;">
+            <div style="margin-bottom:10px;"><strong style="color:#047857;font-size:13px;">Vendor 1</strong></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Name <span style="color:var(--danger)">*</span></label><input type="text" id="vName_1" placeholder="Vendor or company name" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Phone <span style="color:var(--danger)">*</span></label><input type="text" id="vPhone_1" placeholder="e.g. 08012345678" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods / Services Supplied <span style="color:var(--danger)">*</span></label><input type="text" id="vItems_1" placeholder="What was purchased or provided" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Invoice / Receipt No.</label><input type="text" id="vInvoice_1" placeholder="Invoice number" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Amount (₦)</label><input type="number" id="vAmount_1" min="0" step="0.01" placeholder="0" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._recalcVendorTotal()"></div>
+                <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_1" rows="2" placeholder="Optional" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;"></textarea></div>
+            </div>
+        </div>
+    </div>
+    <div id="vendorTotalDisplay" style="display:none;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;padding:12px 16px;font-size:13px;font-weight:700;color:#047857;margin-top:4px;"></div>
+</div>
                         <div class="form-group full-width">
                             <h3 style="margin:24px 0 16px;font-family:'Archivo',sans-serif;">📎 Supporting Documents <span style="font-size:13px;font-weight:400;color:var(--text-muted);">(Finance will download these)</span></h3>
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -1554,17 +1564,19 @@
                     alert('Please provide all bank account details'); return; }
                 if (!this.validateAccountNumber(accountNumber)) {
                     alert('Account number must be exactly 10 digits'); return; }
+                const vendors = this._collectVendors();
+if (vendors.length === 0) { alert('Please add at least one vendor.'); return; }
+const missingFields = vendors.some(v => !v.name || !v.items);
+if (missingFields) { alert('Each vendor must have a Name and Goods/Services Supplied.'); return; }
+const missingPhone = vendors.some(v => !v.phone);
+if (missingPhone) { alert('Each vendor must have a phone number.'); return; }
 
-                const vendorName      = document.getElementById('vendorName')?.value?.trim();
-                const vendorPhone     = document.getElementById('vendorPhone')?.value?.trim();
-                const vendorAddress   = document.getElementById('vendorAddress')?.value?.trim();
-                const vendorItems     = document.getElementById('vendorItemsSupplied')?.value?.trim();
-                const vendorInvoiceNo = document.getElementById('vendorInvoiceNo')?.value?.trim();
-
-                if (!vendorName)  { alert('Please enter the vendor / supplier name.'); return; }
-                if (!vendorPhone) { alert('Please enter the vendor phone number.'); return; }
-                if (!vendorItems) { alert('Please describe the goods / services supplied.'); return; }
-
+// Flatten for backward-compat single-vendor fields
+const vendorName      = vendors.map(v => v.name).join(' | ');
+const vendorPhone     = vendors.map(v => v.phone).join(' | ');
+const vendorItems     = vendors.map(v => v.items).join(' | ');
+const vendorInvoiceNo = vendors.map(v => v.invoiceNo).filter(Boolean).join(' | ') || '';
+const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') || '';
                 const procInvoiceFile = document.getElementById('procInvoiceFile')?.files[0];
                 const procReceiptFile = document.getElementById('procReceiptFile')?.files[0];
                 if (!procInvoiceFile) { alert('Please upload the vendor invoice before submitting.'); return; }
