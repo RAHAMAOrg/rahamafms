@@ -387,14 +387,37 @@
                             [...this.data.payments, ...allPaymentsForReports].forEach(p => paymentMap.set(p.refNumber, p));
                             this.data.payments = Array.from(paymentMap.values());
                         }
+                        // Also load ALL retirements so reports are complete
+                        const { data: allRetsForReports } = await supabaseClient.from('retirements').select('*');
+                        if (allRetsForReports) {
+                            const retMap = new Map();
+                            [...this.data.retirements, ...allRetsForReports].forEach(r => retMap.set(r.id||r.refNumber, r));
+                            this.data.retirements = Array.from(retMap.values());
+                        }
                     }
                     if (this.getUserRole() === 'finance') {
+                        // Load ALL pending payments (includes procurement)
+                        const { data: allPendingPay } = await supabaseClient.from('payments').select('*').eq('status','pending');
+                        if (allPendingPay) {
+                            const pMap = new Map();
+                            [...this.data.payments, ...allPendingPay].forEach(p => pMap.set(p.refNumber, p));
+                            this.data.payments = Array.from(pMap.values());
+                        }
+                        // Load ALL pending retirements (includes procurement)
+                        const { data: allPendingRet } = await supabaseClient.from('retirements').select('*').eq('status','pending');
+                        if (allPendingRet) {
+                            const rMap = new Map();
+                            [...this.data.retirements, ...allPendingRet].forEach(r => rMap.set(r.id||r.refNumber, r));
+                            this.data.retirements = Array.from(rMap.values());
+                        }
                         const pendingPaymentRefs = this.data.payments.filter(p => p.status === 'pending' && p.conceptNoteRef).map(p => p.conceptNoteRef);
                         if (pendingPaymentRefs.length > 0) {
                             const { data: linkedCNs } = await supabaseClient.from('concept_notes').select('*').in('refNumber', pendingPaymentRefs);
-                            if (linkedCNs) this.data.conceptNotes = linkedCNs;
-                        } else {
-                            this.data.conceptNotes = [];
+                            if (linkedCNs) {
+                                const cMap = new Map();
+                                [...this.data.conceptNotes, ...linkedCNs].forEach(c => cMap.set(c.refNumber, c));
+                                this.data.conceptNotes = Array.from(cMap.values());
+                            }
                         }
                     }
                     const { data: notifs } = await supabaseClient.from('notifications').select('*').eq('recipientName', this.currentUser).eq('isRead', false).order('createdAt', { ascending: false });
@@ -667,7 +690,7 @@
                         <div class="form-group full-width"><label>Objective <span class="required">*</span></label><textarea name="objective" id="objective" required placeholder="What is the purpose of this activity?"></textarea></div>
                         <div class="form-group full-width"><label>Description <span class="required">*</span></label><textarea name="description" id="description" required placeholder="Detailed description of the activity"></textarea></div>
                         <div class="form-group"><label>Estimated Cost (₦) <span class="required">*</span></label><input type="number" name="estimatedCost" id="estimatedCost" required min="0" step="0.01"></div>
-                        <div class="form-group"><label>Implementation Date <span class="required">*</span></label><input type="date" name="ImplementationDate" id="ImplementationDate" required></div>
+                        <div class="form-group"><label>Implementation Date <span class="required">*</span></label><input type="date" name="implementation_date" id="implementation_date" required></div>
                         <div class="form-group full-width"><label>Are items/services to be procured? <span class="required">*</span></label><select name="requiresProcurement" required><option value="no">No - Direct payment</option><option value="yes">Yes - Procurement needed</option></select><span class="form-hint">Select "Yes" if items need to be purchased by Procurement team</span></div>
                         <div class="btn-group full-width"><button type="submit" class="btn btn-primary">Submit Concept Note</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
                     </form>`;
@@ -692,7 +715,7 @@
                     // If the submitter is the Budget Owner, route directly to ED (can't self-approve)
                     const submitterRole = this.getUserRole();
                     const firstApprover = submitterRole === 'budgetOwner' ? 'ed' : 'budgetOwner';
-                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, ImplementationDate: formData.get('ImplementationDate') || null, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
+                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
                     const { data, error } = await supabaseClient.from('concept_notes').insert([conceptNote]).select();
                     if (error) throw error;
                     this.data.conceptNotes.unshift(data[0]); this.clearCache();
@@ -1577,9 +1600,10 @@ const vendorPhone     = vendors.map(v => v.phone).join(' | ');
 const vendorItems     = vendors.map(v => v.items).join(' | ');
 const vendorInvoiceNo = vendors.map(v => v.invoiceNo).filter(Boolean).join(' | ') || '';
 const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') || '';
-                const procInvoiceFile = document.getElementById('procInvoiceFile')?.files[0];
                 const procReceiptFile = document.getElementById('procReceiptFile')?.files[0];
-                if (!procInvoiceFile) { alert('Please upload the vendor invoice before submitting.'); return; }
+                const hasAnyInvoice = Array.from({length: app._vendorCount||1}, (_,i) =>
+                    document.getElementById('vInvoiceFile_'+(i+1))?.files[0]).some(Boolean);
+                if (!hasAnyInvoice) { alert('Please upload an invoice for at least one vendor.'); return; }
 
                 const variance = cn.estimatedCost - actualCost;
                 const overPct = cn.estimatedCost > 0 ? ((actualCost - cn.estimatedCost) / cn.estimatedCost) : 0;
@@ -1635,9 +1659,11 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 try {
                     submitBtn.disabled = true; submitBtn.textContent = 'Uploading documents...';
 
-                    let procInvoiceData = null, procReceiptData = null;
-                    if (procInvoiceFile) procInvoiceData = await this.uploadFile(procInvoiceFile, 'procurement');
-                    if (procReceiptFile)  procReceiptData  = await this.uploadFile(procReceiptFile,  'procurement');
+                    const enrichedVendors = await this._uploadVendorInvoices(vendors);
+                    const firstVendorWithInvoice = enrichedVendors.find(v => v.invoiceUrl);
+                    let procInvoiceData = firstVendorWithInvoice ? {url: firstVendorWithInvoice.invoiceUrl, fileName: firstVendorWithInvoice.invoiceFileName} : null;
+                    let procReceiptData = null;
+                    if (procReceiptFile) procReceiptData = await this.uploadFile(procReceiptFile, 'procurement');
 
                     submitBtn.textContent = 'Processing...';
 
@@ -1670,7 +1696,8 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                         procurementInvoiceUrl:  procInvoiceData?.url  || null,
                         procurementInvoiceName: procInvoiceData?.fileName || null,
                         procurementReceiptUrl:  procReceiptData?.url  || null,
-                        procurementReceiptName: procReceiptData?.fileName || null
+                        procurementReceiptName: procReceiptData?.fileName || null,
+                        vendorsJson: JSON.stringify(enrichedVendors)
                     }).eq('refNumber', refNumber);
                     if (cnError) throw cnError;
 
@@ -1863,14 +1890,21 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
             renderReports(content) {
                 const role = this.getUserRole();
                 if (!['budgetOwner','ed','procurement','finance'].includes(role)) { content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view reports.</p></div>`; return; }
-                const projectStats = this.data.projects.map(project => { const spent = this.getProjectSpent(project.code); const remaining = project.budget - spent; const percentUsed = (spent / project.budget * 100).toFixed(1); return { ...project, spent, remaining, percentUsed }; });
+                const allPayments = this.data.payments;
+                const allRetirements = this.data.retirements;
+                const projectStats = this.data.projects.map(project => {
+                    const spent = allPayments.filter(p => p.projectCode === project.code && p.status === 'paid').reduce((s,p) => s+(p.amount||0), 0);
+                    const remaining = project.budget - spent;
+                    const percentUsed = (spent / project.budget * 100).toFixed(1);
+                    return { ...project, spent, remaining, percentUsed };
+                });
                 content.innerHTML = `
                     <div class="header"><h2>Reports & Budget Tracking</h2><p>Financial overview and budget utilization</p></div>
                     <div class="stats-grid">
                         <div class="stat-card"><h3>Total Budget</h3><div class="stat-value">₦${this.data.projects.reduce((sum, p) => sum + p.budget, 0).toLocaleString()}</div><div class="stat-label">Across all projects</div></div>
-                        <div class="stat-card warning"><h3>Total Spent</h3><div class="stat-value">₦${this.data.payments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div><div class="stat-label">All paid requests</div></div>
+                        <div class="stat-card warning"><h3>Total Spent</h3><div class="stat-value">₦${allPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toLocaleString()}</div><div class="stat-label">All paid requests</div></div>
                         <div class="stat-card"><h3>Pending Approvals</h3><div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending').length}</div><div class="stat-label">Concept notes awaiting review</div></div>
-                        <div class="stat-card danger"><h3>Unretired Advances</h3><div class="stat-value">${this.data.payments.filter(p => p.status === 'paid' && !this.data.retirements.find(r => r.paymentRef === p.refNumber)).length}</div><div class="stat-label">Need retirement</div></div>
+                        <div class="stat-card danger"><h3>Unretired Advances</h3><div class="stat-value">${allPayments.filter(p => p.status === 'paid' && !allRetirements.find(r => r.paymentRef === p.refNumber)).length}</div><div class="stat-label">Need retirement</div></div>
                     </div>
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Project Budget Status</h3>
                     <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -1887,8 +1921,8 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                         <th>Retirement Ref</th><th>Retirement Status</th><th>Retired Date</th>
                         <th>Variance</th>
                     </tr></thead><tbody>
-                    ${this.data.payments.map(p => {
-                        const ret = this.data.retirements.find(r => r.paymentRef === p.refNumber);
+                    ${allPayments.map(p => {
+                        const ret = allRetirements.find(r => r.paymentRef === p.refNumber);
                         const payBadge = p.status === 'paid' ? 'status-paid' : p.status === 'rejected' ? 'status-rejected' : 'status-pending';
                         const retBadge = !ret ? '' : ret.status === 'approved' ? 'status-approved' : ret.status === 'rejected' ? 'status-rejected' : 'status-pending';
                         const variance = ret && p.amount && ret.actualSpent != null ? (p.amount - ret.actualSpent) : null;
@@ -2289,23 +2323,34 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             // REMOTE VENDOR SIGNING — Generate token + link + QR
             // ══════════════════════════════════════════════════════════════
             async _showRemoteVendorSign(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) return;
+                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) {
+                    const { data: cnFresh, error: cnErr } = await supabaseClient
+                        .from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                    if (cnErr || !cnFresh) { alert('Could not load concept note: ' + (cnErr?.message||'not found')); return; }
+                    cn = cnFresh;
+                    this.data.conceptNotes.push(cn);
+                }
                 // Create signing token in Supabase
                 const token = 'vst_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
                 const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
+                const tokenPayload = {
+                    token, cnRef: refNumber,
+                    grrNumber: cn.grrNumber || ('GRR-' + refNumber),
+                    activityTitle: cn.activityTitle,
+                    projectCode: cn.projectCode,
+                    estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
+                    description: cn.description || '',
+                    createdBy: this.currentUser,
+                    expiresAt, used: false
+                };
                 try {
-                    await supabaseClient.from('grr_signing_tokens').insert([{
-                        token, cnRef: refNumber,
-                        grrNumber: cn.grrNumber || ('GRR-' + refNumber),
-                        activityTitle: cn.activityTitle,
-                        projectCode: cn.projectCode,
-                        estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
-                        description: cn.description || '',
-                        createdBy: this.currentUser,
-                        expiresAt, used: false
-                    }]);
-                } catch(e) { alert('Error creating signing link: ' + e.message); return; }
+                    const { error: e1 } = await supabaseClient.from('grr_signing_tokens').insert([tokenPayload]);
+                    if (e1) throw e1;
+                } catch(e) {
+                    alert('Error creating signing link.\n\nThe grr_signing_tokens table may need to be created.\nRun this SQL in Supabase:\n\nCREATE TABLE IF NOT EXISTS grr_signing_tokens (\n  id bigserial PRIMARY KEY,\n  token text UNIQUE NOT NULL,\n  cnRef text, grrNumber text,\n  activityTitle text, projectCode text,\n  estimatedCost numeric, description text,\n  vendorsJson text, createdBy text,\n  expiresAt timestamptz, used boolean DEFAULT false,\n  vendorName text, vendorPhone text, signedAt timestamptz,\n  createdAt timestamptz DEFAULT now()\n);\nALTER TABLE grr_signing_tokens ENABLE ROW LEVEL SECURITY;\nCREATE POLICY anon_all ON grr_signing_tokens FOR ALL TO anon USING (true) WITH CHECK (true);\n\nError: ' + e.message);
+                    return;
+                }
 
                 const signingUrl = window.location.origin + window.location.pathname + '?vendorSign=' + token;
 
@@ -3143,25 +3188,18 @@ _recalcVendorTotal() {
     }
 },
 
-_collectVendors() {
-    const vendors = [];
-    document.querySelectorAll('[id^="vendorBlock_"]').forEach(block => {
-        const m = block.id.match(/vendorBlock_(\d+)/);
-        if (!m) return;
-        const id = m[1];
-        const name = document.getElementById('vName_' + id)?.value?.trim();
-        if (!name) return;
-        vendors.push({
-            name,
-            phone:     document.getElementById('vPhone_'   + id)?.value?.trim() || '',
-            items:     document.getElementById('vItems_'   + id)?.value?.trim() || '',
-            invoiceNo: document.getElementById('vInvoice_' + id)?.value?.trim() || '',
-            amount:    parseFloat(document.getElementById('vAmount_'  + id)?.value) || 0,
-            address:   document.getElementById('vAddress_' + id)?.value?.trim() || ''
-        });
-    });
-    return vendors;
+
+async _uploadVendorInvoices(vendors) {
+    const enriched = [];
+    for (const v of vendors) {
+        const fileInput = document.getElementById('vInvoiceFile_'+v.id); const file = fileInput?.files[0];
+        let invoiceUrl=null, invoiceFileName=null;
+        if (file) { try { const d = await this.uploadFile(file,'procurement'); invoiceUrl=d?.url||null; invoiceFileName=d?.fileName||null; } catch(e){} }
+        enriched.push({...v, invoiceUrl, invoiceFileName});
+    }
+    return enriched;
 },
+
             logout() {
                 if (confirm('Are you sure you want to logout?')) { localStorage.removeItem('pms_user'); window.location.href = 'https://rahamaorg.github.io/appraisal-system/'; }
             }
