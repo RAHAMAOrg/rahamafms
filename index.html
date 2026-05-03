@@ -2062,13 +2062,37 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                             </div>
                         </div>` : ''}
                         <div id="cnLinkedDocs_${cn.refNumber}" style="display:none;"></div>
+                        ${cn.requiresProcurement === 'yes' && (cn.poNumber || cn.grrNumber) ? `
+                        <div id="cnSigningStatus_${cn.refNumber}" class="form-group full-width">
+                            <div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;">
+                                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:10px;">📋 Signing Progress — Loading…</div>
+                            </div>
+                        </div>` : ''}
                         <div class="btn-group full-width" style="flex-wrap:wrap;gap:8px;">
                             <button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>
-                            ${(this.currentUser === cn.staffName || this.data.roles[this.currentUser] === 'staff') && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._staffSignPO('${cn.refNumber}')" style="border-color:#059669;color:#059669;">✍️ Sign PO (Staff)</button>` : ''}
-                            ${(this.currentUser === cn.staffName || this.data.roles[this.currentUser] === 'staff') && cn.requiresProcurement === 'yes' && cn.grrNumber ? `<button class="btn btn-secondary" onclick="app._staffVerifyGRR('${cn.refNumber}')" style="border-color:#047857;color:#047857;">✅ Verify GRR (Staff)</button>` : ''}
-                            ${this.data.roles[this.currentUser] === 'budgetOwner' && cn.staffName !== this.currentUser && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (Budget Owner)</button>` : ''}
-                            ${this.data.roles[this.currentUser] === 'ed' && cn.requiresProcurement === 'yes' && cn.poNumber ? `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (ED)</button>` : ''}
-                            ${this.data.roles[this.currentUser] === 'procurement' && cn.requiresProcurement === 'yes' && cn.grrNumber ? `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>` : ''}
+                            ${(() => {
+                                const myRole = this.data.roles[this.currentUser] || 'staff';
+                                const isRequester = this.currentUser === cn.staffName;
+                                const isProcurement = cn.requiresProcurement === 'yes';
+                                const hasPO = !!cn.poNumber;
+                                const hasGRR = !!cn.grrNumber;
+                                let btns = '';
+                                // Staff requester: sign PO + verify GRR — shown regardless of payment existence
+                                if (isRequester && isProcurement && hasPO)
+                                    btns += `<button class="btn btn-secondary" onclick="app._staffSignPO('${cn.refNumber}')" style="border-color:#059669;color:#059669;">✍️ Sign Purchase Order (Staff)</button>`;
+                                if (isRequester && isProcurement && hasGRR)
+                                    btns += `<button class="btn btn-secondary" onclick="app._staffVerifyGRR('${cn.refNumber}')" style="border-color:#047857;color:#047857;">✅ Verify GRR (Staff)</button>`;
+                                // Budget Owner: authorise PO — cn.staffName === currentUser is now checked inside _boSignPO with DB lookup
+                                if (myRole === 'budgetOwner' && isProcurement && hasPO)
+                                    btns += `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (Budget Owner)</button>`;
+                                // ED: authorise PO
+                                if (myRole === 'ed' && isProcurement && hasPO)
+                                    btns += `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (ED)</button>`;
+                                // Procurement: vendor sign GRR
+                                if (myRole === 'procurement' && isProcurement && hasGRR)
+                                    btns += `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>`;
+                                return btns;
+                            })()}
                             <button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button>
                         </div>
                     </div>`;
@@ -2095,6 +2119,46 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                             }).join('') +
                             '</div></div>';
                     } catch(e) { console.warn('Could not load retirement docs:', e); }
+                })();
+
+                // Load signing status asynchronously
+                (async () => {
+                    if (cn.requiresProcurement !== 'yes' || (!cn.poNumber && !cn.grrNumber)) return;
+                    const statusEl = document.getElementById('cnSigningStatus_' + cn.refNumber);
+                    if (!statusEl) return;
+                    try {
+                        const docRefs = [cn.poNumber, cn.grrNumber].filter(Boolean);
+                        const { data: sigs } = await supabaseClient.from('document_signatures')
+                            .select('signerName,signerRole,pageContext,signedAt,docType')
+                            .in('docRef', docRefs)
+                            .order('signedAt', { ascending: true });
+                        const allSigs = sigs || [];
+                        const poSteps = [
+                            { ctx: 'staff_po',        label: 'Staff signs PO' },
+                            { ctx: 'budget_owner_po', label: cn.forwardedToED ? 'ED authorises PO' : 'Budget Owner authorises PO' },
+                            { ctx: 'finance_sign',    label: 'Finance confirms payment' },
+                        ];
+                        const grrSteps = [
+                            { ctx: 'procurement_received', label: 'Procurement signs GRR (received)' },
+                            { ctx: 'staff_grr_verify',     label: 'Staff verifies GRR' },
+                            { ctx: 'vendor_on_device',     label: 'Vendor signs GRR', alt: 'vendor_remote' },
+                            { ctx: 'finance_sign',         label: 'Finance confirms GRR' },
+                        ];
+                        const renderStep = (step, sigList) => {
+                            const sig = sigList.find(s => s.pageContext === step.ctx || s.pageContext === step.alt);
+                            return sig
+                                ? `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #D1FAE5;"><span style="color:#059669;font-size:16px;">&#x2705;</span><div><div style="font-size:13px;font-weight:600;color:#065F46;">${step.label}</div><div style="font-size:11px;color:#6B7280;">${sig.signerName} &middot; ${new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</div></div></div>`
+                                : `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #D1FAE5;"><span style="color:#D1D5DB;font-size:16px;">&#x25EF;</span><div style="font-size:13px;color:#9CA3AF;">${step.label} <em style="font-size:11px;">(pending)</em></div></div>`;
+                        };
+                        const poSigs  = allSigs.filter(s => s.docType === 'purchase_order' || ['staff_po','budget_owner_po'].includes(s.pageContext));
+                        const grrSigs = allSigs.filter(s => s.docType === 'grr' || ['procurement_received','staff_grr_verify','vendor_on_device','vendor_remote'].includes(s.pageContext));
+                        // finance_sign appears in both — split by docType
+                        allSigs.filter(s => s.pageContext === 'finance_sign').forEach(s => {
+                            if (s.docType === 'purchase_order') poSigs.push(s);
+                            if (s.docType === 'grr') grrSigs.push(s);
+                        });
+                        statusEl.innerHTML = `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => renderStep(s, grrSigs)).join('')}</div></div></div>`;
+                    } catch(e) { if (statusEl) statusEl.innerHTML = ''; console.warn('Signing status load error:', e); }
                 })();
             },
             
@@ -3464,30 +3528,70 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 
             // Staff signs PO (requester authorisation)
             async _staffSignPO(cnRef) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
-                if (!cn || !cn.poNumber) { alert('PO not generated yet.'); return; }
-                const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
-                if (!pay) { alert('Payment record not found.'); return; }
-                await this.showSigningView(cn.poNumber, 'purchase_order', pay.refNumber, 'staff_po', cnRef);
+                // Fetch fresh from DB — local cache may not have procurement-created CNs
+                let cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data; this.data.conceptNotes.push(cn);
+                }
+                if (!cn.poNumber) { alert('PO has not been generated yet — procurement must complete the form first.'); return; }
+                // Check if already signed by this user
+                const { data: existing } = await supabaseClient.from('document_signatures')
+                    .select('id').eq('docRef', cn.poNumber).eq('signerName', this.currentUser).eq('pageContext', 'staff_po');
+                if (existing && existing.length > 0) { alert('You have already signed this Purchase Order.'); return; }
+                // Find payment via DB — procurement-created payments use original staffName so they may not be in local cache
+                let pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) {
+                    const { data: payDb } = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef).limit(1);
+                    pay = payDb && payDb[0];
+                }
+                await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'staff_po', cnRef);
             },
 
             // Staff verifies GRR (programme staff verification)
             async _staffVerifyGRR(cnRef) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
-                if (!cn || !cn.grrNumber) { alert('GRR not generated yet.'); return; }
-                const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
-                if (!pay) { alert('Payment record not found.'); return; }
-                await this.showSigningView(cn.grrNumber, 'grr', pay.refNumber, 'staff_grr_verify', cnRef);
+                let cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data; this.data.conceptNotes.push(cn);
+                }
+                if (!cn.grrNumber) { alert('GRR has not been generated yet.'); return; }
+                const { data: existing } = await supabaseClient.from('document_signatures')
+                    .select('id').eq('docRef', cn.grrNumber).eq('signerName', this.currentUser).eq('pageContext', 'staff_grr_verify');
+                if (existing && existing.length > 0) { alert('You have already verified this GRR.'); return; }
+                let pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) {
+                    const { data: payDb } = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef).limit(1);
+                    pay = payDb && payDb[0];
+                }
+                await this.showSigningView(cn.grrNumber, 'grr', pay?.refNumber || cnRef, 'staff_grr_verify', cnRef);
             },
 
-            // Budget Owner authorises PO
+            // Budget Owner / ED authorises PO
             async _boSignPO(cnRef) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
-                if (!cn || !cn.poNumber) { alert('PO not generated yet.'); return; }
-                if (cn.staffName === this.currentUser) { alert('You cannot authorise a PO for a concept note you submitted.'); return; }
-                const pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
-                if (!pay) { alert('Payment record not found.'); return; }
-                await this.showSigningView(cn.poNumber, 'purchase_order', pay.refNumber, 'budget_owner_po', cnRef);
+                let cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data; this.data.conceptNotes.push(cn);
+                }
+                if (!cn.poNumber) { alert('PO not generated yet.'); return; }
+                const myRole = this.getUserRole();
+                if (myRole !== 'budgetOwner' && myRole !== 'ed') { alert('Only Budget Owner or ED can authorise the PO.'); return; }
+                // BO cannot self-authorise a CN they submitted (those go to ED anyway, but guard it)
+                if (myRole === 'budgetOwner' && cn.staffName === this.currentUser) { alert('You cannot authorise a PO for a concept note you submitted.'); return; }
+                // Check if PO already has a BO/ED authorisation
+                const { data: existing } = await supabaseClient.from('document_signatures')
+                    .select('id,signerName').eq('docRef', cn.poNumber).eq('pageContext', 'budget_owner_po');
+                if (existing && existing.length > 0) { alert(`This PO has already been authorised by ${existing[0].signerName}.`); return; }
+                let pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) {
+                    const { data: payDb } = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef).limit(1);
+                    pay = payDb && payDb[0];
+                }
+                await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'budget_owner_po', cnRef);
             },
 
             async initPOSigning(paymentRef)  { /* PO signing now driven by notifications and staff signing buttons */ },
