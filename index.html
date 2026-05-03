@@ -655,6 +655,7 @@
                     ${this.data.notifications.length > 0 ? `<div style="margin-bottom: 24px;">${this.data.notifications.map(n => `<div class="alert-badge ${n.type === 'danger' ? 'danger' : n.type === 'success' ? '' : 'warning'}" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="app.dismissNotification(${n.id}, '${n.refNumber}')"><span>${n.type === 'danger' ? '❌' : n.type === 'success' ? '✅' : 'ℹ️'} ${n.message}</span><span style="font-size: 11px; opacity: 0.7; margin-left: 16px;">Tap to dismiss</span></div>`).join('')}</div>` : ''}
                     ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `<div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;"><h2 style="font-size: 28px; margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Welcome to RAHAMA FMS! 🎉</h2><p style="font-size: 16px; opacity: 0.95; max-width: 600px; margin: 0 auto 24px;">You're all set to start managing your financial workflows. Create your first concept note to get started.</p><button onclick="app.showView('conceptNote')" class="btn" style="background: white; color: var(--primary); padding: 16px 32px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">Create Your First Concept Note →</button></div>` : ''}
                     ${isLocked ? `<div class="alert-badge danger">⚠️ Your account is locked: ${unretiredPayments.length >= 2 ? `${unretiredPayments.length} unretired advances` : `Retirement overdue by ${Math.floor((Date.now() - new Date(overdueRetirements[0].paidDate)) / (1000 * 60 * 60 * 24))} days`}</div>` : ''}
+                    <div id="pendingSigningAlert"></div>
                     <div class="stats-grid">
                         <div class="stat-card"><h3>Concept Notes</h3><div class="stat-value">${myConceptNotes.length}</div><div class="stat-label">Total submitted</div></div>
                         <div class="stat-card ${unretiredPayments.length > 0 ? 'warning' : 'success'}"><h3>Unretired Advances</h3><div class="stat-value">${unretiredPayments.length}</div><div class="stat-label">${unretiredPayments.length >= 2 ? 'Account locked!' : 'Active advances'}</div></div>
@@ -669,6 +670,50 @@
                     ${myConceptNotes.length === 0 ? `<div class="empty-state" style="padding: 32px;"><p>No concept notes yet. Create one to get started!</p></div>` : `<div style="margin-bottom: 32px;">${myConceptNotes.slice(0, 5).map(cn => { const progress = this.getConceptNoteProgress(cn); return `<div class="tracking-card"><div class="tracking-header"><div><span class="tracking-ref">${cn.refNumber}</span><span style="color: var(--text-muted); font-size: 13px; margin-left: 12px;">${cn.activityTitle}</span></div><span class="tracking-amount">₦${cn.estimatedCost.toLocaleString()}</span></div><div style="display: flex; justify-content: space-between; align-items: center;"><div style="flex: 1; margin-right: 16px;"><div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;"><div style="height: 100%; background: ${cn.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'}; width: ${progress.percentComplete}%; transition: width 0.3s;"></div></div><div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${progress.currentStep}</div></div><span class="status-badge status-${cn.status}" style="margin-right: 12px;">${cn.status}</span><button onclick="app.showConceptNoteTracking('${cn.refNumber}')" style="padding: 6px 14px; background: none; border: 1px solid var(--primary); border-radius: 6px; color: var(--primary); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">📄 View Details</button></div></div>`; }).join('')}</div>`}
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Recent Activity</h3>
                     <div class="table-container"><table><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Amount</th><th>Status</th></tr></thead><tbody>${this.getRecentActivity().map(item => `<tr><td>${new Date(item.date).toLocaleDateString()}</td><td>${item.type}</td><td>${item.ref}</td><td>${item.amount ? '₦' + item.amount.toLocaleString() : '-'}</td><td><span class="status-badge status-${item.status}">${item.status}</span></td></tr>`).join('') || '<tr><td colspan="5" style="text-align: center; padding: 32px; color: #999;">No recent activity</td></tr>'}</tbody></table></div>`;
+
+                // Async check: find any CNs where this user needs to sign PO or GRR
+                (async () => {
+                    try {
+                        const alertEl = document.getElementById('pendingSigningAlert');
+                        if (!alertEl) return;
+                        // CNs with procurement where this user is the requester
+                        const { data: myCNs } = await supabaseClient
+                            .from('concept_notes').select('refNumber,activityTitle,poNumber,grrNumber,requiresProcurement,status')
+                            .eq('staffName', this.currentUser)
+                            .eq('requiresProcurement', 'yes')
+                            .eq('status', 'approved')
+                            .not('poNumber', 'is', null);
+                        if (!myCNs || myCNs.length === 0) return;
+                        const poNumbers = myCNs.map(c => c.poNumber).filter(Boolean);
+                        const grrNumbers = myCNs.map(c => c.grrNumber).filter(Boolean);
+                        const allDocRefs = [...poNumbers, ...grrNumbers];
+                        const { data: sigs } = await supabaseClient
+                            .from('document_signatures').select('docRef,pageContext')
+                            .in('docRef', allDocRefs)
+                            .eq('signerName', this.currentUser);
+                        const signedSet = new Set((sigs||[]).map(s => s.docRef + '::' + s.pageContext));
+                        const needsPOSign  = myCNs.filter(c => c.poNumber  && !signedSet.has(c.poNumber  + '::staff_po'));
+                        const needsGRRSign = myCNs.filter(c => c.grrNumber && !signedSet.has(c.grrNumber + '::staff_grr_verify'));
+                        if (needsPOSign.length === 0 && needsGRRSign.length === 0) return;
+                        alertEl.innerHTML =
+                            (needsPOSign.length > 0 ? needsPOSign.map(c =>
+                                `<div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                                    <div>
+                                        <div style="font-weight:700;color:#E65100;font-size:13px;">✍️ Action Required: Sign Purchase Order</div>
+                                        <div style="font-size:12px;color:#BF360C;margin-top:3px;">${c.activityTitle} — PO: ${c.poNumber}</div>
+                                    </div>
+                                    <button onclick="app.viewConceptNoteDetails('${c.refNumber}')" style="padding:8px 16px;background:#E65100;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Open &amp; Sign PO →</button>
+                                </div>`).join('') : '') +
+                            (needsGRRSign.length > 0 ? needsGRRSign.map(c =>
+                                `<div style="background:#E8F5E9;border:2px solid #A7F3D0;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                                    <div>
+                                        <div style="font-weight:700;color:#047857;font-size:13px;">✅ Action Required: Verify GRR</div>
+                                        <div style="font-size:12px;color:#065F46;margin-top:3px;">${c.activityTitle} — GRR: ${c.grrNumber}</div>
+                                    </div>
+                                    <button onclick="app.viewConceptNoteDetails('${c.refNumber}')" style="padding:8px 16px;background:#047857;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Open &amp; Verify GRR →</button>
+                                </div>`).join('') : '');
+                    } catch(e) { console.warn('Signing alert check failed:', e); }
+                })();
             },
             
             getRecentActivity() {
@@ -1420,6 +1465,7 @@
                 const pendingPayments = this.data.payments.filter(p => p.status === 'pending' && role === 'finance');
                 const pendingRetirements = this.data.retirements.filter(r => r.status === 'pending' && role === 'finance');
                 let historyCNs = [], historyPayments = [], historyRetirements = [];
+                let pendingPOSignatures = []; // CNs where BO needs to sign PO
                 try {
                     if (['budgetOwner', 'ed'].includes(role)) {
                         const { data: approved } = await supabaseClient.from('concept_notes').select('*').eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50);
@@ -1427,6 +1473,36 @@
                         const { data: forwarded } = role === 'budgetOwner' ? await supabaseClient.from('concept_notes').select('*').not('forwardedToED', 'is', null).eq('currentApprover', 'ed').order('forwardedToED', { ascending: false }).limit(50) : { data: [] };
                         const seen = new Set();
                         [...(approved || []), ...(rejected || []), ...(forwarded || [])].forEach(cn => { if (!seen.has(cn.refNumber)) { seen.add(cn.refNumber); historyCNs.push(cn); } });
+                        // Sort history by most recent action date
+                        historyCNs.sort((a, b) => {
+                            const dateA = new Date(a.approvedDate || a.rejectedDate || a.forwardedToED || a.submittedDate || 0);
+                            const dateB = new Date(b.approvedDate || b.rejectedDate || b.forwardedToED || b.submittedDate || 0);
+                            return dateB - dateA;
+                        });
+                        // Find CNs with a poNumber that have staff_po signed but NOT budget_owner_po signed yet
+                        const { data: cnsWithPO } = await supabaseClient
+                            .from('concept_notes').select('*')
+                            .not('poNumber', 'is', null)
+                            .eq('requiresProcurement', 'yes')
+                            .eq('status', 'approved');
+                        if (cnsWithPO && cnsWithPO.length > 0) {
+                            const poNumbers = cnsWithPO.map(c => c.poNumber).filter(Boolean);
+                            const { data: existingSigs } = await supabaseClient
+                                .from('document_signatures').select('docRef,pageContext')
+                                .in('docRef', poNumbers)
+                                .in('pageContext', ['staff_po', 'budget_owner_po']);
+                            const sigsMap = {};
+                            (existingSigs || []).forEach(s => {
+                                if (!sigsMap[s.docRef]) sigsMap[s.docRef] = [];
+                                sigsMap[s.docRef].push(s.pageContext);
+                            });
+                            pendingPOSignatures = cnsWithPO.filter(cn => {
+                                const sigs = sigsMap[cn.poNumber] || [];
+                                // Show if: staff has signed BUT BO has not yet signed
+                                // Also show if staff hasn't signed yet (so BO is aware it's coming)
+                                return !sigs.includes('budget_owner_po');
+                            });
+                        }
                     }
                     if (role === 'procurement') {
                         const { data: completed } = await supabaseClient.from('concept_notes').select('*').eq('approvedBy', this.currentUser).not('procurementComplete', 'is', null).order('procurementComplete', { ascending: false }).limit(50);
@@ -1487,6 +1563,27 @@
                             </tbody></table></div>
                         </div>`;
                     })()}
+                    ${pendingPOSignatures.length > 0 ? `
+                    <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:20px;margin-bottom:28px;">
+                        <h3 style="font-family:'Archivo',sans-serif;margin-bottom:6px;color:#E65100;">✍️ Purchase Orders Awaiting Your Signature (${pendingPOSignatures.length})</h3>
+                        <p style="font-size:13px;color:#BF360C;margin-bottom:16px;">These procurement activities have been completed and need your authorisation on the Purchase Order before Finance can process payment.</p>
+                        <div class="table-container"><table><thead><tr>
+                            <th>CN Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>PO Number</th><th>Actual Cost</th><th>Procurement Completed</th><th>Action</th>
+                        </tr></thead><tbody>
+                        ${pendingPOSignatures.map(cn => `<tr style="background:#FFFDE7;">
+                            <td style="font-weight:600;">${cn.refNumber}</td>
+                            <td>${cn.staffName}</td>
+                            <td style="max-width:160px;font-size:12px;">${cn.activityTitle}</td>
+                            <td>${cn.projectCode}</td>
+                            <td style="font-weight:600;color:#285B3C;">${cn.poNumber}</td>
+                            <td style="font-weight:600;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td>
+                            <td style="font-size:12px;">${cn.procurementComplete ? new Date(cn.procurementComplete).toLocaleDateString('en-NG') : '—'}</td>
+                            <td>
+                                <button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:6px;border-color:var(--primary);color:var(--primary);">📄 View &amp; Sign PO</button>
+                            </td>
+                        </tr>`).join('')}
+                        </tbody></table></div>
+                    </div>` : ''}
                     ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">→ Forward to ED (>₦1M)</button>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
@@ -2070,12 +2167,16 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
             },
 
             async viewConceptNoteDetails(refNumber) {
-                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
-                if (!cn) {
-                    const { data, error } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
-                    if (error || !data) { alert('Concept note not found.'); return; }
-                    cn = data; this.data.conceptNotes.push(cn);
-                }
+                // Always fetch fresh from DB — local cache may be stale (e.g. poNumber/grrNumber
+                // added by procurement after the current user's session loaded).
+                const { data: freshCN, error: cnErr } = await supabaseClient
+                    .from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                if (cnErr || !freshCN) { alert('Concept note not found.'); return; }
+                const cn = freshCN;
+                // Update local cache so other parts of the app see the fresh data too
+                const cacheIdx = this.data.conceptNotes.findIndex(c => c.refNumber === refNumber);
+                if (cacheIdx !== -1) this.data.conceptNotes[cacheIdx] = cn;
+                else this.data.conceptNotes.push(cn);
                 const content = document.getElementById('mainContent');
                 content.innerHTML = `
                     <div class="header"><h2>Concept Note Details</h2><p>Full information for ${cn.refNumber}</p></div>
@@ -2109,7 +2210,10 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                             </div>
                         </div>` : ''}
                         <div class="btn-group full-width" style="flex-wrap:wrap;gap:8px;">
-                            <button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>
+                            ${(this.data.roles[this.currentUser] || 'staff') === 'staff'
+                                ? `<button class="btn btn-primary" onclick="app.showView('dashboard')">← Back to Dashboard</button>`
+                                : `<button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>`
+                            }
                             ${(() => {
                                 const myRole = this.data.roles[this.currentUser] || 'staff';
                                 const isRequester = this.currentUser === cn.staffName;
