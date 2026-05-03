@@ -1351,19 +1351,19 @@
               switch(action) {
     case 'approve_under_1m':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetownerapprovedby: this.currentUser, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetownerapprovedby: this.currentUser };
         break;
     case 'approve_with_note':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetownerapprovedby: this.currentUser, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetownerapprovedby: this.currentUser };
         break;
     case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
     case 'ed_approve':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetownerapprovedby: this.currentUser, poNumber, poGeneratedAt: now }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetownerapprovedby: this.currentUser };
         break;
 }
                 try {
@@ -2204,7 +2204,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">PO Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
                     ${sigBlock('1. Staff (Requester)', poStaffSig, cn.staffName, null)}
-                    ${sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.budgetOwnerApprovedBy || cn.approvedBy, cn.budgetOwnerSignedAt)}
+                    ${sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.budgetownerapprovedby || cn.approvedBy, cn.budgetOwnerSignedAt)}
                     ${sigBlock('3. Finance', poFinSig, null, null)}
                 </div>
                 <h2 style="font-size:14px;border-bottom:2px solid #285B3C;padding-bottom:6px;margin-top:8px;color:#285B3C;">GRR — Goods/Services Receiving Report</h2>
@@ -2297,7 +2297,7 @@ ${cn.staffSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Staff 
   <div><div class="lbl">Sent to Procurement</div><div class="val">${fmtD(cn.sentToProcurement)}</div></div>
   <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${cn.rejectionReason||'—'}</div></div>
 </div>
-${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
+${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetownerapprovedby||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
 ${procSection}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Paid</th><th>Processed By</th></tr></thead><tbody>${payRows}</tbody></table>`}
@@ -2735,7 +2735,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 const staffSig   = allSigs.find(s => s.pageContext === 'staff_po');
                 const boSig      = allSigs.find(s => s.pageContext === 'budget_owner_po')
                                || (cn.budgetOwnerSignatureData
-                                   ? { signatureData: cn.budgetOwnerSignatureData, signerName: cn.budgetOwnerApprovedBy || cn.approvedBy, signedAt: cn.budgetOwnerSignedAt }
+                                   ? { signatureData: cn.budgetOwnerSignatureData, signerName: cn.budgetownerapprovedby || cn.approvedBy, signedAt: cn.budgetOwnerSignedAt }
                                    : null);
                 const finSig     = allSigs.find(s => s.pageContext === 'finance_sign');
 
