@@ -2133,7 +2133,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                     const now = new Date().toISOString();
                     const { error } = await supabaseClient.from('retirements').update({
                         status: 'approved', approvedDate: now, approvedBy: this.currentUser,
-                        approverSignatureData: sigData, approverSignedAt: now
+                        approversignaturedata: sigData, approverSignedAt: now
                     }).eq('refNumber', refNumber);
                     if (error) throw error;
                     // Record in document_signatures against the retirement ref and its payment ref
