@@ -286,7 +286,7 @@
                     if (el) el.innerText = user.name;
                     const role = this.getUserRole();
                     const btn = document.getElementById('reportsBtn');
-                    if (!['budgetOwner','ed','procurement','finance'].includes(role)) {
+                    if (!['budgetOwner','ed','procurement','finance','finance_manager'].includes(role)) {
                         if (btn) btn.style.display = 'none';
                     }
                     // Budget Owner and ED get Audit Trail + System Overview (super admin)
@@ -296,7 +296,7 @@
                         if (auditBtn) auditBtn.style.display = '';
                         if (superBtn) superBtn.style.display = '';
                     }
-                    if (role === 'finance') {
+                    if (role === 'finance' || role === 'finance_manager') {
                         if (auditBtn) auditBtn.style.display = '';
                     }
                 }
@@ -358,13 +358,13 @@
                         this.data.retirements = retResult.data || [];
                     } else {
                         const queries = [];
-                        if (role !== 'finance') {
+                        if (!['finance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('concept_notes').select('*').eq('staffName', this.currentUser).order('submittedDate', { ascending: false }));
                         }
-                        if (['budgetOwner','ed','procurement'].includes(role)) {
+                        if (['budgetOwner','ed','procurement','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('concept_notes').select('*').eq('status', 'pending').order('submittedDate', { ascending: false }).limit(50));
                         }
-                        if (['budgetOwner','ed','finance'].includes(role)) {
+                        if (['budgetOwner','ed','finance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('retirements').select('*').eq('status', 'pending').order('submittedDate', { ascending: false }).limit(50));
                         }
                         queries.push(supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).order('requestDate', { ascending: false }));
@@ -383,7 +383,7 @@
                         this.data.payments = payments;
                         this.data.retirements = retirements;
                     }
-                    if (['budgetOwner','ed','finance'].includes(this.getUserRole())) {
+                    if (['budgetOwner','ed','finance','finance_manager'].includes(this.getUserRole())) {
                         const { data: allPaymentsForReports } = await supabaseClient.from('payments').select('*');
                         if (allPaymentsForReports) {
                             const paymentMap = new Map();
@@ -398,7 +398,7 @@
                             this.data.retirements = Array.from(retMap.values());
                         }
                     }
-                    if (this.getUserRole() === 'finance') {
+                    if (['finance','finance_manager'].includes(this.getUserRole())) {
                         // Load ALL pending payments (includes procurement)
                         const { data: allPendingPay } = await supabaseClient.from('payments').select('*').eq('status','pending');
                         if (allPendingPay) {
@@ -1218,7 +1218,7 @@
                 const role = this.getUserRole();
                 // Also fetch variance_review CNs from Supabase (not in local cache)
                 let varReviewCNs = [];
-                if (role === 'budgetOwner') {
+                if (role === 'budgetOwner' || role === 'finance_manager') {
                     const { data: vr } = await supabaseClient.from('concept_notes').select('*')
                         .eq('status', 'variance_review').eq('currentApprover', 'budgetOwner');
                     varReviewCNs = vr || [];
@@ -1260,7 +1260,7 @@
                         const { data: completed } = await supabaseClient.from('concept_notes').select('*').eq('approvedBy', this.currentUser).not('procurementComplete', 'is', null).order('procurementComplete', { ascending: false }).limit(50);
                         historyCNs = completed || [];
                     }
-                    if (role === 'finance') {
+                    if (['finance','finance_manager'].includes(role)) {
                         const { data: processedPay } = await supabaseClient.from('payments').select('*').eq('processedBy', this.currentUser).order('paidDate', { ascending: false }).limit(50);
                         const { data: rejectedPay } = await supabaseClient.from('payments').select('*').eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50);
                         const { data: approvedRet } = await supabaseClient.from('retirements').select('*').eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50);
@@ -2010,7 +2010,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
             
             renderReports(content) {
                 const role = this.getUserRole();
-                if (!['budgetOwner','ed','procurement','finance'].includes(role)) { content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view reports.</p></div>`; return; }
+                if (!['budgetOwner','ed','procurement','finance','finance_manager'].includes(role)) { content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view reports.</p></div>`; return; }
                 const allPayments = this.data.payments;
                 const allRetirements = this.data.retirements;
                 const projectStats = this.data.projects.map(project => {
@@ -3312,113 +3312,316 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 
             async renderAuditTrail(content) {
                 const role = this.data.roles[this.currentUser];
-                const isAdmin = ['budgetOwner','ed','finance'].includes(role);
+                const isAdmin = ['budgetOwner','ed','finance','finance_manager'].includes(role);
 
-                content.innerHTML = `<div class="header"><h2>🔍 Audit Trail</h2><p>Complete record of all actions taken in the system</p></div>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;">
-                        <input id="auditSearch" type="text" placeholder="Search ref, user, action, details…" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;flex:1;min-width:200px;" oninput="app._filterAudit()">
-                        <select id="auditActionFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" onchange="app._filterAudit()">
-                            <option value="">All Actions</option>
-                            <option value="submitted">Submitted</option>
-                            <option value="approve">Approved</option>
-                            <option value="reject">Rejected</option>
-                            <option value="forward_to_ed">Forwarded to ED</option>
-                            <option value="paid">Payment Processed</option>
-                            <option value="signed">Document Signed</option>
-                            <option value="grr_vendor_signed">Vendor Signed GRR</option>
-                            <option value="procurement_complete">Procurement Complete</option>
-                            <option value="variance_escalated">Variance Escalated</option>
-                            <option value="variance_approved">Variance Approved</option>
-                            <option value="variance_rejected">Variance Rejected</option>
-                            <option value="retirement_approved">Retirement Approved</option>
-                        </select>
-                        <select id="auditTableFilter" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" onchange="app._filterAudit()">
-                            <option value="">All Records</option>
-                            <option value="concept_notes">Concept Notes</option>
-                            <option value="payments">Payments</option>
-                            <option value="retirements">Retirements</option>
-                            <option value="document_signatures">Signatures</option>
-                        </select>
-                        <input id="auditDateFrom" type="date" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" oninput="app._filterAudit()" title="From date">
-                        <input id="auditDateTo" type="date" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;" oninput="app._filterAudit()" title="To date">
-                    </div>
-                    <div id="auditContent"><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><p style="margin-top:16px;color:var(--text-muted);">Loading audit trail…</p></div></div>`;
+                content.innerHTML = `
+                <div class="header">
+                    <h2>🔍 Audit &amp; Financial Ledger</h2>
+                    <p>Deep dive into all payments, retirements and system activity</p>
+                </div>
+                <div style="display:flex;gap:0;margin-bottom:28px;border-bottom:2px solid var(--border);">
+                    ${['activity','payments','retirements'].map((t,i) => `
+                    <button id="auditTab_${t}" onclick="app._switchAuditTab('${t}')"
+                        style="padding:12px 28px;border:none;background:none;font-size:13px;font-weight:600;cursor:pointer;border-bottom:3px solid ${i===0?'var(--primary)':'transparent'};color:${i===0?'var(--primary)':'var(--text-muted)'};margin-bottom:-2px;transition:all .2s;">
+                        ${{activity:'📋 Activity Log',payments:'💳 Payments Ledger',retirements:'🧾 Retirements Ledger'}[t]}
+                    </button>`).join('')}
+                </div>
+                <div id="auditTabContent"><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div></div>`;
 
-                let query = supabaseClient.from('audit_log').select('*').order('changedAt', { ascending: false }).limit(500);
-                if (!isAdmin) query = query.eq('changedBy', this.currentUser);
-                const { data, error } = await query;
+                // Load all data upfront
+                const [
+                    { data: allPayments },
+                    { data: allRetirements },
+                    { data: auditRaw }
+                ] = await Promise.all([
+                    isAdmin
+                        ? supabaseClient.from('payments').select('*').order('requestDate', { ascending: false })
+                        : supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).order('requestDate', { ascending: false }),
+                    isAdmin
+                        ? supabaseClient.from('retirements').select('*').order('submittedDate', { ascending: false })
+                        : supabaseClient.from('retirements').select('*').eq('staffName', this.currentUser).order('submittedDate', { ascending: false }),
+                    supabaseClient.from('audit_log').select('*')
+                        .not('action', 'in', '("INSERT","UPDATE","DELETE")')
+                        .order('changedAt', { ascending: false }).limit(500)
+                ]);
 
-                if (error) { document.getElementById('auditContent').innerHTML = `<div class="empty-state"><p>Error loading audit trail: ${error.message}</p></div>`; return; }
-
-                this._auditData = data || [];
-                this._renderAuditRows(this._auditData);
-            },
-
-            _renderAuditRows(rows) {
-                const el = document.getElementById('auditContent');
-                if (!rows || rows.length === 0) {
-                    el.innerHTML = '<div class="empty-state"><p>No audit records found.</p></div>';
-                    return;
+                // Also load CNs for cross-referencing
+                const cnRefs = [...new Set([
+                    ...(allPayments||[]).map(p => p.conceptNoteRef),
+                    ...(allRetirements||[]).map(r => r.paymentRef)
+                ].filter(Boolean))];
+                let cnMap = new Map();
+                if (cnRefs.length) {
+                    const { data: cns } = await supabaseClient.from('concept_notes').select('refNumber,activityTitle,projectCode,requiresProcurement,poNumber,grrNumber').in('refNumber', cnRefs);
+                    (cns||[]).forEach(c => cnMap.set(c.refNumber, c));
                 }
-                const actionLabel = a => ({
-                    'submitted':            '📝 Submitted',
-                    'approve_under_1m':     '✅ Approved',
-                    'approve_with_note':    '✅ Approved (Note)',
-                    'ed_approve':           '✅ ED Approved',
-                    'forward_to_ed':        '→ Forwarded to ED',
-                    'rejected':             '✗ Rejected',
-                    'paid':                 '💳 Payment Processed',
-                    'signed':               '✍️ Signed',
-                    'grr_vendor_signed':    '✍️ Vendor Signed GRR',
-                    'procurement_complete': '📦 Procurement Complete',
-                    'variance_escalated':   '⚠️ Variance Escalated',
-                    'variance_approved':    '✅ Variance Approved',
-                    'variance_rejected':    '✗ Variance Rejected',
-                    'retirement_approved':  '✅ Retirement Approved',
-                    'retirement_rejected':  '✗ Retirement Rejected',
-                }[a] || a);
-                const actionCls = a => a.includes('reject') ? 'status-rejected' : ['paid','approve','signed','complete','vendor_signed','retirement_approved','variance_approved'].some(k => a.includes(k)) ? 'status-approved' : 'status-pending';
 
-                el.innerHTML = `
-                    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
-                        <div style="display:grid;grid-template-columns:140px 130px 140px 1fr 120px;gap:0;background:var(--primary);color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;">
-                            <span>When</span><span>Record</span><span>Ref</span><span>Action &amp; Details</span><span>By</span>
-                        </div>
-                        ${rows.map(r => `
-                        <div style="display:grid;grid-template-columns:140px 130px 140px 1fr 120px;gap:0;padding:12px 16px;border-bottom:1px solid var(--border);align-items:start;">
-                            <span style="color:var(--text-muted);font-size:11px;line-height:1.5;">
-                                ${new Date(r.changedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}<br>
-                                <span style="font-size:10px;">${new Date(r.changedAt).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}</span>
-                            </span>
-                            <span style="font-size:11px;color:var(--text-muted);padding-right:8px;">${r.tableName||'—'}</span>
-                            <span style="font-weight:700;font-size:12px;color:var(--primary);padding-right:8px;">${r.refNumber||'—'}</span>
-                            <span>
-                                <span class="status-badge ${actionCls(r.action||'')}" style="font-size:11px;margin-bottom:4px;display:inline-block;">${actionLabel(r.action||'—')}</span>
-                                ${r.details ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px;line-height:1.5;">${r.details}</div>` : ''}
-                            </span>
-                            <span style="font-size:12px;font-weight:600;">${r.changedBy||'—'}</span>
-                        </div>`).join('')}
-                    </div>
-                    <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">Showing ${rows.length} record${rows.length===1?'':'s'}</div>`;
+                this._auditPayments   = allPayments || [];
+                this._auditRetirements = allRetirements || [];
+                this._auditData = (auditRaw||[]).filter(r => !['INSERT','UPDATE','DELETE'].includes(r.action));
+                this._auditCNMap = cnMap;
+                this._activeAuditTab = 'activity';
+                this._switchAuditTab('activity');
             },
 
-            _filterAudit() {
-                if (!this._auditData) return;
-                const q    = (document.getElementById('auditSearch')?.value||'').toLowerCase();
-                const ac   = document.getElementById('auditActionFilter')?.value||'';
-                const tc   = document.getElementById('auditTableFilter')?.value||'';
-                const from = document.getElementById('auditDateFrom')?.value;
-                const to   = document.getElementById('auditDateTo')?.value;
-                const filtered = this._auditData.filter(r => {
-                    if (ac && !(r.action||'').includes(ac)) return false;
-                    if (tc && r.tableName !== tc) return false;
-                    if (from && new Date(r.changedAt) < new Date(from)) return false;
-                    if (to   && new Date(r.changedAt) > new Date(to + 'T23:59:59')) return false;
-                    if (q && !`${r.refNumber} ${r.changedBy} ${r.action} ${r.details}`.toLowerCase().includes(q)) return false;
-                    return true;
+            _switchAuditTab(tab) {
+                this._activeAuditTab = tab;
+                ['activity','payments','retirements'].forEach(t => {
+                    const btn = document.getElementById('auditTab_' + t);
+                    if (!btn) return;
+                    btn.style.borderBottomColor = t === tab ? 'var(--primary)' : 'transparent';
+                    btn.style.color = t === tab ? 'var(--primary)' : 'var(--text-muted)';
                 });
-                this._renderAuditRows(filtered);
+                const el = document.getElementById('auditTabContent');
+                if (tab === 'activity')    this._renderAuditActivity(el);
+                if (tab === 'payments')    this._renderAuditPayments(el);
+                if (tab === 'retirements') this._renderAuditRetirements(el);
             },
+
+            _auditFilterBar(idPrefix, extraFilters = '') {
+                return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+                    <input id="${idPrefix}Search" type="text" placeholder="Search…" oninput="app._applyAuditFilter('${idPrefix}')"
+                        style="padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;flex:1;min-width:180px;">
+                    <input id="${idPrefix}From" type="date" title="From" oninput="app._applyAuditFilter('${idPrefix}')"
+                        style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                    <input id="${idPrefix}To" type="date" title="To" oninput="app._applyAuditFilter('${idPrefix}')"
+                        style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                    ${extraFilters}
+                    <button onclick="app._exportAuditCSV('${idPrefix}')"
+                        style="padding:9px 16px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">⬇ Export CSV</button>
+                </div>`;
+            },
+
+            _renderAuditActivity(el) {
+                const rows = this._auditData || [];
+                const actionLabel = a => ({'submitted':'📝 Submitted','approve_under_1m':'✅ Approved','approve_with_note':'✅ Approved (Note)','ed_approve':'✅ ED Approved','forward_to_ed':'→ Forwarded to ED','rejected':'✗ Rejected','paid':'💳 Payment Processed','signed':'✍️ Signed','grr_vendor_signed':'✍️ Vendor Signed GRR','procurement_complete':'📦 Procurement Complete','variance_escalated':'⚠️ Variance Escalated','variance_approved':'✅ Variance Approved','variance_rejected':'✗ Variance Rejected','retirement_approved':'✅ Retirement Approved','retirement_rejected':'✗ Retirement Rejected'}[a] || a);
+                const actionCls = a => a.includes('reject') ? 'status-rejected' : ['paid','approve','signed','complete','vendor_signed','retirement_approved','variance_approved'].some(k => a.includes(k)) ? 'status-approved' : 'status-pending';
+                el.innerHTML = `
+                ${this._auditFilterBar('act',`
+                    <select id="actActionFilter" onchange="app._applyAuditFilter('act')" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                        <option value="">All Actions</option>
+                        <option>submitted</option><option>paid</option><option>signed</option>
+                        <option>procurement_complete</option><option>retirement_approved</option>
+                        <option>retirement_rejected</option><option>variance_escalated</option>
+                        <option>variance_approved</option><option>variance_rejected</option>
+                    </select>`)}
+                <div id="actTable">
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+                    <div style="display:grid;grid-template-columns:150px 130px 150px 1fr 130px;background:var(--primary);color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;">
+                        <span>When</span><span>Record Type</span><span>Ref</span><span>Action &amp; Details</span><span>By</span>
+                    </div>
+                    ${rows.length === 0 ? '<div style="padding:32px;text-align:center;color:var(--text-muted);">No activity records found.</div>' :
+                    rows.map(r => `
+                    <div class="_actRow" data-search="${[r.refNumber,r.changedBy,r.action,r.details].join(' ').toLowerCase()}" data-date="${r.changedAt?.slice(0,10)||''}" data-action="${r.action||''}"
+                        style="display:grid;grid-template-columns:150px 130px 150px 1fr 130px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:start;">
+                        <span style="color:var(--text-muted);font-size:11px;">
+                            ${new Date(r.changedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}<br>
+                            <span style="font-size:10px;">${new Date(r.changedAt).toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'})}</span>
+                        </span>
+                        <span style="font-size:11px;color:var(--text-muted);">${r.tableName||'—'}</span>
+                        <span style="font-weight:700;font-size:12px;color:var(--primary);">${r.refNumber||'—'}</span>
+                        <span>
+                            <span class="status-badge ${actionCls(r.action||'')}" style="font-size:11px;display:inline-block;margin-bottom:4px;">${actionLabel(r.action||'—')}</span>
+                            ${r.details ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.5;">${r.details}</div>` : ''}
+                        </span>
+                        <span style="font-size:12px;font-weight:600;">${r.changedBy||'—'}</span>
+                    </div>`).join('')}
+                </div>
+                <div id="actCount" style="margin-top:10px;font-size:12px;color:var(--text-muted);">Showing ${rows.length} record${rows.length===1?'':'s'}</div>
+                </div>`;
+                this._actRows = rows;
+            },
+
+            _renderAuditPayments(el) {
+                const payments = this._auditPayments || [];
+                const cnMap = this._auditCNMap || new Map();
+                const total = payments.filter(p => p.status === 'paid').reduce((s,p) => s+(p.amount||0), 0);
+                const pending = payments.filter(p => p.status === 'pending').reduce((s,p) => s+(p.amount||0), 0);
+                el.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+                    <div class="stat-card success"><h3>Total Disbursed</h3><div class="stat-value">₦${total.toLocaleString()}</div><div class="stat-label">${payments.filter(p=>p.status==='paid').length} paid payments</div></div>
+                    <div class="stat-card warning"><h3>Pending Disbursement</h3><div class="stat-value">₦${pending.toLocaleString()}</div><div class="stat-label">${payments.filter(p=>p.status==='pending').length} awaiting processing</div></div>
+                    <div class="stat-card danger"><h3>Unretired</h3><div class="stat-value">${payments.filter(p => p.status==='paid' && !this._auditRetirements.find(r => r.paymentRef===p.refNumber)).length}</div><div class="stat-label">Paid but not yet retired</div></div>
+                </div>
+                ${this._auditFilterBar('pay',`
+                    <select id="payStatusFilter" onchange="app._applyAuditFilter('pay')" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                        <option value="">All Statuses</option>
+                        <option value="paid">Paid</option>
+                        <option value="pending">Pending</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                    <select id="payProjectFilter" onchange="app._applyAuditFilter('pay')" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                        <option value="">All Projects</option>
+                        ${[...new Set(payments.map(p=>p.projectCode).filter(Boolean))].map(c=>`<option>${c}</option>`).join('')}
+                    </select>`)}
+                <div id="payTable">
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+                    <div style="display:grid;grid-template-columns:130px 130px 120px 110px 100px 120px 110px 110px 1fr;background:var(--primary);color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;">
+                        <span>Payment Ref</span><span>CN Ref</span><span>Staff</span><span>Project</span><span>Amount</span><span>Account Name</span><span>Bank</span><span>Status</span><span>Details</span>
+                    </div>
+                    ${payments.length === 0 ? '<div style="padding:32px;text-align:center;color:var(--text-muted);">No payments found.</div>' :
+                    payments.map(p => {
+                        const cn = cnMap.get(p.conceptNoteRef);
+                        const retirement = this._auditRetirements.find(r => r.paymentRef === p.refNumber);
+                        const retStatus = !retirement ? '<span style="color:#e53935;font-size:11px;">⚠ Not Retired</span>'
+                            : retirement.status === 'approved' ? '<span style="color:#2e7d32;font-size:11px;">✓ Retired</span>'
+                            : '<span style="color:#f57c00;font-size:11px;">⏳ Retirement Pending</span>';
+                        return `<div class="_payRow"
+                            data-search="${[p.refNumber,p.conceptNoteRef,p.staffName,p.projectCode,p.accountName,p.bankName,p.status].join(' ').toLowerCase()}"
+                            data-date="${p.requestDate?.slice(0,10)||''}" data-status="${p.status||''}" data-project="${p.projectCode||''}"
+                            style="display:grid;grid-template-columns:130px 130px 120px 110px 100px 120px 110px 110px 1fr;padding:11px 16px;border-bottom:1px solid var(--border);align-items:start;font-size:12px;">
+                            <span style="font-weight:700;color:var(--primary);">${p.refNumber}</span>
+                            <span>${p.conceptNoteRef||'—'}<br><span style="font-size:10px;color:var(--text-muted);">${cn?.activityTitle?.slice(0,30)||''}</span></span>
+                            <span>${p.staffName}</span>
+                            <span>${p.projectCode||'—'}</span>
+                            <span style="font-weight:700;">₦${Number(p.amount||0).toLocaleString()}</span>
+                            <span>${p.accountName||'—'}<br><span style="font-size:10px;color:var(--text-muted);">${p.accountNumber||''}</span></span>
+                            <span>${p.bankName||'—'}</span>
+                            <span><span class="status-badge ${p.status==='paid'?'status-approved':p.status==='pending'?'status-pending':'status-rejected'}" style="font-size:10px;">${p.status}</span></span>
+                            <span>
+                                ${p.paidDate?`<div style="font-size:10px;color:var(--text-muted);">Paid: ${new Date(p.paidDate).toLocaleDateString('en-NG')}</div>`:''}
+                                ${p.processedBy?`<div style="font-size:10px;color:var(--text-muted);">By: ${p.processedBy}</div>`:''}
+                                <div style="margin-top:4px;">${retStatus}</div>
+                                ${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="margin-top:6px;font-size:10px;padding:3px 8px;border-color:var(--primary);color:var(--primary);">📄 View CN</button>`:''}
+                            </span>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <div id="payCount" style="margin-top:10px;font-size:12px;color:var(--text-muted);">Showing ${payments.length} payment${payments.length===1?'':'s'} · Total: ₦${payments.reduce((s,p)=>s+(p.amount||0),0).toLocaleString()}</div>
+                </div>`;
+                this._payRows = payments;
+            },
+
+            _renderAuditRetirements(el) {
+                const rets = this._auditRetirements || [];
+                const payments = this._auditPayments || [];
+                const approved = rets.filter(r => r.status === 'approved');
+                const totalSpent = approved.reduce((s,r) => s+(r.actualSpent||0), 0);
+                const totalReturned = approved.reduce((s,r) => s+(r.amountReturned||0), 0);
+                const totalVariance = approved.reduce((s,r) => s+Math.abs((r.actualSpent||0)-(r.amountAdvanced||0)), 0);
+                el.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;">
+                    <div class="stat-card success"><h3>Total Approved</h3><div class="stat-value">${approved.length}</div><div class="stat-label">Retired retirements</div></div>
+                    <div class="stat-card warning"><h3>Total Spent</h3><div class="stat-value">₦${totalSpent.toLocaleString()}</div><div class="stat-label">Across approved retirements</div></div>
+                    <div class="stat-card"><h3>Total Returned</h3><div class="stat-value">₦${totalReturned.toLocaleString()}</div><div class="stat-label">Change returned to finance</div></div>
+                    <div class="stat-card danger"><h3>Total Variance</h3><div class="stat-value">₦${totalVariance.toLocaleString()}</div><div class="stat-label">Difference from advance</div></div>
+                </div>
+                ${this._auditFilterBar('ret',`
+                    <select id="retStatusFilter" onchange="app._applyAuditFilter('ret')" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                        <option value="">All Statuses</option>
+                        <option value="approved">Approved</option>
+                        <option value="pending">Pending</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                    <select id="retProjectFilter" onchange="app._applyAuditFilter('ret')" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+                        <option value="">All Projects</option>
+                        ${[...new Set(rets.map(r=>r.projectCode||payments.find(p=>p.refNumber===r.paymentRef)?.projectCode).filter(Boolean))].map(c=>`<option>${c}</option>`).join('')}
+                    </select>`)}
+                <div id="retTable">
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;">
+                    <div style="display:grid;grid-template-columns:130px 130px 120px 100px 100px 100px 100px 100px 1fr;background:var(--primary);color:#fff;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:10px 16px;">
+                        <span>Retirement Ref</span><span>Payment Ref</span><span>Staff</span><span>Advance</span><span>Spent</span><span>Returned</span><span>Variance</span><span>Status</span><span>Details</span>
+                    </div>
+                    ${rets.length === 0 ? '<div style="padding:32px;text-align:center;color:var(--text-muted);">No retirements found.</div>' :
+                    rets.map(r => {
+                        const pay = payments.find(p => p.refNumber === r.paymentRef);
+                        const advance = pay?.amount || r.amountAdvanced || 0;
+                        const variance = (r.actualSpent||0) - advance;
+                        const varColour = variance > 0 ? '#e53935' : variance < 0 ? '#2e7d32' : 'var(--text-muted)';
+                        const cnRef = pay?.conceptNoteRef;
+                        return `<div class="_retRow"
+                            data-search="${[r.refNumber,r.paymentRef,r.staffName,r.status,cnRef||''].join(' ').toLowerCase()}"
+                            data-date="${r.submittedDate?.slice(0,10)||''}" data-status="${r.status||''}" data-project="${pay?.projectCode||''}"
+                            style="display:grid;grid-template-columns:130px 130px 120px 100px 100px 100px 100px 100px 1fr;padding:11px 16px;border-bottom:1px solid var(--border);align-items:start;font-size:12px;">
+                            <span style="font-weight:700;color:var(--primary);">${r.refNumber}</span>
+                            <span>${r.paymentRef||'—'}</span>
+                            <span>${r.staffName}</span>
+                            <span>₦${Number(advance).toLocaleString()}</span>
+                            <span style="font-weight:700;">₦${Number(r.actualSpent||0).toLocaleString()}</span>
+                            <span>₦${Number(r.amountReturned||0).toLocaleString()}</span>
+                            <span style="font-weight:700;color:${varColour};">${variance===0?'—':(variance>0?'+':'')}₦${Math.abs(variance).toLocaleString()}</span>
+                            <span><span class="status-badge ${r.status==='approved'?'status-approved':r.status==='pending'?'status-pending':'status-rejected'}" style="font-size:10px;">${r.status}</span></span>
+                            <span>
+                                ${r.approvedDate?`<div style="font-size:10px;color:var(--text-muted);">Approved: ${new Date(r.approvedDate).toLocaleDateString('en-NG')}</div>`:''}
+                                ${r.approvedBy?`<div style="font-size:10px;color:var(--text-muted);">By: ${r.approvedBy}</div>`:''}
+                                ${r.rejectionReason?`<div style="font-size:10px;color:#e53935;margin-top:2px;">Reason: ${r.rejectionReason}</div>`:''}
+                                ${r.expenditureDetails?`<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${r.expenditureDetails.slice(0,80)}…</div>`:''}
+                                ${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="margin-top:6px;font-size:10px;padding:3px 8px;border-color:var(--primary);color:var(--primary);">📄 View CN</button>`:''}
+                                ${cnRef?`<button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="margin-top:4px;font-size:10px;padding:3px 8px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:''}
+                            </span>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <div id="retCount" style="margin-top:10px;font-size:12px;color:var(--text-muted);">Showing ${rets.length} retirement${rets.length===1?'':'s'}</div>
+                </div>`;
+                this._retRows = rets;
+            },
+
+            _applyAuditFilter(prefix) {
+                const q    = (document.getElementById(prefix+'Search')?.value||'').toLowerCase();
+                const from = document.getElementById(prefix+'From')?.value||'';
+                const to   = document.getElementById(prefix+'To')?.value||'';
+                const status = document.getElementById(prefix+'StatusFilter')?.value || document.getElementById(prefix+'ActionFilter')?.value || '';
+                const project = document.getElementById(prefix+'ProjectFilter')?.value||'';
+                const cls = {act:'_actRow', pay:'_payRow', ret:'_retRow'}[prefix];
+                const countEl = document.getElementById(prefix+'Count');
+                let visible = 0;
+                document.querySelectorAll('.'+cls).forEach(row => {
+                    const search = row.dataset.search||'';
+                    const date   = row.dataset.date||'';
+                    const rowStatus = row.dataset.status||row.dataset.action||'';
+                    const rowProject = row.dataset.project||'';
+                    const show = (!q || search.includes(q))
+                        && (!from || date >= from)
+                        && (!to   || date <= to)
+                        && (!status  || rowStatus.includes(status))
+                        && (!project || rowProject === project);
+                    row.style.display = show ? '' : 'none';
+                    if (show) visible++;
+                });
+                if (countEl) countEl.textContent = `Showing ${visible} record${visible===1?'':'s'}`;
+            },
+
+            _exportAuditCSV(prefix) {
+                let rows, filename, headers;
+                if (prefix === 'act') {
+                    rows = (this._auditData||[]).filter(r => {
+                        const el = document.querySelector('._actRow[style=""]') || document.querySelector('._actRow:not([style*="none"])');
+                        return true; // export all filtered visible
+                    });
+                    // Re-filter by visible rows
+                    const visibleRefs = new Set([...document.querySelectorAll('._actRow')].filter(r=>r.style.display!=='none').map(r=>r.dataset.search?.split(' ')[0]));
+                    rows = (this._auditData||[]);
+                    headers = ['When','Record Type','Ref','Action','Details','By'];
+                    const csv = [headers, ...rows.map(r => [new Date(r.changedAt).toLocaleString('en-NG'),r.tableName||'',r.refNumber||'',r.action||'',`"${(r.details||'').replace(/"/g,'""')}"`,r.changedBy||''])].map(r=>r.join(',')).join('\n');
+                    filename = 'audit_activity.csv';
+                    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = filename; a.click(); return;
+                }
+                if (prefix === 'pay') {
+                    rows = [...document.querySelectorAll('._payRow')].filter(r=>r.style.display!=='none');
+                    const allPay = this._auditPayments||[];
+                    const visibleRefs = new Set(rows.map(r=>r.dataset.search?.split(' ')[0]));
+                    const data = allPay.filter(p=>visibleRefs.has(p.refNumber?.toLowerCase()));
+                    headers = ['Payment Ref','CN Ref','Staff','Project','Amount','Account Name','Account No','Bank','Status','Paid Date','Processed By'];
+                    const csv = [headers, ...data.map(p=>[p.refNumber,p.conceptNoteRef||'',p.staffName,p.projectCode||'',p.amount,`"${p.accountName||''}"`,p.accountNumber||'',`"${p.bankName||''}"`,p.status,p.paidDate||'',p.processedBy||''])].map(r=>r.join(',')).join('\n');
+                    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = 'payments_ledger.csv'; a.click(); return;
+                }
+                if (prefix === 'ret') {
+                    const allRet = this._auditRetirements||[];
+                    const allPay = this._auditPayments||[];
+                    headers = ['Retirement Ref','Payment Ref','CN Ref','Staff','Advance','Spent','Returned','Variance','Status','Approved Date','Approved By','Rejection Reason'];
+                    const csv = [headers, ...allRet.map(r=>{
+                        const pay = allPay.find(p=>p.refNumber===r.paymentRef);
+                        const advance = pay?.amount||0;
+                        const variance = (r.actualSpent||0)-advance;
+                        return [r.refNumber,r.paymentRef||'',pay?.conceptNoteRef||'',r.staffName,advance,r.actualSpent||0,r.amountReturned||0,variance,r.status,r.approvedDate||'',r.approvedBy||'',`"${r.rejectionReason||''}"`];
+                    })].map(r=>r.join(',')).join('\n');
+                    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = 'retirements_ledger.csv'; a.click(); return;
+                }
+            },
+
+            _renderAuditRows(rows) { this._renderAuditActivity(document.getElementById('auditTabContent')); },
+            _filterAudit() { this._applyAuditFilter('act'); },
 
             async _logAudit(table, refNumber, action, details) {
                 try {
