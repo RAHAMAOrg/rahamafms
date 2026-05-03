@@ -2013,11 +2013,27 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 if (!['budgetOwner','ed','procurement','finance','finance_manager'].includes(role)) { content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view reports.</p></div>`; return; }
                 const allPayments = this.data.payments;
                 const allRetirements = this.data.retirements;
+
+                // Enrich payments missing projectCode from linked concept notes
+                const cnRefMap = new Map(this.data.conceptNotes.map(c => [c.refNumber, c]));
+                allPayments.forEach(p => {
+                    if (!p.projectCode && p.conceptNoteRef) {
+                        const cn = cnRefMap.get(p.conceptNoteRef);
+                        if (cn?.projectCode) p.projectCode = cn.projectCode;
+                    }
+                });
+
+                const paidPayments = allPayments.filter(p => p.status === 'paid');
+                const totalSpent = paidPayments.reduce((s,p) => s+(p.amount||0), 0);
+                const totalBudget = this.data.projects.reduce((s,p) => s+p.budget, 0);
+
                 const projectStats = this.data.projects.map(project => {
-                    const spent = allPayments.filter(p => p.projectCode === project.code && p.status === 'paid').reduce((s,p) => s+(p.amount||0), 0);
+                    const spent = paidPayments.filter(p => p.projectCode === project.code).reduce((s,p) => s+(p.amount||0), 0);
+                    const committed = allPayments.filter(p => p.status === 'pending' && p.projectCode === project.code).reduce((s,p) => s+(p.amount||0), 0);
                     const remaining = project.budget - spent;
-                    const percentUsed = (spent / project.budget * 100).toFixed(1);
-                    return { ...project, spent, remaining, percentUsed };
+                    const percentUsed = project.budget > 0 ? Math.min((spent / project.budget * 100), 100).toFixed(1) : '0.0';
+                    const percentCommitted = project.budget > 0 ? Math.min((committed / project.budget * 100), 100).toFixed(1) : '0.0';
+                    return { ...project, spent, committed, remaining, percentUsed, percentCommitted };
                 });
                 content.innerHTML = `
                     <div class="header"><h2>Reports & Budget Tracking</h2><p>Financial overview and budget utilization</p></div>
