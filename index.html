@@ -2940,9 +2940,24 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 }
 
                 const grrNum = cn.grrNumber || ('GRR-' + refNumber);
+                // Build item rows: prefer multi-vendor JSON captured during procurement entry
+                let _grrVendors = [];
+                try { if (cn.vendorsJson) _grrVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
                 const itemRows = cn.requiresProcurement === 'yes'
-                    ? `<tr><td>1</td><td>${cn.activityTitle}</td><td>${cn.description || '—'}</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td></tr>`
+                    ? (_grrVendors.length > 0
+                        ? _grrVendors.map((v, i) => `<tr>
+                            <td>${i+1}</td>
+                            <td>${v.items || cn.activityTitle}</td>
+                            <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
+                            <td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td>
+                            <td style="text-align:center">1</td>
+                            <td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td>
+                          </tr>`).join('')
+                        : `<tr><td>1</td><td>${cn.vendorItemsSupplied || cn.activityTitle}</td><td>${cn.grrVendorName || '—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td></tr>`)
                     : '<tr><td colspan="6" style="text-align:center;color:#999;">No procurement items</td></tr>';
+                const _grrTotal = _grrVendors.length > 0
+                    ? _grrVendors.reduce((s, v) => s + (v.amount || 0), 0)
+                    : Number(cn.actualProcurementCost || cn.estimatedCost);
 
                 overlay.innerHTML = `
                     <div class="vendor-sign-header">
@@ -2967,7 +2982,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                         <table class="vendor-items-table">
                             <thead><tr><th>#</th><th>Description</th><th>Details</th><th style="text-align:right">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th></tr></thead>
                             <tbody>${itemRows}</tbody>
-                            <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;padding:10px 12px;">Total Value</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td></tr></tfoot>
+                            <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;padding:10px 12px;">Total Value</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${_grrTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
                         </table>
 
                         <div class="vendor-confirm-box">
@@ -3093,7 +3108,8 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     activityTitle: cn.activityTitle,
                     projectCode: cn.projectCode,
                     estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
-                    description: cn.description || '',
+                    description: cn.vendorItemsSupplied || cn.activityTitle || '',
+                    vendorsJson: cn.vendorsJson || '',
                     createdBy: this.currentUser,
                     expiresAt, used: false
                 };
@@ -3177,9 +3193,16 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                             </div>
                         </div>
                         <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
-                            <thead><tr style="background:#285B3C;color:#fff;"><th style="padding:10px 12px;text-align:left;">#</th><th style="padding:10px 12px;text-align:left;">Description</th><th style="padding:10px 12px;text-align:right;">Total (₦)</th></tr></thead>
-                            <tbody><tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">1</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${tokenRow.activityTitle}${tokenRow.description ? ' — ' + tokenRow.description.substring(0,80) : ''}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr></tbody>
-                            <tfoot><tr><td colspan="2" style="text-align:right;font-weight:700;padding:10px 12px;">Total</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr></tfoot>
+                            <thead><tr style="background:#285B3C;color:#fff;"><th style="padding:10px 12px;text-align:left;">#</th><th style="padding:10px 12px;text-align:left;">Item / Service</th><th style="padding:10px 12px;text-align:left;">Vendor</th><th style="padding:10px 12px;text-align:right;">Total (₦)</th></tr></thead>
+                            <tbody>${(()=>{
+                                let _rv = [];
+                                try { if (tokenRow.vendorsJson) _rv = JSON.parse(tokenRow.vendorsJson); } catch(e){}
+                                if (_rv.length > 0) {
+                                    return _rv.map((v,i) => `<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">${i+1}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.items||tokenRow.activityTitle}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${Number(v.amount||0).toLocaleString()}</td></tr>`).join('');
+                                }
+                                return `<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">1</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${tokenRow.description || tokenRow.activityTitle}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">—</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr>`;
+                            })()}</tbody>
+                            <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;padding:10px 12px;">Total</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${(()=>{ let _rv=[]; try{if(tokenRow.vendorsJson)_rv=JSON.parse(tokenRow.vendorsJson);}catch(e){} return _rv.length>0 ? _rv.reduce((s,v)=>s+(v.amount||0),0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : Number(tokenRow.estimatedCost||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); })()}</td></tr></tfoot>
                         </table>
                         <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:10px;padding:14px 18px;font-size:13px;margin-bottom:20px;">
                             <strong>Confirmation:</strong> By signing below, I confirm the goods/services above were delivered/rendered satisfactorily.
