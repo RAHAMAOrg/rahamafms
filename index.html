@@ -1456,7 +1456,9 @@
                     });
                 }
                 const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
-                    if (!['pending','variance_rejected'].includes(cn.status)) return false;
+                    // Include finance-rejected procurement CNs so they reappear for Procurement
+                    const isFinanceRejected = cn.financeRejectionReason && cn.status === 'pending' && cn.currentApprover === 'procurement';
+                    if (!['pending','variance_rejected'].includes(cn.status) && !isFinanceRejected) return false;
                     if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
                     if (role === 'ed' && cn.currentApprover === 'ed') return true;
                     if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
@@ -1722,6 +1724,14 @@
                         <h2>Complete Procurement & Forward to Finance</h2>
                         <p>Generate PO &amp; GRR, confirm actual cost, and send payment request to Finance</p>
                     </div>
+
+                    ${cn.financeRejectionReason ? `
+                    <div style="background:#FFEBEE;border:2px solid #FFCDD2;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+                        <div style="font-weight:700;color:#B71C1C;font-size:14px;margin-bottom:8px;">&#x274C; Finance Rejection &#x2014; Action Required</div>
+                        <p style="color:#C62828;font-size:13px;margin-bottom:6px;"><strong>Reason:</strong> ${cn.financeRejectionReason}</p>
+                        <p style="font-size:12px;color:#C62828;">Rejected by <strong>${cn.financeRejectedBy}</strong> on ${cn.financeRejectedAt ? new Date(cn.financeRejectedAt).toLocaleDateString('en-NG', {day:'numeric',month:'long',year:'numeric'}) : '&#x2014;'}</p>
+                        <p style="font-size:12px;color:#B71C1C;margin-top:8px;font-style:italic;">Please address the above, update the details below, and resubmit to Finance.</p>
+                    </div>` : ''}
 
                     <div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:12px;padding:24px;margin-bottom:28px;">
                         <h3 style="font-family:'Archivo',sans-serif;font-size:15px;color:#1B5E20;margin-bottom:8px;">
@@ -2324,8 +2334,45 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 try {
                     const { error } = await supabaseClient.from('payments').update({ status: 'rejected', rejectedDate: new Date().toISOString(), rejectedBy: this.currentUser, rejectionReason: reason }).eq('refNumber', refNumber);
                     if (error) throw error;
-                    await this.createNotification(payment.staffName, `Your payment request ${refNumber} was rejected: "${reason}"`, 'danger', refNumber);
-                    alert('Payment rejected.'); await this.loadData(); this.showView('approvals');
+
+                    const isProcurement = payment.retirementresponsibility === 'procurement' || payment.procurementComplete;
+
+                    if (isProcurement && payment.conceptNoteRef) {
+                        // Reset CN back to procurement so they can re-process
+                        await supabaseClient.from('concept_notes').update({
+                            currentApprover: 'procurement',
+                            status: 'pending',
+                            financeRejectionReason: reason,
+                            financeRejectedAt: new Date().toISOString(),
+                            financeRejectedBy: this.currentUser
+                        }).eq('refNumber', payment.conceptNoteRef);
+
+                        // Notify all procurement officers
+                        const procUsers = Object.entries(this.data.roles).filter(([,r]) => r === 'procurement').map(([n]) => n);
+                        for (const p of procUsers) {
+                            await this.createNotification(p,
+                                `⚠️ Finance rejected payment ${refNumber} for CN ${payment.conceptNoteRef}. Reason: "${reason}". Please review and resubmit to Finance.`,
+                                'danger', payment.conceptNoteRef);
+                        }
+                        // Also notify original staff member
+                        await this.createNotification(payment.staffName,
+                            `Payment for your activity (${payment.conceptNoteRef}) was rejected by Finance: "${reason}". Procurement is reviewing and will resubmit.`,
+                            'warning', refNumber);
+
+                        await this._logAudit('payments', refNumber, 'rejected',
+                            `Finance rejected procurement payment. Reason: ${reason}. CN ${payment.conceptNoteRef} returned to Procurement. Rejected by: ${this.currentUser}.`);
+
+                        alert(`Payment rejected.\n\nCN ${payment.conceptNoteRef} has been returned to Procurement to review and resubmit.`);
+                    } else {
+                        // Regular staff payment — notify staff as before
+                        await this.createNotification(payment.staffName,
+                            `Your payment request ${refNumber} was rejected: "${reason}"`, 'danger', refNumber);
+                        await this._logAudit('payments', refNumber, 'rejected',
+                            `Staff payment rejected by ${this.currentUser}. Reason: ${reason}.`);
+                        alert('Payment rejected.');
+                    }
+
+                    await this.loadData(); this.showView('approvals');
                 } catch (error) { console.error('Reject error:', error); alert('Error rejecting payment: ' + error.message); }
             },
             
@@ -3061,13 +3108,13 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
                 try {
                     const grrNum = cn.grrNumber || ('GRR-' + refNumber);
-                    await supabaseClient.from('document_signatures').insert([{
+                    const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
                         docRef: grrNum, docType: 'grr', relatedRef: refNumber,
                         signerName: vendorName, signerRole: 'vendor',
                         signatureData: sigData, signedAt: new Date().toISOString(),
-                        pageContext: 'vendor_on_device',
-                        vendorPhone: vendorPhone || null
+                        pageContext: 'vendor_on_device'
                     }]);
+                    if (sigErr) throw sigErr;
                     // also update concept_note with vendor name for the download
                     await supabaseClient.from('concept_notes').update({
                         grrVendorName: vendorName,
@@ -3249,20 +3296,49 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     if (btn) { btn.disabled=true; btn.textContent='Submitting…'; }
                     try {
                         const sigData = rv.toDataURL('image/png');
-                        const { data: tr } = await supabaseClient.from('grr_signing_tokens').select('*').eq('token',tok).single();
-                        await supabaseClient.from('document_signatures').insert([{
-                            docRef: tr.grrNumber, docType:'grr', relatedRef: tr.cnRef,
-                            signerName: name, signerRole:'vendor', signatureData: sigData,
-                            signedAt: new Date().toISOString(), pageContext:'vendor_remote',
-                            vendorPhone: phone || null
+
+                        // Re-fetch token to confirm it is still valid and not used
+                        const { data: tr, error: trErr } = await supabaseClient
+                            .from('grr_signing_tokens').select('*').eq('token',tok).single();
+                        if (trErr || !tr) {
+                            throw new Error('Could not verify signing link. It may have expired or been revoked. Please contact RAHAMA procurement for a new link. (' + (trErr?.message || 'token not found') + ')');
+                        }
+                        if (tr.used) {
+                            document.getElementById('rvStatus').innerHTML = '<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:16px 18px;color:#1B5E20;font-weight:600;font-size:15px;text-align:center;">✅ This GRR has already been signed. Thank you.</div>';
+                            if (btn) { btn.disabled=true; btn.textContent='Already Signed'; }
+                            return;
+                        }
+                        if (new Date(tr.expiresAt) < new Date()) {
+                            throw new Error('This signing link has expired. Please contact RAHAMA procurement for a new one.');
+                        }
+
+                        // Save signature — note: vendorPhone is stored in grr_signing_tokens,
+                        // not in document_signatures (which does not have that column)
+                        const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
+                            docRef: tr.grrNumber, docType: 'grr', relatedRef: tr.cnRef,
+                            signerName: name, signerRole: 'vendor', signatureData: sigData,
+                            signedAt: new Date().toISOString(), pageContext: 'vendor_remote'
                         }]);
-                        await supabaseClient.from('grr_signing_tokens').update({ used:true, vendorName:name, signedAt: new Date().toISOString() }).eq('token',tok);
-                        await supabaseClient.from('concept_notes').update({ grrVendorName:name, grrVendorPhone:phone||null, grrVendorSignedAt:new Date().toISOString() }).eq('refNumber', tr.cnRef);
+                        if (sigErr) throw new Error('Failed to save signature: ' + sigErr.message);
+
+                        // Only mark token used AFTER signature is confirmed saved
+                        const { error: tokErr } = await supabaseClient.from('grr_signing_tokens')
+                            .update({ used: true, vendorName: name, vendorPhone: phone || null, signedAt: new Date().toISOString() })
+                            .eq('token', tok);
+                        if (tokErr) console.warn('Token mark-used failed (non-critical):', tokErr.message);
+
+                        // Update concept note with vendor details
+                        await supabaseClient.from('concept_notes').update({
+                            grrVendorName: name,
+                            grrVendorPhone: phone || null,
+                            grrVendorSignedAt: new Date().toISOString()
+                        }).eq('refNumber', tr.cnRef);
+
                         document.getElementById('rvStatus').innerHTML = '<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:16px 18px;color:#1B5E20;font-weight:600;font-size:15px;text-align:center;">✅ Signature received. Thank you — you may now close this page.</div>';
                         if (btn) btn.textContent = '✓ Submitted';
                     } catch(e) {
                         if (btn) { btn.disabled=false; btn.textContent='✓ Submit Signature'; }
-                        alert('Error: ' + e.message);
+                        document.getElementById('rvStatus').innerHTML = '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:14px 18px;color:#B71C1C;font-size:13px;"><strong>Error:</strong> ' + e.message + '</div>';
                     }
                 };
             },
@@ -3449,24 +3525,36 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             // GRR PREVIEW
             // ══════════════════════════════════════════════════════════════
             async _previewGRRDraft(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                // Always fetch fresh CN so we have the latest grrNumber, vendor fields, etc.
+                const { data: freshCN } = await supabaseClient
+                    .from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                const cn = freshCN || this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
-                const grrNum = cn.grrNumber || ('GRR-' + refNumber + '-DRAFT');
 
-                // Fetch all signatures for this GRR from document_signatures
-                const { data: sigs } = await supabaseClient
-                    .from('document_signatures')
-                    .select('*')
-                    .eq('docRef', grrNum);
-                const allSigs = sigs || [];
+                // Use the same key formula that on-device and remote signing use when saving:
+                // cn.grrNumber if set, else 'GRR-' + refNumber (no -DRAFT suffix)
+                const grrNum = cn.grrNumber || ('GRR-' + refNumber);
+
+                // Fetch all signatures for this GRR — cast a wide net using both
+                // the resolved grrNum AND relatedRef=refNumber, then deduplicate
+                const [{ data: sigsByDoc }, { data: sigsByRef }] = await Promise.all([
+                    supabaseClient.from('document_signatures').select('*').eq('docRef', grrNum),
+                    supabaseClient.from('document_signatures').select('*').eq('relatedRef', refNumber).eq('docType', 'grr')
+                ]);
+                const seen = new Set();
+                const allSigs = [...(sigsByDoc || []), ...(sigsByRef || [])].filter(s => {
+                    if (seen.has(s.id)) return false;
+                    seen.add(s.id);
+                    return true;
+                });
 
                 const procSig  = allSigs.find(s => s.pageContext === 'procurement_received');
                 const staffSig = allSigs.find(s => s.pageContext === 'staff_grr_verify');
                 const finSig   = allSigs.find(s => s.pageContext === 'finance_sign');
 
-                // Vendor sig: prefer document_signatures, fall back to concept note fields (remote sign)
-                const vendorSigFromDb = allSigs.find(s => s.signerRole === 'vendor');
-                const vendorSig = vendorSigFromDb
+                // Vendor sig: DB record (has real signatureData) takes priority over
+                // concept_note fallback (which has name/timestamp but no image)
+                const vendorSig = allSigs.find(s => s.signerRole === 'vendor')
                     || (cn.grrVendorSignedAt
                         ? { signatureData: null, signerName: cn.grrVendorName, signedAt: cn.grrVendorSignedAt }
                         : null);
