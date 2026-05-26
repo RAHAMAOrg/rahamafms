@@ -201,6 +201,10 @@
         .vendor-confirm-box { background:#E8F5E9; border:1px solid #A5D6A7; border-radius:10px; padding:16px 20px; margin:20px 0; font-size:13px; }
         #vendorSigCanvas { border:2px solid #285B3C; border-radius:8px; width:100%; touch-action:none; cursor:crosshair; display:block; background:#fafafa; }
         .remote-sign-modal { background:#fff; border-radius:16px; padding:28px; max-width:480px; width:96%; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+        /* PO vendor sign overlay — reuses same fullscreen style as GRR */
+        .po-sign-overlay { display:none; position:fixed; inset:0; background:#fff; z-index:20000; flex-direction:column; overflow-y:auto; }
+        .po-sign-overlay.open { display:flex; }
+        #poVendorSigCanvas { border:2px solid #1B4D8E; border-radius:8px; width:100%; touch-action:none; cursor:crosshair; display:block; background:#fafafa; }
 
         </style>
 </head>
@@ -278,6 +282,8 @@
                 const _initParams = new URLSearchParams(window.location.search);
                 const _vendorToken = _initParams.get('vendorSign');
                 if (_vendorToken) { this._renderVendorSignPage(_vendorToken); return; }
+                const _poVendorToken = _initParams.get('poVendorSign');
+                if (_poVendorToken) { this._renderVendorPOSignPage(_poVendorToken); return; }
                 this._setupOfflineDetection();
                 this._setupSessionTimeout();
                 const params = new URLSearchParams(window.location.search);
@@ -934,7 +940,52 @@
                         <div class="form-group"><label>Activity Title <span class="required">*</span></label><input type="text" name="activityTitle" id="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano"></div>
                         <div class="form-group full-width"><label>Objective <span class="required">*</span></label><textarea name="objective" id="objective" required placeholder="What is the purpose of this activity?"></textarea></div>
                         <div class="form-group full-width"><label>Description <span class="required">*</span></label><textarea name="description" id="description" required placeholder="Detailed description of the activity"></textarea></div>
-                        <div class="form-group"><label>Estimated Cost (₦) <span class="required">*</span></label><input type="number" name="estimatedCost" id="estimatedCost" required min="0" step="0.01"></div>
+                        <input type="number" name="estimatedCost" id="estimatedCost" style="display:none;" min="0" step="0.01" value="0">
+                        <div class="form-group full-width">
+                            <div style="border:2px solid #A7F3D0;border-radius:10px;overflow:hidden;">
+                                <div style="background:#285B3C;color:white;padding:12px 20px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
+                                    📋 Budget Breakdown <span style="font-weight:400;opacity:.8;font-style:italic;"> — Enter line items; total auto-fills Estimated Cost</span>
+                                </div>
+                                <div style="background:#ECFDF5;padding:16px 20px;border-bottom:1px solid #A7F3D0;">
+                                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                                        <thead>
+                                            <tr style="background:#D1FAE5;">
+                                                <th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:36px;">S/N</th>
+                                                <th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line / Description</th>
+                                                <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:150px;">Unit Amount (₦)</th>
+                                                <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:110px;">Qty / Days</th>
+                                                <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:150px;">Total (₦)</th>
+                                                <th style="padding:10px 12px;text-align:center;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:36px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cnBudgetBody">
+                                            <tr id="cnRow_1">
+                                                <td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">1</td>
+                                                <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="text" placeholder="e.g. Training facilitator fee" style="width:100%;border:none;background:transparent;font-size:13px;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_desc_1"></td>
+                                                <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="0" step="0.01" placeholder="0" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_amt_1"></td>
+                                                <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="1" step="1" value="1" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_qty_1"></td>
+                                                <td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;" id="cn_total_1">0.00</td>
+                                                <td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:center;"><button type="button" onclick="app.removeCNBudgetRow(1)" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;" title="Remove">✕</button></td>
+                                            </tr>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr style="background:#D1FAE5;">
+                                                <td colspan="4" style="padding:10px 12px;border:1px solid #A7F3D0;font-weight:700;color:#065F46;">Total Estimated Cost</td>
+                                                <td style="padding:10px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:700;color:#047857;font-size:15px;" id="cnBudgetTotal">₦0.00</td>
+                                                <td style="border:1px solid #A7F3D0;"></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                    <button type="button" onclick="app.addCNBudgetRow()" style="margin-top:10px;padding:8px 16px;background:#ECFDF5;border:1px dashed #6EE7B7;border-radius:6px;color:#047857;font-size:13px;font-weight:600;cursor:pointer;">+ Add Budget Line</button>
+                                </div>
+                                <div style="padding:10px 20px;background:#F0FDF4;border-top:1px solid #A7F3D0;font-size:13px;font-weight:600;color:#6B7280;" id="cnBudgetStatusBar">Fill in budget lines above — the total will auto-calculate</div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Upload Budget Document <span style="font-size:12px;color:#6B7280;">(Optional)</span></label>
+                            <div class="file-upload-area" id="cnBudgetUploadArea" onclick="document.getElementById('cnBudgetFile').click()"><p>📎 Click to attach budget/ToR document</p><span class="form-hint">PDF, XLSX, DOCX, JPG — Max 5MB</span></div>
+                            <input type="file" id="cnBudgetFile" accept=".pdf,.xlsx,.xls,.docx,.doc,.jpg,.jpeg,.png" style="display:none" onchange="app.handleCNBudgetUpload(this)">
+                        </div>
                         <div class="form-group"><label>Implementation Date <span class="required">*</span></label><input type="date" name="implementation_date" id="implementation_date" required></div>
                         <div class="form-group full-width"><label>Are items/services to be procured? <span class="required">*</span></label><select name="requiresProcurement" required><option value="no">No - Direct payment</option><option value="yes">Yes - Procurement needed</option></select><span class="form-hint">Select "Yes" if items need to be purchased by Procurement team</span></div>
                         <div class="btn-group full-width"><button type="submit" class="btn btn-primary">Submit Concept Note</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
@@ -944,8 +995,8 @@
             async submitConceptNote(event) {
                 event.preventDefault(); this.clearErrors();
                 const form = event.target; const formData = new FormData(form);
-                const amount = parseFloat(formData.get('estimatedCost'));
-                if (!this.validateAmount(amount)) { this.showError('estimatedCost', 'Please enter a valid amount'); return; }
+                const amount = parseFloat(document.getElementById('estimatedCost')?.value) || 0;
+                if (amount <= 0) { alert('Please fill in at least one budget line item before submitting.'); return; }
 
                 // ── Capture staff signature before proceeding ──
                 const sigData = await this._showSignaturePad(
@@ -960,9 +1011,27 @@
                     // If the submitter is the Budget Owner, route directly to ED (can't self-approve)
                     const submitterRole = this.getUserRole();
                     const firstApprover = submitterRole === 'budgetOwner' ? 'ed' : 'budgetOwner';
-                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
+                    // Collect budget line items as text for storage
+                    const budgetLinesText = this.getCNBudgetLinesText();
+                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, budgetBreakdown: budgetLinesText || null, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
                     const { data, error } = await supabaseClient.from('concept_notes').insert([conceptNote]).select();
                     if (error) throw error;
+                    // Upload optional budget document
+                    const cnRef = data[0].refNumber;
+                    const budgetFile = app._cnBudgetFile;
+                    if (budgetFile) {
+                        try {
+                            const ext = budgetFile.name.split('.').pop();
+                            const path = `budgets/${cnRef}_budget.${ext}`;
+                            const { data: upData, error: upErr } = await supabaseClient.storage.from('documents').upload(path, budgetFile, { upsert: true });
+                            if (!upErr) {
+                                const { data: { publicUrl } } = supabaseClient.storage.from('documents').getPublicUrl(path);
+                                await supabaseClient.from('concept_notes').update({ budgetDocUrl: publicUrl, budgetDocName: budgetFile.name }).eq('refNumber', cnRef);
+                                data[0].budgetDocUrl = publicUrl; data[0].budgetDocName = budgetFile.name;
+                            }
+                        } catch(ue) { console.warn('Budget file upload failed (non-critical):', ue.message); }
+                        app._cnBudgetFile = null;
+                    }
                     this.data.conceptNotes.unshift(data[0]); this.clearCache();
                     // Notify the right approver
                     if (firstApprover === 'ed') {
@@ -981,6 +1050,73 @@
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting concept note: ' + error.message); if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Concept Note'; } }
             },
             
+            // ── Concept Note Budget Table helpers ──────────────────────────
+            recalcCNBudgetRow(id) {
+                const amt = parseFloat(document.getElementById('cn_amt_' + id)?.value) || 0;
+                const qty = parseFloat(document.getElementById('cn_qty_' + id)?.value) || 1;
+                const total = amt * qty;
+                const el = document.getElementById('cn_total_' + id);
+                if (el) el.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                app.updateCNBudgetTotal();
+            },
+            addCNBudgetRow() {
+                app._cnBudgetLineCount = (app._cnBudgetLineCount || 1) + 1;
+                const id = app._cnBudgetLineCount;
+                const tbody = document.getElementById('cnBudgetBody');
+                if (!tbody) return;
+                const row = document.createElement('tr');
+                row.id = 'cnRow_' + id;
+                row.innerHTML = `<td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">${id}</td><td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="text" placeholder="Budget line description" style="width:100%;border:none;background:transparent;font-size:13px;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(${id})" id="cn_desc_${id}"></td><td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="0" step="0.01" placeholder="0" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(${id})" id="cn_amt_${id}"></td><td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="1" step="1" value="1" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(${id})" id="cn_qty_${id}"></td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;" id="cn_total_${id}">0.00</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:center;"><button type="button" onclick="app.removeCNBudgetRow(${id})" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;">✕</button></td>`;
+                tbody.appendChild(row);
+            },
+            removeCNBudgetRow(id) { const row = document.getElementById('cnRow_' + id); if (row) row.remove(); app.updateCNBudgetTotal(); },
+            updateCNBudgetTotal() {
+                let total = 0;
+                document.querySelectorAll('#cnBudgetBody tr').forEach(row => {
+                    const m = row.id.match(/cnRow_(\d+)/);
+                    if (!m) return;
+                    const amt = parseFloat(document.getElementById('cn_amt_' + m[1])?.value) || 0;
+                    const qty = parseFloat(document.getElementById('cn_qty_' + m[1])?.value) || 1;
+                    total += amt * qty;
+                });
+                const fmt = v => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const totalEl = document.getElementById('cnBudgetTotal');
+                const statusBar = document.getElementById('cnBudgetStatusBar');
+                const hiddenInput = document.getElementById('estimatedCost');
+                if (totalEl) totalEl.textContent = '₦' + fmt(total);
+                if (hiddenInput) hiddenInput.value = total.toFixed(2);
+                if (statusBar) {
+                    if (total > 0) {
+                        statusBar.style.background = '#ECFDF5'; statusBar.style.color = '#047857';
+                        statusBar.innerHTML = `✅ Estimated Total: <strong>₦${fmt(total)}</strong>`;
+                    } else {
+                        statusBar.style.background = '#F3F4F6'; statusBar.style.color = '#6B7280';
+                        statusBar.textContent = 'Fill in budget lines above — the total will auto-calculate';
+                    }
+                }
+            },
+            getCNBudgetLinesText() {
+                const lines = [];
+                document.querySelectorAll('#cnBudgetBody tr').forEach(row => {
+                    const m = row.id.match(/cnRow_(\d+)/);
+                    if (!m) return;
+                    const desc = document.getElementById('cn_desc_' + m[1])?.value?.trim();
+                    const amt  = parseFloat(document.getElementById('cn_amt_' + m[1])?.value) || 0;
+                    const qty  = parseFloat(document.getElementById('cn_qty_' + m[1])?.value) || 1;
+                    if (desc) lines.push(`${m[1]}. ${desc}: ₦${amt.toLocaleString()} × ${qty} = ₦${(amt*qty).toLocaleString()}`);
+                });
+                return lines.join('\n');
+            },
+            handleCNBudgetUpload(input) {
+                const area = document.getElementById('cnBudgetUploadArea');
+                const file = input.files[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) { alert('File too large — max 5MB'); input.value = ''; return; }
+                area.classList.add('has-file');
+                area.innerHTML = `<p>✓ ${file.name}</p><span class="form-hint">${(file.size/1024).toFixed(1)} KB — Budget document ready</span>`;
+                app._cnBudgetFile = file;
+            },
+
             renderPaymentForm(content) {
                 const approvedNotes = this.data.conceptNotes.filter(cn => {
                     if (cn.staffName !== this.currentUser) return false;
@@ -1446,16 +1582,11 @@
                             this.data.conceptNotes.push(c);
                     });
                 }
-                // Also fetch variance_rejected AND finance-rejected CNs for procurement
+                // Also fetch variance_rejected CNs for procurement
                 if (role === 'procurement') {
                     const { data: vrej } = await supabaseClient.from('concept_notes').select('*')
-                        .eq('status', 'variance_rejected').eq('currentApprover', 'procurement');
-                    // Finance-rejected procurement payments reset CN to status='pending' + currentApprover='procurement'
-                    // but these won't appear in the normal loadData query (which filters by staffName for procurement)
-                    const { data: finRej } = await supabaseClient.from('concept_notes').select('*')
-                        .eq('status', 'pending').eq('currentApprover', 'procurement')
-                        .not('financeRejectionReason', 'is', null);
-                    [...(vrej || []), ...(finRej || [])].forEach(c => {
+                        .in('status', ['variance_rejected']).eq('currentApprover', 'procurement');
+                    (vrej || []).forEach(c => {
                         if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
                             this.data.conceptNotes.push(c);
                     });
@@ -1592,7 +1723,7 @@
                         </tr>`).join('')}
                         </tbody></table></div>
                     </div>` : ''}
-                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'forward_to_ed')">→ Forward to ED (>₦1M)</button>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_needs_ed')" style="background:#E8F5E9;border-color:#285B3C;color:#1B5E20;">✍️ Sign &amp; Forward to ED (over limit)</button><div style="font-size:11px;color:#555;margin-top:3px;">Your signature will be captured first</div>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
@@ -1758,6 +1889,10 @@
                             <button class="btn btn-secondary" style="border-color:#285B3C;color:#285B3C;"
                                 onclick="app.vendorSignGRR('${refNumber}')">
                                 ✍️ Vendor Sign GRR
+                            </button>
+                            <button class="btn btn-secondary" style="border-color:#1B4D8E;color:#1B4D8E;"
+                                onclick="app.vendorSignPO('${refNumber}')">
+                                ✍️ Vendor Sign PO
                             </button>
                         </div>
                         <p style="font-size:12px;color:#616161;margin-top:12px;font-style:italic;">
@@ -2251,6 +2386,9 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                                 // Procurement: vendor sign GRR
                                 if (myRole === 'procurement' && isProcurement && hasGRR)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>`;
+                                // Procurement: vendor sign PO
+                                if (myRole === 'procurement' && isProcurement && hasPO)
+                                    btns += `<button class="btn btn-secondary" onclick="app.vendorSignPO('${cn.refNumber}')" style="border-color:#1B4D8E;color:#1B4D8E;">✍️ Vendor Sign PO</button>`;
                                 return btns;
                             })()}
                             <button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button>
@@ -2825,7 +2963,8 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
 
                 const poSigs   = docSigs.filter(s => s.docType === 'purchase_order');
                 const grrSigs  = docSigs.filter(s => s.docType === 'grr');
-                const vendorSig    = grrSigs.find(s => s.signerRole === 'vendor');
+                const vendorSigs   = grrSigs.filter(s => s.signerRole === 'vendor');
+                const vendorSig    = vendorSigs[0] || null; // kept for compat
                 const poStaffSig   = poSigs.find(s => s.pageContext === 'staff_po');
                 const poBoSig      = poSigs.find(s => s.pageContext === 'budget_owner_po' || s.signerRole === 'budgetOwner');
                 const poFinSig     = poSigs.find(s => s.pageContext === 'finance_sign' && s.docType === 'purchase_order');
@@ -2875,8 +3014,10 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     ${sigBlock('1. Procurement (Received)', grrProcSig, cn.approvedBy && cn.requiresProcurement === 'yes' ? cn.approvedBy : null, cn.procurementComplete||null)}
                     ${sigBlock('2. Programme Staff (Verified)', grrStaffSig, cn.staffName, null)}
-                    ${sigBlock('3. Vendor', vendorSig, cn.grrVendorName, cn.grrVendorSignedAt)}
-                    ${sigBlock('4. Finance', grrFinSig, null, null)}
+                    ${vendorSigs.length > 0
+                        ? vendorSigs.map((vs, i) => sigBlock(vendorSigs.length > 1 ? `3.${i+1} Vendor — ${vs.signerName}` : '3. Vendor', vs, vs.signerName, vs.signedAt)).join('')
+                        : sigBlock('3. Vendor', null, cn.grrVendorName, cn.grrVendorSignedAt)}
+                    ${sigBlock(`${vendorSigs.length > 1 ? vendorSigs.length + 3 : 4}. Finance`, grrFinSig, null, null)}
                 </div>` : '';
 
                 const payRows = payments.map(p => `<tr>
@@ -2918,9 +3059,12 @@ tr:nth-child(even) td{background:#f9f9f9;}
 @media print{body{margin:16px;}}
 </style></head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:14px;margin-bottom:20px;">
-  <div>
-    <h1>RAHAMA GIRL CHILD &amp; WOMEN EMPOWERMENT INITIATIVE</h1>
-    <div style="font-size:13px;color:#555;">Full Concept Note Dossier &mdash; ${cn.refNumber}</div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width:70px;height:70px;object-fit:contain;" onerror="this.style.display='none'">
+    <div>
+      <h1>RAHAMA GIRL CHILD &amp; WOMEN EMPOWERMENT INITIATIVE</h1>
+      <div style="font-size:13px;color:#555;">Full Concept Note Dossier &mdash; ${cn.refNumber}</div>
+    </div>
   </div>
   <div style="text-align:right;font-size:12px;color:#777;">
     Generated: ${fmt(new Date())}<br>
@@ -2946,6 +3090,8 @@ ${cn.staffSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Staff 
   <div><div class="lbl">Objective</div><div style="margin-top:4px;line-height:1.6;">${cn.objective||'—'}</div></div>
   <div><div class="lbl">Description</div><div style="margin-top:4px;line-height:1.6;">${cn.description||'—'}</div></div>
 </div>
+${cn.budgetBreakdown ? `<div style="margin:10px 0 16px;"><div class="lbl">Budget Breakdown</div><pre style="margin-top:6px;font-family:inherit;font-size:12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:6px;padding:12px 14px;white-space:pre-wrap;color:#374151;">${cn.budgetBreakdown}</pre></div>` : ''}
+${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E3F2FD;color:#0D47A1;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">📎 Budget Doc: <a href="${cn.budgetDocUrl}" target="_blank">${cn.budgetDocName||'Download'}</a></span></div>` : ''}
 <h2>APPROVAL HISTORY</h2>
 <div class="grid3">
   <div><div class="lbl">Approved By</div><div class="val">${cn.approvedBy||'—'}</div></div>
@@ -3205,6 +3351,194 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             },
 
             // ══════════════════════════════════════════════════════════════
+            // PO VENDOR SIGNING — on-device + remote (like GRR)
+            // Shows actual procurement cost, NOT the original estimated cost
+            // ══════════════════════════════════════════════════════════════
+            async vendorSignPO(refNumber) {
+                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) {
+                    const { data: cnFresh } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                    if (!cnFresh) { alert('Concept note not found.'); return; }
+                    cn = cnFresh; this.data.conceptNotes.push(cn);
+                }
+                const poNum = cn.poNumber || ('PO-' + refNumber);
+
+                let overlay = document.getElementById('poSignOverlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'poSignOverlay';
+                    overlay.className = 'po-sign-overlay';
+                    document.body.appendChild(overlay);
+                }
+
+                // Build vendor rows using actual procurement cost from vendorsJson
+                let _poVendors = [];
+                try { if (cn.vendorsJson) _poVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const actualTotal = _poVendors.length > 0
+                    ? _poVendors.reduce((s, v) => s + (v.amount || 0), 0)
+                    : Number(cn.actualProcurementCost || cn.estimatedCost);
+                const itemRows = _poVendors.length > 0
+                    ? _poVendors.map((v, i) => `<tr>
+                        <td>${i+1}</td>
+                        <td>${v.items || cn.activityTitle}</td>
+                        <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
+                        <td>${v.invoiceNo||'—'}</td>
+                        <td style="text-align:right;font-weight:600;">₦${Number(v.amount||0).toLocaleString()}</td>
+                      </tr>`).join('')
+                    : `<tr><td>1</td><td>${cn.vendorItemsSupplied||cn.activityTitle}</td><td>${cn.grrVendorName||'—'}</td><td>${cn.vendorInvoiceNo||'—'}</td><td style="text-align:right;font-weight:600;">₦${actualTotal.toLocaleString()}</td></tr>`;
+
+                overlay.innerHTML = `
+                    <div class="vendor-sign-header" style="background:#1B4D8E;">
+                        <div style="width:36px;height:36px;background:rgba(255,255,255,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;">🛒</div>
+                        <div>
+                            <h2>Purchase Order — Vendor Acknowledgement</h2>
+                            <div style="font-size:12px;opacity:.8;">RAHAMA Girl Child &amp; Women Empowerment Initiative — ${poNum}</div>
+                        </div>
+                        <button onclick="document.getElementById('poSignOverlay').classList.remove('open')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+                    </div>
+                    <div class="vendor-sign-body">
+                        <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${cn.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${cn.projectCode}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${poNum}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Total Value (Actual)</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+                            </div>
+                        </div>
+                        <h4 style="font-family:'Archivo',sans-serif;margin-bottom:10px;">Items / Services on this Purchase Order</h4>
+                        <table class="vendor-items-table" style="border:1px solid #c7d9ff;">
+                            <thead style="background:#1B4D8E;"><tr><th>#</th><th>Description</th><th>Vendor</th><th>Invoice No.</th><th style="text-align:right;">Amount (₦)</th></tr></thead>
+                            <tbody>${itemRows}</tbody>
+                            <tfoot><tr style="background:#e8eeff;"><td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px;">Total Authorised</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+                        </table>
+                        <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;">
+                            <strong>Vendor Acknowledgement</strong><br>
+                            By signing below, I confirm that I have received this Purchase Order from RAHAMA, agree to supply the goods/services listed at the stated price, and will invoice accordingly.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Vendor / Company Name <span class="required">*</span></label>
+                                <input type="text" id="poVendorNameInput" placeholder="Full name of vendor representative" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;"></div>
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Phone Number</label>
+                                <input type="tel" id="poVendorPhoneInput" placeholder="e.g. 0811 234 5678" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;"></div>
+                        </div>
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Vendor Signature <span class="required">*</span></label>
+                        <canvas id="poVendorSigCanvas" width="600" height="200"></canvas>
+                        <div style="font-size:11px;color:#777;margin-top:6px;text-align:center;">Draw signature — use finger on touchscreen or mouse on desktop</div>
+                        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" onclick="app._submitVendorPOSignature('${refNumber}')" style="flex:1;min-width:160px;background:linear-gradient(135deg,#1B4D8E,#1e3a6e);">✓ Confirm &amp; Sign PO</button>
+                            <button class="btn btn-secondary" onclick="app._clearPOVendorCanvas()" style="min-width:100px;">Clear</button>
+                            <button class="btn btn-secondary" onclick="app._showRemoteVendorSignPO('${refNumber}')" style="min-width:160px;border-color:#1B4D8E;color:#1B4D8E;">📱 Remote Sign Link</button>
+                        </div>
+                        <div id="poVendorSignStatus" style="margin-top:16px;"></div>
+                    </div>`;
+
+                overlay.classList.add('open');
+                // Init canvas
+                const cv = document.getElementById('poVendorSigCanvas');
+                cv._hasMark = false;
+                const cctx = cv.getContext('2d');
+                cctx.strokeStyle='#1a1a2e'; cctx.lineWidth=2.4; cctx.lineCap='round'; cctx.lineJoin='round';
+                let pd=false;
+                const pp=e=>{const r=cv.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:(s.clientX-r.left)*(cv.width/r.width),y:(s.clientY-r.top)*(cv.height/r.height)};};
+                cv.addEventListener('mousedown', e=>{e.preventDefault();pd=true;const p=pp(e);cctx.beginPath();cctx.moveTo(p.x,p.y);});
+                cv.addEventListener('mousemove', e=>{e.preventDefault();if(!pd)return;cv._hasMark=true;const p=pp(e);cctx.lineTo(p.x,p.y);cctx.stroke();});
+                cv.addEventListener('mouseup',   ()=>pd=false);
+                cv.addEventListener('mouseleave',()=>pd=false);
+                cv.addEventListener('touchstart',e=>{e.preventDefault();pd=true;const p=pp(e);cctx.beginPath();cctx.moveTo(p.x,p.y);},{passive:false});
+                cv.addEventListener('touchmove', e=>{e.preventDefault();if(!pd)return;cv._hasMark=true;const p=pp(e);cctx.lineTo(p.x,p.y);cctx.stroke();},{passive:false});
+                cv.addEventListener('touchend',  ()=>pd=false);
+            },
+
+            _clearPOVendorCanvas() {
+                const c = document.getElementById('poVendorSigCanvas');
+                if (!c) return;
+                c.getContext('2d').clearRect(0,0,c.width,c.height);
+                c._hasMark = false;
+            },
+
+            async _submitVendorPOSignature(refNumber) {
+                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) return;
+                const vendorName  = document.getElementById('poVendorNameInput')?.value?.trim();
+                const vendorPhone = document.getElementById('poVendorPhoneInput')?.value?.trim();
+                const cv = document.getElementById('poVendorSigCanvas');
+                if (!vendorName) { alert('Please enter the vendor name before signing.'); return; }
+                if (!cv || !cv._hasMark) { alert('Please draw the vendor signature first.'); return; }
+                const sigData = cv.toDataURL('image/png');
+                const btn = document.querySelector('#poSignOverlay .btn.btn-primary');
+                if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+                try {
+                    const poNum = cn.poNumber || ('PO-' + refNumber);
+                    const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
+                        docRef: poNum, docType: 'purchase_order', relatedRef: refNumber,
+                        signerName: vendorName, signerRole: 'vendor',
+                        signatureData: sigData, signedAt: new Date().toISOString(),
+                        pageContext: 'vendor_po_on_device'
+                    }]);
+                    if (sigErr) throw sigErr;
+                    await this._logAudit('document_signatures', poNum, 'po_vendor_signed', `Vendor: ${vendorName}`);
+                    document.getElementById('poVendorSignStatus').innerHTML = '<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:14px 18px;color:#1B4D8E;font-weight:600;">✓ PO signed by vendor and recorded successfully.</div>';
+                    if (btn) btn.textContent = '✓ Signed';
+                    setTimeout(() => { document.getElementById('poSignOverlay')?.classList.remove('open'); this.loadData(); }, 2200);
+                } catch(e) {
+                    if (btn) { btn.disabled = false; btn.textContent = '✓ Confirm & Sign PO'; }
+                    alert('Error saving signature: ' + e.message);
+                }
+            },
+
+            async _showRemoteVendorSignPO(refNumber) {
+                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) {
+                    const { data: cnFresh, error: cnErr } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                    if (cnErr || !cnFresh) { alert('Could not load concept note.'); return; }
+                    cn = cnFresh; this.data.conceptNotes.push(cn);
+                }
+                const token = 'post_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+                const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+                const tokenPayload = {
+                    token, cnRef: refNumber,
+                    poNumber: cn.poNumber || ('PO-' + refNumber),
+                    activityTitle: cn.activityTitle,
+                    projectCode: cn.projectCode,
+                    actualCost: cn.actualProcurementCost || cn.estimatedCost,
+                    vendorsJson: cn.vendorsJson || '',
+                    createdBy: this.currentUser,
+                    expiresAt, used: false, docType: 'purchase_order'
+                };
+                try {
+                    const { error: e1 } = await supabaseClient.from('grr_signing_tokens').insert([tokenPayload]);
+                    if (e1) throw e1;
+                } catch(e) { alert('Error creating signing link: ' + e.message); return; }
+
+                const signingUrl = window.location.origin + window.location.pathname + '?poVendorSign=' + token;
+                let modal = document.getElementById('remoteSigModal');
+                if (!modal) {
+                    const ov = document.createElement('div');
+                    ov.id = 'remoteSigModalOv';
+                    ov.className = 'sig-modal-overlay';
+                    ov.innerHTML = '<div class="remote-sign-modal" id="remoteSigModal"></div>';
+                    document.body.appendChild(ov);
+                }
+                const ov = document.getElementById('remoteSigModalOv');
+                modal = document.getElementById('remoteSigModal');
+                modal.innerHTML = `
+                    <h3 style="font-family:'Archivo',sans-serif;margin-bottom:6px;">📱 Remote PO Vendor Signing Link</h3>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Share this link with the vendor. It expires in 48 hours — no login needed.</p>
+                    <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px;font-size:12px;word-break:break-all;margin-bottom:16px;font-family:monospace;">${signingUrl}</div>
+                    <div id="qrCodeDivPO" style="display:flex;justify-content:center;margin-bottom:20px;"></div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${signingUrl}').then(()=>alert('Link copied!'))">📋 Copy Link</button>
+                        <a class="btn btn-secondary" href="https://wa.me/?text=${encodeURIComponent('Please sign the Purchase Order for RAHAMA. Use this link (valid 48h): ' + signingUrl)}" target="_blank" style="display:inline-flex;align-items:center;text-decoration:none;border-color:#25D366;color:#25D366;">💬 Share via WhatsApp</a>
+                        <button class="btn btn-secondary" onclick="document.getElementById('remoteSigModalOv').classList.remove('open')" style="margin-left:auto;">Close</button>
+                    </div>`;
+                ov.classList.add('open');
+                document.getElementById('qrCodeDivPO').innerHTML = '';
+                try {
+                    new QRCode(document.getElementById('qrCodeDivPO'), { text: signingUrl, width: 180, height: 180, colorDark: '#1B4D8E', colorLight: '#fff' });
+                } catch(e) { document.getElementById('qrCodeDivPO').innerHTML = '<p style="font-size:12px;color:#999;">QR unavailable — use link above</p>'; }
+            },
+
+            // ══════════════════════════════════════════════════════════════
             // VENDOR SIGN PAGE — opened via ?vendorSign=TOKEN (no login)
             // ══════════════════════════════════════════════════════════════
             async _renderVendorSignPage(token) {
@@ -3344,6 +3678,125 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     } catch(e) {
                         if (btn) { btn.disabled=false; btn.textContent='✓ Submit Signature'; }
                         document.getElementById('rvStatus').innerHTML = '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:14px 18px;color:#B71C1C;font-size:13px;"><strong>Error:</strong> ' + e.message + '</div>';
+                    }
+                };
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // PO VENDOR SIGN PAGE — opened via ?poVendorSign=TOKEN (no login)
+            // Shows actual procurement cost, not estimated cost
+            // ══════════════════════════════════════════════════════════════
+            async _renderVendorPOSignPage(token) {
+                document.body.style.margin = '0';
+                document.querySelector('.app')?.remove();
+
+                const { data: tokenRow, error: tErr } = await supabaseClient
+                    .from('grr_signing_tokens').select('*').eq('token', token).single();
+
+                const container = document.createElement('div');
+                container.style.cssText = 'min-height:100vh;font-family:Arial,sans-serif;';
+                document.body.appendChild(container);
+
+                if (tErr || !tokenRow) {
+                    container.innerHTML = `<div style="background:#1B4D8E;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — PO Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">❌</div><h3 style="color:#B71C1C;">Invalid or Expired Link</h3><p style="color:#555;margin-top:8px;">Please contact RAHAMA procurement for a new link.</p></div>`;
+                    return;
+                }
+                if (tokenRow.used) {
+                    container.innerHTML = `<div style="background:#1B4D8E;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — PO Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">✅</div><h3 style="color:#1B4D8E;">Already Signed</h3><p style="color:#555;margin-top:8px;">This PO has already been signed. Thank you.</p></div>`;
+                    return;
+                }
+                if (new Date(tokenRow.expiresAt) < new Date()) {
+                    container.innerHTML = `<div style="background:#1B4D8E;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — PO Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">⏰</div><h3 style="color:#B71C1C;">Link Expired</h3><p style="color:#555;margin-top:8px;">Please contact RAHAMA procurement for a new link.</p></div>`;
+                    return;
+                }
+
+                let _rv = [];
+                try { if (tokenRow.vendorsJson) _rv = JSON.parse(tokenRow.vendorsJson); } catch(e){}
+                const actualTotal = _rv.length > 0
+                    ? _rv.reduce((s,v)=>s+(v.amount||0),0)
+                    : Number(tokenRow.actualCost||tokenRow.estimatedCost||0);
+                const itemRowsHtml = _rv.length > 0
+                    ? _rv.map((v,i)=>`<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">${i+1}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.items||tokenRow.activityTitle}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.invoiceNo||'—'}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">₦${Number(v.amount||0).toLocaleString()}</td></tr>`).join('')
+                    : `<tr><td style="padding:9px 12px;">1</td><td style="padding:9px 12px;">${tokenRow.activityTitle}</td><td style="padding:9px 12px;">—</td><td style="padding:9px 12px;">—</td><td style="padding:9px 12px;text-align:right;font-weight:600;">₦${actualTotal.toLocaleString()}</td></tr>`;
+
+                container.innerHTML = `
+                    <div style="background:#1B4D8E;color:#fff;padding:20px 24px;">
+                        <div style="font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — Purchase Order Vendor Signing</div>
+                        <div style="font-size:12px;opacity:.8;margin-top:4px;">PO: ${tokenRow.poNumber}</div>
+                    </div>
+                    <div style="max-width:640px;margin:0 auto;padding:24px;">
+                        <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${tokenRow.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${tokenRow.projectCode}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${tokenRow.poNumber}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Total Value (Actual)</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+                            </div>
+                        </div>
+                        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
+                            <thead><tr style="background:#1B4D8E;color:#fff;"><th style="padding:10px 12px;">#</th><th style="padding:10px 12px;">Item / Service</th><th style="padding:10px 12px;">Vendor</th><th style="padding:10px 12px;">Invoice No.</th><th style="padding:10px 12px;text-align:right;">Amount (₦)</th></tr></thead>
+                            <tbody>${itemRowsHtml}</tbody>
+                            <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px;">Total Authorised</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+                        </table>
+                        <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:14px 18px;font-size:13px;margin-bottom:20px;">
+                            <strong>Confirmation:</strong> By signing below, I confirm receipt of this Purchase Order and agree to supply the goods/services listed at the stated price.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Your Full Name *</label>
+                            <input id="pvVendorName" type="text" placeholder="Vendor representative name" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Phone Number</label>
+                            <input id="pvVendorPhone" type="tel" placeholder="0811 234 5678" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+                        </div>
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Signature *</label>
+                        <canvas id="pvSigCanvas" width="580" height="200" style="border:2px solid #1B4D8E;border-radius:8px;width:100%;touch-action:none;cursor:crosshair;background:#fafafa;display:block;"></canvas>
+                        <div style="font-size:11px;color:#777;margin-top:6px;text-align:center;">Draw your signature using finger or mouse</div>
+                        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+                            <button id="pvSubmitBtn" style="flex:1;padding:14px 24px;background:#1B4D8E;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;" onclick="window._submitRemotePOVendorSig('${token}')">✓ Submit Signature</button>
+                            <button style="padding:14px 18px;background:none;border:1px solid #ccc;border-radius:8px;font-size:14px;cursor:pointer;" onclick="window._clearPVCanvas()">Clear</button>
+                        </div>
+                        <div id="pvStatus" style="margin-top:16px;"></div>
+                    </div>`;
+
+                const pv = document.getElementById('pvSigCanvas');
+                pv._hasMark = false;
+                const pvctx = pv.getContext('2d');
+                pvctx.strokeStyle='#1a1a2e'; pvctx.lineWidth=2.4; pvctx.lineCap='round'; pvctx.lineJoin='round';
+                let pvd=false;
+                const pvp=e=>{const r=pv.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:(s.clientX-r.left)*(pv.width/r.width),y:(s.clientY-r.top)*(pv.height/r.height)};};
+                pv.addEventListener('mousedown', e=>{e.preventDefault();pvd=true;const p=pvp(e);pvctx.beginPath();pvctx.moveTo(p.x,p.y);});
+                pv.addEventListener('mousemove', e=>{e.preventDefault();if(!pvd)return;pv._hasMark=true;const p=pvp(e);pvctx.lineTo(p.x,p.y);pvctx.stroke();});
+                pv.addEventListener('mouseup',   ()=>pvd=false);
+                pv.addEventListener('mouseleave',()=>pvd=false);
+                pv.addEventListener('touchstart',e=>{e.preventDefault();pvd=true;const p=pvp(e);pvctx.beginPath();pvctx.moveTo(p.x,p.y);},{passive:false});
+                pv.addEventListener('touchmove', e=>{e.preventDefault();if(!pvd)return;pv._hasMark=true;const p=pvp(e);pvctx.lineTo(p.x,p.y);pvctx.stroke();},{passive:false});
+                pv.addEventListener('touchend',  ()=>pvd=false);
+
+                window._clearPVCanvas = ()=>{ pvctx.clearRect(0,0,pv.width,pv.height); pv._hasMark=false; };
+                window._submitRemotePOVendorSig = async (tok) => {
+                    const name  = document.getElementById('pvVendorName')?.value?.trim();
+                    const phone = document.getElementById('pvVendorPhone')?.value?.trim();
+                    if (!name) { alert('Please enter your name.'); return; }
+                    if (!pv._hasMark) { alert('Please draw your signature.'); return; }
+                    const btn = document.getElementById('pvSubmitBtn');
+                    if (btn) { btn.disabled=true; btn.textContent='Submitting…'; }
+                    try {
+                        const sigData = pv.toDataURL('image/png');
+                        const { data: tr, error: trErr } = await supabaseClient.from('grr_signing_tokens').select('*').eq('token',tok).single();
+                        if (trErr || !tr) throw new Error('Could not verify signing link. ' + (trErr?.message||''));
+                        if (tr.used) { document.getElementById('pvStatus').innerHTML='<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:16px;color:#1B4D8E;font-weight:600;text-align:center;">✅ Already signed. Thank you.</div>'; if(btn){btn.disabled=true;btn.textContent='Already Signed';} return; }
+                        if (new Date(tr.expiresAt) < new Date()) throw new Error('Link expired.');
+                        const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
+                            docRef: tr.poNumber, docType: 'purchase_order', relatedRef: tr.cnRef,
+                            signerName: name, signerRole: 'vendor', signatureData: sigData,
+                            signedAt: new Date().toISOString(), pageContext: 'vendor_po_remote'
+                        }]);
+                        if (sigErr) throw new Error('Failed to save signature: ' + sigErr.message);
+                        await supabaseClient.from('grr_signing_tokens').update({ used: true, vendorName: name, vendorPhone: phone||null, signedAt: new Date().toISOString() }).eq('token', tok);
+                        document.getElementById('pvStatus').innerHTML='<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:16px;color:#1B4D8E;font-weight:600;font-size:15px;text-align:center;">✅ Signature received. You may now close this page.</div>';
+                        if (btn) btn.textContent='✓ Submitted';
+                    } catch(e) {
+                        if (btn) { btn.disabled=false; btn.textContent='✓ Submit Signature'; }
+                        document.getElementById('pvStatus').innerHTML='<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:14px;color:#B71C1C;font-size:13px;"><strong>Error:</strong> '+e.message+'</div>';
                     }
                 };
             },
@@ -3490,9 +3943,12 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 </style></head><body>
 <button class="no-print" onclick="window.print()" style="margin-bottom:20px;padding:10px 24px;background:#285B3C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🖨 Print / Save as PDF</button>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
-  <div>
-    <h1>PURCHASE ORDER</h1>
-    <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width:64px;height:64px;object-fit:contain;" onerror="this.style.display='none'">
+    <div>
+      <h1>PURCHASE ORDER</h1>
+      <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
+    </div>
   </div>
   <div style="text-align:right;">
     <div class="label">PO Number</div><div class="value" style="font-size:16px;color:#285B3C;">${poNum}</div>
@@ -3557,12 +4013,13 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 const staffSig = allSigs.find(s => s.pageContext === 'staff_grr_verify');
                 const finSig   = allSigs.find(s => s.pageContext === 'finance_sign');
 
-                // Vendor sig: DB record (has real signatureData) takes priority over
+                // Vendor sigs: all DB records (have real signatureData) take priority over
                 // concept_note fallback (which has name/timestamp but no image)
-                const vendorSig = allSigs.find(s => s.signerRole === 'vendor')
-                    || (cn.grrVendorSignedAt
-                        ? { signatureData: null, signerName: cn.grrVendorName, signedAt: cn.grrVendorSignedAt }
-                        : null);
+                const vendorSigsAll = allSigs.filter(s => s.signerRole === 'vendor');
+                const vendorSigFallback = cn.grrVendorSignedAt
+                    ? [{ signatureData: null, signerName: cn.grrVendorName, signedAt: cn.grrVendorSignedAt }]
+                    : [];
+                const allVendorSigs = vendorSigsAll.length > 0 ? vendorSigsAll : vendorSigFallback;
 
                 const _sigBox = (label, sig) => {
                     if (!sig) return `<div>
@@ -3622,13 +4079,16 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
   tfoot td{background:#E8F5E9;font-weight:700;}
   .label{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
   .value{font-weight:600;font-size:13px;}
-  .sig-grid{margin-top:48px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:24px;}
+  .sig-grid{margin-top:48px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px;}
 </style></head><body>
 <button class="no-print" onclick="window.print()" style="margin-bottom:20px;padding:10px 24px;background:#285B3C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🖨 Print / Save as PDF</button>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
-  <div>
-    <h1>GOODS / SERVICES RECEIVING REPORT</h1>
-    <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width:64px;height:64px;object-fit:contain;" onerror="this.style.display='none'">
+    <div>
+      <h1>GOODS / SERVICES RECEIVING REPORT</h1>
+      <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
+    </div>
   </div>
   <div style="text-align:right;">
     <div class="label">GRR Number</div><div class="value" style="font-size:16px;color:#285B3C;">${grrNum}</div>
@@ -3652,7 +4112,8 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 <div class="sig-grid">
   ${_sigBox('1. Received By (Procurement)', procSig)}
   ${_sigBox('2. Verified By (Programme Staff)', staffSig)}
-  ${_sigBox('3. Vendor Representative', vendorSig)}
+  ${_sigBox('3. Vendor Representative', allVendorSigs[0] || null)}
+  ${allVendorSigs.slice(1).map((vs, i) => _sigBox(`3.${i+2} Vendor Representative`, vs)).join('\n  ')}
   ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
 <div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
