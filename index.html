@@ -1446,11 +1446,16 @@
                             this.data.conceptNotes.push(c);
                     });
                 }
-                // Also fetch variance_rejected CNs for procurement
+                // Also fetch variance_rejected AND finance-rejected CNs for procurement
                 if (role === 'procurement') {
                     const { data: vrej } = await supabaseClient.from('concept_notes').select('*')
-                        .in('status', ['variance_rejected']).eq('currentApprover', 'procurement');
-                    (vrej || []).forEach(c => {
+                        .eq('status', 'variance_rejected').eq('currentApprover', 'procurement');
+                    // Finance-rejected procurement payments reset CN to status='pending' + currentApprover='procurement'
+                    // but these won't appear in the normal loadData query (which filters by staffName for procurement)
+                    const { data: finRej } = await supabaseClient.from('concept_notes').select('*')
+                        .eq('status', 'pending').eq('currentApprover', 'procurement')
+                        .not('financeRejectionReason', 'is', null);
+                    [...(vrej || []), ...(finRej || [])].forEach(c => {
                         if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
                             this.data.conceptNotes.push(c);
                     });
