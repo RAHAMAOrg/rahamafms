@@ -247,7 +247,9 @@
         const STORAGE_BUCKET = 'fms-documents';
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = (typeof supabase !== 'undefined')
+            ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+            : null;
         
         const app = {
             currentUser: '',
@@ -278,6 +280,16 @@
             
             async init() {
                 this.loadStartTime = Date.now();
+                // ── Guard: show error if Supabase CDN failed to load ──
+                if (!supabaseClient) {
+                    document.getElementById('mainContent').innerHTML = `
+                        <div style="padding:48px;text-align:center;">
+                            <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+                            <h2 style="font-family:'Archivo',sans-serif;color:#D32F2F;margin-bottom:12px;">Database connection unavailable</h2>
+                            <p style="color:#616161;max-width:480px;margin:0 auto;">The Supabase library could not be loaded. This usually happens in sandboxed preview environments.<br><br>Please open the file directly in your browser or deploy it to your server to use the full app.</p>
+                        </div>`;
+                    return;
+                }
                 // ── Vendor signing intercept — no login needed ──
                 const _initParams = new URLSearchParams(window.location.search);
                 const _vendorToken = _initParams.get('vendorSign');
@@ -1050,6 +1062,21 @@
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting concept note: ' + error.message); if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Concept Note'; } }
             },
             
+            // ── BO approve button renderer (avoids nested backtick syntax error) ──
+            _renderBOApproveButtons(cn) {
+                const proj = this.data.projects.find(p => p.code === cn.projectCode);
+                const lim = (proj && proj.budgetLimit_bo) || 1000000;
+                const ref = cn.refNumber;
+                const procSuffix = cn.requiresProcurement === 'yes' ? ' → Procurement' : '';
+                if (cn.estimatedCost <= lim) {
+                    return '<button class="action-btn approve" onclick="app.approveConceptNote(\'' + ref + '\', \'approve_under_1m\')">✓ Approve' + procSuffix + '</button>'
+                         + '<button class="action-btn approve" onclick="app.approveConceptNote(\'' + ref + '\', \'approve_with_note\')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>';
+                } else {
+                    return '<button class="action-btn approve" onclick="app.approveConceptNote(\'' + ref + '\', \'approve_needs_ed\')" style="background:#E8F5E9;border-color:#285B3C;color:#1B5E20;">✍️ Sign &amp; Forward to ED (over ₦' + lim.toLocaleString() + ')</button>'
+                         + '<div style="font-size:11px;color:#555;margin-top:3px;">Your signature will be captured first</div>';
+                }
+            },
+
             // ── Concept Note Budget Table helpers ──────────────────────────
             recalcCNBudgetRow(id) {
                 const amt = parseFloat(document.getElementById('cn_amt_' + id)?.value) || 0;
@@ -1723,10 +1750,10 @@
                         </tr>`).join('')}
                         </tbody></table></div>
                     </div>` : ''}
-                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${cn.estimatedCost <= 1000000 ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_under_1m')">✓ Approve${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button><button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_with_note')" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>` : `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'approve_needs_ed')" style="background:#E8F5E9;border-color:#285B3C;color:#1B5E20;">✍️ Sign &amp; Forward to ED (over limit)</button><div style="font-size:11px;color:#555;margin-top:3px;">Your signature will be captured first</div>`}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? (cn.status === 'variance_rejected' ? `<button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">${cn.rejectionReason||''}</div>` : cn.financeRejectionReason ? `<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;padding:6px 10px;margin-bottom:6px;max-width:200px;"><div style="font-size:11px;font-weight:700;color:#B71C1C;">⚠️ Finance Rejected</div><div style="font-size:11px;color:#C62828;margin-top:2px;">${cn.financeRejectionReason.length > 60 ? cn.financeRejectionReason.slice(0,60)+'…' : cn.financeRejectionReason}</div></div><button class="action-btn" onclick="app.showProcurementUpload('${cn.refNumber}')" style="background:#FFEBEE;border-color:#C62828;color:#B71C1C;">↩ Fix & Resubmit to Finance</button>` : `<button class="action-btn approve" onclick="app.showProcurementUpload('${cn.refNumber}')">✓ Complete & Forward to Finance</button>`) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}<button class="action-btn approve" onclick="app.processPayment('${p.refNumber}')">✓ Process Payment</button><button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br><button class="action-btn approve" onclick="app.approveRetirement('${r.refNumber}')">✓ Approve Retirement</button><button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
+                    ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : cn.boPreApprovedAt && cn.budgetOwnerApprovedBy === this.currentUser ? { label: 'Pre-approved → ED', date: cn.boPreApprovedAt, cls: 'status-pending' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
                     ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
                     ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected.</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Retirement Ref</th><th>Payment Ref</th><th>Staff</th><th>Amount Spent</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyRetirements.map(r => { const linkedCN = app.data.conceptNotes.find(c => app.data.payments.find(p => p.refNumber===r.paymentRef && p.conceptNoteRef===c.refNumber)); const cnRef = linkedCN?.refNumber; return `<tr><td>${r.refNumber}</td><td>${r.paymentRef}</td><td>${r.staffName}</td><td>₦${Number(r.actualSpent||0).toLocaleString()}</td><td><span class="status-badge ${r.status==='approved'?'status-approved':'status-rejected'}">${r.status==='approved'?'Approved':'Rejected'}</span></td><td>${r.status==='approved'?(r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'-'):(r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
             },
@@ -1970,6 +1997,8 @@
                 <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods / Services Supplied <span style="color:var(--danger)">*</span></label><input type="text" id="vItems_1" placeholder="What was purchased or provided" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                 <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Invoice / Receipt No.</label><input type="text" id="vInvoice_1" placeholder="Invoice number" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                 <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Amount (₦)</label><input type="number" id="vAmount_1" min="0" step="0.01" placeholder="0" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._recalcVendorTotal()"></div>
+                <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quantity Received <span style="color:var(--danger)">*</span></label><input type="number" id="vQty_1" min="1" step="1" value="1" placeholder="e.g. 10" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition <span style="color:var(--danger)">*</span></label><select id="vQuality_1" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good">✅ Good</option><option value="Partial">⚠️ Partial / Minor Issues</option><option value="Poor">❌ Poor / Rejected</option></select></div>
                 <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_1" rows="2" placeholder="Optional" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;"></textarea></div>
             </div>
         </div>
@@ -2209,7 +2238,7 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                         accountName, accountNumber, bankName,
                         status: 'pending',
                         requestDate: now,
-                        procurementComplete: true,
+                        procurementComplete: now,
                         retirementresponsibility: 'procurement'
                     };
                     const { data: payData, error: payError } = await supabaseClient
@@ -3144,16 +3173,9 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 try { if (cn.vendorsJson) _grrVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
                 const itemRows = cn.requiresProcurement === 'yes'
                     ? (_grrVendors.length > 0
-                        ? _grrVendors.map((v, i) => `<tr>
-                            <td>${i+1}</td>
-                            <td>${v.items || cn.activityTitle}</td>
-                            <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
-                            <td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td>
-                            <td style="text-align:center">1</td>
-                            <td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td>
-                          </tr>`).join('')
-                        : `<tr><td>1</td><td>${cn.vendorItemsSupplied || cn.activityTitle}</td><td>${cn.grrVendorName || '—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td></tr>`)
-                    : '<tr><td colspan="6" style="text-align:center;color:#999;">No procurement items</td></tr>';
+                        ? _grrVendors.map((v, i) => { const qty = v.qty||1; const qualityBadge = v.quality==='Good'?'<span style="color:#047857;font-weight:700;">✅ Good</span>':v.quality==='Poor'?'<span style="color:#DC2626;font-weight:700;">❌ Poor</span>':'<span style="color:#D97706;font-weight:700;">⚠️ Partial</span>'; return `<tr><td>${i+1}</td><td>${v.items || cn.activityTitle}</td><td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:right">₦${(Number(v.amount||0)*qty).toLocaleString()}</td><td style="text-align:center">${qualityBadge}</td></tr>`; }).join('')
+                        : `<tr><td>1</td><td>${cn.vendorItemsSupplied || cn.activityTitle}</td><td>${cn.grrVendorName || '—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center"><span style="color:#047857;font-weight:700;">✅ Good</span></td></tr>`)
+                    : '<tr><td colspan="7" style="text-align:center;color:#999;">No procurement items</td></tr>';
                 const _grrTotal = _grrVendors.length > 0
                     ? _grrVendors.reduce((s, v) => s + (v.amount || 0), 0)
                     : Number(cn.actualProcurementCost || cn.estimatedCost);
@@ -3179,9 +3201,9 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
 
                         <h4 style="font-family:'Archivo',sans-serif;margin-bottom:10px;">Items Delivered / Services Rendered</h4>
                         <table class="vendor-items-table">
-                            <thead><tr><th>#</th><th>Description</th><th>Details</th><th style="text-align:right">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th></tr></thead>
+                            <thead><tr><th>#</th><th>Description</th><th>Details</th><th style="text-align:right">Unit Price</th><th style="text-align:center">Qty</th><th style="text-align:right">Total</th><th style="text-align:center">Quality</th></tr></thead>
                             <tbody>${itemRows}</tbody>
-                            <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;padding:10px 12px;">Total Value</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${_grrTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+                            <tfoot><tr><td colspan="6" style="text-align:right;font-weight:700;padding:10px 12px;">Total Value</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${_grrTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
                         </table>
 
                         <div class="vendor-confirm-box">
@@ -4048,21 +4070,21 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 let vendors = [];
                 try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e){}
                 const itemRows = vendors.length > 0
-                    ? vendors.map(v => `<tr>
+                    ? vendors.map(v => { const qty=v.qty||1; const qBadge=v.quality==='Poor'?'❌ Poor':v.quality==='Partial'?'⚠️ Partial':'✅ Good'; return `<tr>
                         <td>${v.items||cn.activityTitle}</td>
                         <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
                         <td>${v.invoiceNo||'—'}</td>
-                        <td>1</td><td>___</td>
+                        <td style="text-align:center;">${qty}</td><td style="text-align:center;">${qty}</td>
                         <td style="text-align:right;">₦${Number(v.amount||0).toLocaleString()}</td>
-                        <td>Good ☐ Damaged ☐</td>
-                      </tr>`).join('')
+                        <td style="text-align:center;">${qBadge}</td>
+                      </tr>`; }).join('')
                     : `<tr>
                         <td>${cn.vendorItemsSupplied||cn.activityTitle}</td>
                         <td>${cn.grrVendorName||'—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td>
                         <td>${cn.vendorInvoiceNo||'—'}</td>
-                        <td>1</td><td>___</td>
+                        <td style="text-align:center;">1</td><td style="text-align:center;">1</td>
                         <td style="text-align:right;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td>
-                        <td>Good ☐ Damaged ☐</td>
+                        <td style="text-align:center;">✅ Good</td>
                       </tr>`;
                 const totalAmt = vendors.length > 0
                     ? vendors.reduce((s,v) => s+(v.amount||0), 0)
@@ -4353,7 +4375,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                             accountName: cn.accountName, accountNumber: cn.accountNumber, bankName: cn.bankName,
                             status: 'pending',
                             requestDate: new Date().toISOString(),
-                            procurementComplete: true,
+                            procurementComplete: new Date().toISOString(),
                             retirementresponsibility: 'procurement'
                         };
                         const { data: payData, error: payError } = await supabaseClient.from('payments').insert([payRecord]).select();
@@ -5035,6 +5057,8 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                         <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods/Services Supplied *</label><input type="text" id="vItems_${id}" placeholder="What was purchased" style="${s}"></div>
                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Invoice No.</label><input type="text" id="vInvoice_${id}" placeholder="Invoice number" style="${s}"></div>
                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Amount (₦)</label><input type="number" id="vAmount_${id}" min="0" step="0.01" placeholder="0" style="${s}" oninput="app._recalcVendorTotal()"></div>
+                        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quantity Received *</label><input type="number" id="vQty_${id}" min="1" step="1" value="1" placeholder="e.g. 10" style="${s}"></div>
+                        <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition *</label><select id="vQuality_${id}" style="${s}background:white;"><option value="Good">✅ Good</option><option value="Partial">⚠️ Partial / Minor Issues</option><option value="Poor">❌ Poor / Rejected</option></select></div>
                         <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address/Contact</label><textarea id="vAddress_${id}" rows="2" placeholder="Optional" style="${s}resize:vertical;min-height:60px;"></textarea></div>
                     </div>`;
                 container.appendChild(div);
@@ -5076,6 +5100,8 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                         items:     (document.getElementById('vItems_'   + id)?.value || '').trim(),
                         invoiceNo: (document.getElementById('vInvoice_' + id)?.value || '').trim(),
                         amount:    parseFloat(document.getElementById('vAmount_'  + id)?.value) || 0,
+                        qty:       parseInt(document.getElementById('vQty_'     + id)?.value)   || 1,
+                        quality:   (document.getElementById('vQuality_' + id)?.value || 'Good'),
                         address:   (document.getElementById('vAddress_' + id)?.value || '').trim(),
                     });
                 });
@@ -5109,7 +5135,17 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
         
         window.addEventListener('DOMContentLoaded', () => {
             app.init();
+            // Strip commas from number inputs globally — prevents "1,000" being read as "1"
+            document.addEventListener('input', (e) => {
+                if (e.target.type === 'number' || e.target.dataset.numericInput) {
+                    const v = e.target.value;
+                    if (v.includes(',')) e.target.value = v.replace(/,/g, '');
+                }
+            });
             document.addEventListener('keydown', (e) => {
+                if ((e.target.type === 'number' || e.target.dataset.numericInput) && e.key === ',') {
+                    e.preventDefault();
+                }
                 if (e.altKey) {
                     switch(e.key.toLowerCase()) {
                         case 'd': e.preventDefault(); app.showView('dashboard'); break;
