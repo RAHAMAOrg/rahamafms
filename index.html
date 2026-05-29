@@ -243,11 +243,13 @@
     
     <script>
         const SUPABASE_URL = "https://sqygmoxpegbfxddglhbx.supabase.co";
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxeWdtb3hwZWdiZnhkZGdsaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTYzNTcsImV4cCI6MjA4NjU3MjM1N30.Oi3Vhw4q4F58cyb1yhJ90fcjGIVNwp34CqMtfxswkr8";
+        const SUPABASE_ANON_KEY = "sb_publishable__nPBgo9IeeU4Mrk_ggEeTg_YEkWrB24";
         const STORAGE_BUCKET = 'fms-documents';
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = (typeof supabase !== 'undefined')
+            ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+            : null;
         
         const app = {
             currentUser: '',
@@ -278,6 +280,16 @@
             
             async init() {
                 this.loadStartTime = Date.now();
+                // ── Guard: show error if Supabase CDN failed to load ──
+                if (!supabaseClient) {
+                    document.getElementById('mainContent').innerHTML = `
+                        <div style="padding:48px;text-align:center;">
+                            <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+                            <h2 style="font-family:'Archivo',sans-serif;color:#D32F2F;margin-bottom:12px;">Database connection unavailable</h2>
+                            <p style="color:#616161;max-width:480px;margin:0 auto;">The Supabase library could not be loaded. This usually happens in sandboxed preview environments.<br><br>Please open the file directly in your browser or deploy it to your server to use the full app.</p>
+                        </div>`;
+                    return;
+                }
                 // ── Vendor signing intercept — no login needed ──
                 const _initParams = new URLSearchParams(window.location.search);
                 const _vendorToken = _initParams.get('vendorSign');
@@ -599,7 +611,7 @@
                         case 'conceptNote': this.renderConceptNoteForm(content).catch(e => console.error(e)); break;
                         case 'payment': this.renderPaymentForm(content); break;
                         case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
-                        case 'approvals': this.loadData().then(() => this.renderApprovals(content).catch(e => console.error(e))); break;
+                        case 'approvals': this.renderApprovals(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
                         case 'settings': this.renderSettings(content); break;
                     }
