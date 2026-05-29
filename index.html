@@ -1611,6 +1611,30 @@
                 }
                 // Add after the existing variance_rejected fetch for procurement
 if (role === 'procurement') {
+    // Step 1: Find payments that Finance rejected for procurement CNs
+    // This catches historical cases where the CN was never updated with financeRejectionReason
+    const { data: rejectedPays } = await supabaseClient
+        .from('payments')
+        .select('conceptNoteRef, rejectionReason, rejectedDate, rejectedBy')
+        .eq('status', 'rejected')
+        .eq('retirementresponsibility', 'procurement')
+        .not('conceptNoteRef', 'is', null);
+
+    if (rejectedPays && rejectedPays.length > 0) {
+        for (const rp of rejectedPays) {
+            if (!rp.conceptNoteRef) continue;
+            // Only patch CNs where financeRejectionReason was never written
+            await supabaseClient.from('concept_notes').update({
+                currentApprover: 'procurement',
+                financeRejectionReason: rp.rejectionReason || 'Rejected by Finance',
+                financeRejectedAt: rp.rejectedDate || new Date().toISOString(),
+                financeRejectedBy: rp.rejectedBy || 'Finance'
+            }).eq('refNumber', rp.conceptNoteRef)
+              .is('financeRejectionReason', null); // only patch if not already set
+        }
+    }
+
+    // Step 2: Fetch CNs where Finance rejected (now includes patched historical ones)
     const { data: finRejected } = await supabaseClient
         .from('concept_notes')
         .select('*')
@@ -1620,9 +1644,14 @@ if (role === 'procurement') {
     (finRejected || []).forEach(c => {
         if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
             this.data.conceptNotes.push(c);
+        else {
+            // Update existing cache entry so filter sees latest financeRejectionReason
+            const idx = this.data.conceptNotes.findIndex(x => x.refNumber === c.refNumber);
+            if (idx !== -1) this.data.conceptNotes[idx] = c;
+        }
     });
 
-    // Also catch anything routed to procurement that isn't pending
+    // Step 3: Also catch anything routed to procurement that isn't pending
     const { data: allProcCNs } = await supabaseClient
         .from('concept_notes')
         .select('*')
@@ -1656,7 +1685,8 @@ if (role === 'procurement') {
     if (cn.currentApprover !== 'procurement') return false;
     const actionableStatuses = ['pending', 'variance_rejected', 'finance_rejected', 'approved'];
     // approved but procurementComplete not set means procurement still needs to act
-    if (cn.status === 'approved' && cn.procurementComplete) return false;
+    // Exception: finance-rejected CNs always show even if procurementComplete is set
+    if (cn.status === 'approved' && cn.procurementComplete && !cn.financeRejectionReason) return false;
     return actionableStatuses.includes(cn.status)
         || !!cn.financeRejectionReason; // finance-rejected always shows
 });
