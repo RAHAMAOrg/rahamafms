@@ -1609,6 +1609,31 @@
                             this.data.conceptNotes.push(c);
                     });
                 }
+                // Add after the existing variance_rejected fetch for procurement
+if (role === 'procurement') {
+    const { data: finRejected } = await supabaseClient
+        .from('concept_notes')
+        .select('*')
+        .eq('currentApprover', 'procurement')
+        .not('financeRejectionReason', 'is', null);
+    
+    (finRejected || []).forEach(c => {
+        if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
+            this.data.conceptNotes.push(c);
+    });
+
+    // Also catch anything routed to procurement that isn't pending
+    const { data: allProcCNs } = await supabaseClient
+        .from('concept_notes')
+        .select('*')
+        .eq('currentApprover', 'procurement')
+        .in('status', ['pending', 'approved', 'variance_rejected']);
+    
+    (allProcCNs || []).forEach(c => {
+        if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
+            this.data.conceptNotes.push(c);
+    });
+}
                 // Also fetch variance_rejected CNs for procurement
                 if (role === 'procurement') {
                     const { data: vrej } = await supabaseClient.from('concept_notes').select('*')
@@ -1618,15 +1643,23 @@
                             this.data.conceptNotes.push(c);
                     });
                 }
-                const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
-                    // Include finance-rejected procurement CNs so they reappear for Procurement
-                    const isFinanceRejected = cn.financeRejectionReason && cn.status === 'pending' && cn.currentApprover === 'procurement';
-                    if (!['pending','variance_rejected'].includes(cn.status) && !isFinanceRejected) return false;
-                    if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
-                    if (role === 'ed' && cn.currentApprover === 'ed') return true;
-                    if (role === 'procurement' && cn.currentApprover === 'procurement') return true;
-                    return false;
-                });
+              const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
+    if (role !== 'procurement') {
+        // Non-procurement roles: existing logic unchanged
+        const isFinanceRejected = cn.financeRejectionReason && cn.status === 'pending' && cn.currentApprover === 'procurement';
+        if (!['pending','variance_rejected'].includes(cn.status) && !isFinanceRejected) return false;
+        if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner') return true;
+        if (role === 'ed' && cn.currentApprover === 'ed') return true;
+        return false;
+    }
+    // Procurement: show anything routed to them regardless of status
+    if (cn.currentApprover !== 'procurement') return false;
+    const actionableStatuses = ['pending', 'variance_rejected', 'approved'];
+    // approved but procurementComplete not set means procurement still needs to act
+    if (cn.status === 'approved' && cn.procurementComplete) return false;
+    return actionableStatuses.includes(cn.status)
+        || !!cn.financeRejectionReason; // finance-rejected always shows
+});
                 const allCNs = this.data.conceptNotes;
                 const pendingPayments = this.data.payments.filter(p => p.status === 'pending' && role === 'finance');
                 const pendingRetirements = this.data.retirements.filter(r => r.status === 'pending' && role === 'finance');
