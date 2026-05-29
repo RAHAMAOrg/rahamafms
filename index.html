@@ -1654,7 +1654,7 @@ if (role === 'procurement') {
     }
     // Procurement: show anything routed to them regardless of status
     if (cn.currentApprover !== 'procurement') return false;
-    const actionableStatuses = ['pending', 'variance_rejected', 'approved'];
+    const actionableStatuses = ['pending', 'variance_rejected', 'finance_rejected', 'approved'];
     // approved but procurementComplete not set means procurement still needs to act
     if (cn.status === 'approved' && cn.procurementComplete) return false;
     return actionableStatuses.includes(cn.status)
