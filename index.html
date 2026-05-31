@@ -3439,14 +3439,74 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             // PO VENDOR SIGNING — on-device + remote (like GRR)
             // Shows actual procurement cost, NOT the original estimated cost
             // ══════════════════════════════════════════════════════════════
-            async vendorSignPO(refNumber) {
+            async vendorSignPO(refNumber, vendorIndex) {
+                // vendorIndex: 0-based index into vendorsJson array.
+                // If undefined and there are multiple vendors, show a picker first.
                 let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) {
                     const { data: cnFresh } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
                     if (!cnFresh) { alert('Concept note not found.'); return; }
                     cn = cnFresh; this.data.conceptNotes.push(cn);
                 }
-                const poNum = cn.poNumber || ('PO-' + refNumber);
+
+                let _poVendors = [];
+                try { if (cn.vendorsJson) _poVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+
+                // ── If multiple vendors and no index given, show a picker ──
+                if (_poVendors.length > 1 && vendorIndex === undefined) {
+                    let overlay = document.getElementById('poSignOverlay');
+                    if (!overlay) {
+                        overlay = document.createElement('div');
+                        overlay.id = 'poSignOverlay';
+                        overlay.className = 'po-sign-overlay';
+                        document.body.appendChild(overlay);
+                    }
+                    overlay.innerHTML = `
+                        <div class="vendor-sign-header" style="background:#1B4D8E;">
+                            <div style="font-size:20px;">🛒</div>
+                            <div><h2>Select Vendor to Sign PO</h2>
+                            <div style="font-size:12px;opacity:.8;">Each vendor must sign their own Purchase Order</div></div>
+                            <button onclick="document.getElementById('poSignOverlay').classList.remove('open')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+                        </div>
+                        <div class="vendor-sign-body">
+                            <p style="color:#555;font-size:13px;margin-bottom:20px;">This procurement has ${_poVendors.length} vendors. Each vendor signs their own PO. Select which vendor is signing now:</p>
+                            <div style="display:flex;flex-direction:column;gap:12px;">
+                                ${_poVendors.map((v,i) => {
+                                    const vpNum = (cn.poNumber || ('PO-'+refNumber)) + '-V' + (i+1);
+                                    return `<button onclick="document.getElementById('poSignOverlay').classList.remove('open');app.vendorSignPO('${refNumber}',${i})"
+                                        style="background:#EEF2FF;border:2px solid #C7D2FE;border-radius:10px;padding:16px 20px;text-align:left;cursor:pointer;transition:all .2s;"
+                                        onmouseover="this.style.borderColor='#1B4D8E';this.style.background='#E0E7FF'"
+                                        onmouseout="this.style.borderColor='#C7D2FE';this.style.background='#EEF2FF'">
+                                        <div style="font-weight:700;color:#1B4D8E;font-size:14px;">${v.name}</div>
+                                        <div style="font-size:12px;color:#555;margin-top:4px;">${v.items||cn.activityTitle} · ₦${Number(v.amount||0).toLocaleString()} · PO: ${vpNum}</div>
+                                        <div style="font-size:11px;color:#7B7B7B;margin-top:2px;">${v.phone||''}</div>
+                                    </button>`;
+                                }).join('')}
+                                <div style="margin-top:12px;padding-top:12px;border-top:1px solid #E5E7EB;">
+                                    <p style="font-size:12px;color:#777;margin-bottom:10px;">Or generate a remote signing link for a specific vendor:</p>
+                                    ${_poVendors.map((v,i) => `
+                                        <button onclick="app._showRemoteVendorSignPO('${refNumber}',${i})"
+                                            style="padding:8px 14px;background:none;border:1px solid #1B4D8E;border-radius:8px;color:#1B4D8E;font-size:12px;font-weight:600;cursor:pointer;margin-right:8px;margin-bottom:8px;">
+                                            📱 Remote link — ${v.name}
+                                        </button>`).join('')}
+                                </div>
+                            </div>
+                        </div>`;
+                    overlay.classList.add('open');
+                    return;
+                }
+
+                // ── Single vendor or specific vendor chosen ────────────────
+                const vi = vendorIndex !== undefined ? vendorIndex : 0;
+                const v  = _poVendors.length > 0 ? _poVendors[vi] : null;
+
+                const basePoNum   = cn.poNumber || ('PO-' + refNumber);
+                const vendorPoNum = _poVendors.length > 1 ? (basePoNum + '-V' + (vi+1)) : basePoNum;
+                const vendorTotal = v ? (Number(v.amount||0) * (v.qty||1))
+                                      : Number(cn.actualProcurementCost || cn.estimatedCost);
+                const grandTotal  = _poVendors.length > 0
+                    ? _poVendors.reduce((s,vv) => s + (Number(vv.amount||0) * (vv.qty||1)), 0)
+                    : vendorTotal;
 
                 let overlay = document.getElementById('poSignOverlay');
                 if (!overlay) {
@@ -3456,63 +3516,61 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     document.body.appendChild(overlay);
                 }
 
-                // Build vendor rows using actual procurement cost from vendorsJson
-                let _poVendors = [];
-                try { if (cn.vendorsJson) _poVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
-                const actualTotal = _poVendors.length > 0
-                    ? _poVendors.reduce((s, v) => s + (v.amount || 0), 0)
-                    : Number(cn.actualProcurementCost || cn.estimatedCost);
-                const itemRows = _poVendors.length > 0
-                    ? _poVendors.map((v, i) => `<tr>
-                        <td>${i+1}</td>
-                        <td>${v.items || cn.activityTitle}</td>
-                        <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
-                        <td>${v.invoiceNo||'—'}</td>
-                        <td style="text-align:right;font-weight:600;">₦${Number(v.amount||0).toLocaleString()}</td>
-                      </tr>`).join('')
-                    : `<tr><td>1</td><td>${cn.vendorItemsSupplied||cn.activityTitle}</td><td>${cn.grrVendorName||'—'}</td><td>${cn.vendorInvoiceNo||'—'}</td><td style="text-align:right;font-weight:600;">₦${actualTotal.toLocaleString()}</td></tr>`;
-
                 overlay.innerHTML = `
                     <div class="vendor-sign-header" style="background:#1B4D8E;">
                         <div style="width:36px;height:36px;background:rgba(255,255,255,.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;">🛒</div>
                         <div>
                             <h2>Purchase Order — Vendor Acknowledgement</h2>
-                            <div style="font-size:12px;opacity:.8;">RAHAMA Girl Child &amp; Women Empowerment Initiative — ${poNum}</div>
+                            <div style="font-size:12px;opacity:.8;">RAHAMA Girl Child &amp; Women Empowerment Initiative — ${vendorPoNum}</div>
                         </div>
                         <button onclick="document.getElementById('poSignOverlay').classList.remove('open')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
                     </div>
                     <div class="vendor-sign-body">
+                        ${_poVendors.length > 1 ? `<div style="background:#E8EEF8;border:1px solid #C7D2FE;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#1B4D8E;font-weight:600;">
+                            📄 PO ${vi+1} of ${_poVendors.length} — Vendor: <strong>${v?.name}</strong>
+                            &nbsp;|&nbsp; Grand Total: ₦${grandTotal.toLocaleString()}
+                            <button onclick="document.getElementById('poSignOverlay').classList.remove('open');app.vendorSignPO('${refNumber}')"
+                                style="margin-left:12px;background:none;border:1px solid #1B4D8E;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;color:#1B4D8E;">← Change Vendor</button>
+                        </div>` : ''}
                         <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${cn.activityTitle}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${cn.projectCode}</div></div>
-                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${poNum}</div></div>
-                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Total Value (Actual)</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${vendorPoNum}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">${_poVendors.length > 1 ? 'This Vendor Amount' : 'Total Value (Actual)'}</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
                             </div>
                         </div>
                         <h4 style="font-family:'Archivo',sans-serif;margin-bottom:10px;">Items / Services on this Purchase Order</h4>
                         <table class="vendor-items-table" style="border:1px solid #c7d9ff;">
-                            <thead style="background:#1B4D8E;"><tr><th>#</th><th>Description</th><th>Vendor</th><th>Invoice No.</th><th style="text-align:right;">Amount (₦)</th></tr></thead>
-                            <tbody>${itemRows}</tbody>
-                            <tfoot><tr style="background:#e8eeff;"><td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px;">Total Authorised</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+                            <thead style="background:#1B4D8E;"><tr><th>Description</th><th>Vendor</th><th>Invoice No.</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Amount (₦)</th></tr></thead>
+                            <tbody>
+                                <tr>
+                                    <td>${v ? (v.items || cn.activityTitle) : (cn.vendorItemsSupplied||cn.activityTitle)}</td>
+                                    <td>${v ? v.name : (cn.grrVendorName||'—')}<br><span style="font-size:11px;color:#777;">${v ? (v.phone||'') : (cn.grrVendorPhone||'')}</span></td>
+                                    <td>${v ? (v.invoiceNo||'—') : (cn.vendorInvoiceNo||'—')}</td>
+                                    <td style="text-align:center;">${v ? (v.qty||1) : 1}</td>
+                                    <td style="text-align:right;font-weight:600;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                                </tr>
+                            </tbody>
+                            <tfoot><tr style="background:#e8eeff;"><td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px;">Amount Authorised</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
                         </table>
                         <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:16px 20px;margin:20px 0;font-size:13px;">
                             <strong>Vendor Acknowledgement</strong><br>
-                            By signing below, I confirm that I have received this Purchase Order from RAHAMA, agree to supply the goods/services listed at the stated price, and will invoice accordingly.
+                            By signing below, I, <strong>${v?.name || 'the vendor'}</strong>, confirm that I have received this Purchase Order from RAHAMA, agree to supply the goods/services listed at the stated price, and will invoice accordingly.
                         </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
                             <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Vendor / Company Name <span class="required">*</span></label>
-                                <input type="text" id="poVendorNameInput" placeholder="Full name of vendor representative" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;"></div>
+                                <input type="text" id="poVendorNameInput" value="${v?.name||''}" placeholder="Full name of vendor representative" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;"></div>
                             <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Phone Number</label>
-                                <input type="tel" id="poVendorPhoneInput" placeholder="e.g. 0811 234 5678" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;"></div>
+                                <input type="tel" id="poVendorPhoneInput" value="${v?.phone||''}" placeholder="e.g. 0811 234 5678" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;"></div>
                         </div>
                         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Vendor Signature <span class="required">*</span></label>
                         <canvas id="poVendorSigCanvas" width="600" height="200"></canvas>
                         <div style="font-size:11px;color:#777;margin-top:6px;text-align:center;">Draw signature — use finger on touchscreen or mouse on desktop</div>
                         <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
-                            <button class="btn btn-primary" onclick="app._submitVendorPOSignature('${refNumber}')" style="flex:1;min-width:160px;background:linear-gradient(135deg,#1B4D8E,#1e3a6e);">✓ Confirm &amp; Sign PO</button>
+                            <button class="btn btn-primary" onclick="app._submitVendorPOSignature('${refNumber}',${vi})" style="flex:1;min-width:160px;background:linear-gradient(135deg,#1B4D8E,#1e3a6e);">✓ Confirm &amp; Sign PO</button>
                             <button class="btn btn-secondary" onclick="app._clearPOVendorCanvas()" style="min-width:100px;">Clear</button>
-                            <button class="btn btn-secondary" onclick="app._showRemoteVendorSignPO('${refNumber}')" style="min-width:160px;border-color:#1B4D8E;color:#1B4D8E;">📱 Remote Sign Link</button>
+                            <button class="btn btn-secondary" onclick="app._showRemoteVendorSignPO('${refNumber}',${vi})" style="min-width:160px;border-color:#1B4D8E;color:#1B4D8E;">📱 Remote Sign Link</button>
                         </div>
                         <div id="poVendorSignStatus" style="margin-top:16px;"></div>
                     </div>`;
@@ -3541,7 +3599,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 c._hasMark = false;
             },
 
-            async _submitVendorPOSignature(refNumber) {
+            async _submitVendorPOSignature(refNumber, vendorIndex) {
                 let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 const vendorName  = document.getElementById('poVendorNameInput')?.value?.trim();
@@ -3553,16 +3611,24 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 const btn = document.querySelector('#poSignOverlay .btn.btn-primary');
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
                 try {
-                    const poNum = cn.poNumber || ('PO-' + refNumber);
+                    const basePoNum = cn.poNumber || ('PO-' + refNumber);
+                    // Determine the correct PO number for this specific vendor
+                    let _vendors = [];
+                    try { if (cn.vendorsJson) _vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                    const vi = (vendorIndex !== undefined && _vendors.length > 1) ? vendorIndex : null;
+                    const vendorPoNum = (vi !== null) ? (basePoNum + '-V' + (vi+1)) : basePoNum;
+
                     const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
-                        docRef: poNum, docType: 'purchase_order', relatedRef: refNumber,
+                        docRef: vendorPoNum, docType: 'purchase_order', relatedRef: refNumber,
                         signerName: vendorName, signerRole: 'vendor',
                         signatureData: sigData, signedAt: new Date().toISOString(),
                         pageContext: 'vendor_po_on_device'
                     }]);
                     if (sigErr) throw sigErr;
-                    await this._logAudit('document_signatures', poNum, 'po_vendor_signed', `Vendor: ${vendorName}`);
-                    document.getElementById('poVendorSignStatus').innerHTML = '<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:14px 18px;color:#1B4D8E;font-weight:600;">✓ PO signed by vendor and recorded successfully.</div>';
+                    await this._logAudit('document_signatures', vendorPoNum, 'po_vendor_signed',
+                        `Vendor: ${vendorName}${vi !== null ? ' (Vendor '+(vi+1)+' of '+_vendors.length+')' : ''}`);
+                    document.getElementById('poVendorSignStatus').innerHTML =
+                        '<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:14px 18px;color:#1B4D8E;font-weight:600;">✓ PO signed by vendor and recorded successfully.</div>';
                     if (btn) btn.textContent = '✓ Signed';
                     setTimeout(() => { document.getElementById('poSignOverlay')?.classList.remove('open'); this.loadData(); }, 2200);
                 } catch(e) {
@@ -3571,22 +3637,38 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 }
             },
 
-            async _showRemoteVendorSignPO(refNumber) {
+            async _showRemoteVendorSignPO(refNumber, vendorIndex) {
                 let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) {
                     const { data: cnFresh, error: cnErr } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
                     if (cnErr || !cnFresh) { alert('Could not load concept note.'); return; }
                     cn = cnFresh; this.data.conceptNotes.push(cn);
                 }
+
+                let _vendors = [];
+                try { if (cn.vendorsJson) _vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+
+                const vi = (vendorIndex !== undefined && _vendors.length > 1) ? vendorIndex : null;
+                const v  = vi !== null ? _vendors[vi] : (_vendors[0] || null);
+
+                const basePoNum   = cn.poNumber || ('PO-' + refNumber);
+                const vendorPoNum = vi !== null ? (basePoNum + '-V' + (vi+1)) : basePoNum;
+                const vendorTotal = v
+                    ? (Number(v.amount||0) * (v.qty||1))
+                    : Number(cn.actualProcurementCost || cn.estimatedCost);
+
+                // Build a vendorsJson containing only this vendor's record for the remote page
+                const singleVendorJson = v ? JSON.stringify([v]) : (cn.vendorsJson || '');
+
                 const token = 'post_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
                 const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
                 const tokenPayload = {
                     token, cnRef: refNumber,
-                    poNumber: cn.poNumber || ('PO-' + refNumber),
+                    poNumber: vendorPoNum,
                     activityTitle: cn.activityTitle,
                     projectCode: cn.projectCode,
-                    actualCost: cn.actualProcurementCost || cn.estimatedCost,
-                    vendorsJson: cn.vendorsJson || '',
+                    actualCost: vendorTotal,
+                    vendorsJson: singleVendorJson,
                     createdBy: this.currentUser,
                     expiresAt, used: false, docType: 'purchase_order'
                 };
@@ -3606,14 +3688,16 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                 }
                 const ov = document.getElementById('remoteSigModalOv');
                 modal = document.getElementById('remoteSigModal');
+                const vendorLabel = v ? v.name : 'vendor';
                 modal.innerHTML = `
-                    <h3 style="font-family:'Archivo',sans-serif;margin-bottom:6px;">📱 Remote PO Vendor Signing Link</h3>
-                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Share this link with the vendor. It expires in 48 hours — no login needed.</p>
+                    <h3 style="font-family:'Archivo',sans-serif;margin-bottom:6px;">📱 Remote PO Signing Link${vi !== null ? ' — ' + vendorLabel : ''}</h3>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">Share this link with <strong>${vendorLabel}</strong>. It expires in 48 hours — no login needed.</p>
+                    ${vi !== null ? `<p style="font-size:12px;color:#6B7280;margin-bottom:14px;">PO: <strong>${vendorPoNum}</strong> · Amount: <strong>₦${vendorTotal.toLocaleString()}</strong></p>` : ''}
                     <div style="background:#f5f5f5;border-radius:8px;padding:12px 14px;font-size:12px;word-break:break-all;margin-bottom:16px;font-family:monospace;">${signingUrl}</div>
                     <div id="qrCodeDivPO" style="display:flex;justify-content:center;margin-bottom:20px;"></div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
                         <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${signingUrl}').then(()=>alert('Link copied!'))">📋 Copy Link</button>
-                        <a class="btn btn-secondary" href="https://wa.me/?text=${encodeURIComponent('Please sign the Purchase Order for RAHAMA. Use this link (valid 48h): ' + signingUrl)}" target="_blank" style="display:inline-flex;align-items:center;text-decoration:none;border-color:#25D366;color:#25D366;">💬 Share via WhatsApp</a>
+                        <a class="btn btn-secondary" href="https://wa.me/?text=${encodeURIComponent('Please sign the Purchase Order ('+vendorPoNum+') for RAHAMA. Link valid 48h: ' + signingUrl)}" target="_blank" style="display:inline-flex;align-items:center;text-decoration:none;border-color:#25D366;color:#25D366;">💬 Share via WhatsApp</a>
                         <button class="btn btn-secondary" onclick="document.getElementById('remoteSigModalOv').classList.remove('open')" style="margin-left:auto;">Close</button>
                     </div>`;
                 ov.classList.add('open');
@@ -3787,7 +3871,7 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     return;
                 }
                 if (tokenRow.used) {
-                    container.innerHTML = `<div style="background:#1B4D8E;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — PO Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">✅</div><h3 style="color:#1B4D8E;">Already Signed</h3><p style="color:#555;margin-top:8px;">This PO has already been signed. Thank you.</p></div>`;
+                    container.innerHTML = `<div style="background:#1B4D8E;color:#fff;padding:20px 24px;font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — PO Vendor Signing</div><div style="max-width:500px;margin:60px auto;padding:24px;text-align:center;"><div style="font-size:48px;margin-bottom:16px;">✅</div><h3 style="color:#1B4D8E;">Already Signed</h3><p style="color:#555;margin-top:8px;">This Purchase Order has already been signed. Thank you.</p></div>`;
                     return;
                 }
                 if (new Date(tokenRow.expiresAt) < new Date()) {
@@ -3795,42 +3879,71 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
                     return;
                 }
 
+                // Token carries a single-vendor vendorsJson (sliced by _showRemoteVendorSignPO)
                 let _rv = [];
                 try { if (tokenRow.vendorsJson) _rv = JSON.parse(tokenRow.vendorsJson); } catch(e){}
-                const actualTotal = _rv.length > 0
-                    ? _rv.reduce((s,v)=>s+(v.amount||0),0)
-                    : Number(tokenRow.actualCost||tokenRow.estimatedCost||0);
-                const itemRowsHtml = _rv.length > 0
-                    ? _rv.map((v,i)=>`<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">${i+1}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.items||tokenRow.activityTitle}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.invoiceNo||'—'}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">₦${Number(v.amount||0).toLocaleString()}</td></tr>`).join('')
-                    : `<tr><td style="padding:9px 12px;">1</td><td style="padding:9px 12px;">${tokenRow.activityTitle}</td><td style="padding:9px 12px;">—</td><td style="padding:9px 12px;">—</td><td style="padding:9px 12px;text-align:right;font-weight:600;">₦${actualTotal.toLocaleString()}</td></tr>`;
+                const v = _rv[0] || null;
+
+                // Use token's actualCost for the amount — it was set to vendorTotal when the token was created
+                const vendorAmount = v
+                    ? (Number(v.amount||0) * (v.qty||1))
+                    : Number(tokenRow.actualCost||0);
+                const vendorPoNum = tokenRow.poNumber; // already vendor-specific
+
+                const itemRowsHtml = v
+                    ? `<tr>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.items||tokenRow.activityTitle}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.invoiceNo||'—'}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center;">${v.qty||1}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      </tr>`
+                    : `<tr>
+                        <td style="padding:9px 12px;">${tokenRow.activityTitle}</td>
+                        <td style="padding:9px 12px;">—</td><td style="padding:9px 12px;">—</td>
+                        <td style="padding:9px 12px;text-align:center;">1</td>
+                        <td style="padding:9px 12px;text-align:right;font-weight:600;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                      </tr>`;
+
+                const prefillName  = v?.name  || '';
+                const prefillPhone = v?.phone || '';
 
                 container.innerHTML = `
                     <div style="background:#1B4D8E;color:#fff;padding:20px 24px;">
                         <div style="font-family:'Archivo',sans-serif;font-size:18px;font-weight:700;">RAHAMA — Purchase Order Vendor Signing</div>
-                        <div style="font-size:12px;opacity:.8;margin-top:4px;">PO: ${tokenRow.poNumber}</div>
+                        <div style="font-size:12px;opacity:.8;margin-top:4px;">PO: ${vendorPoNum}</div>
                     </div>
                     <div style="max-width:640px;margin:0 auto;padding:24px;">
                         <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${tokenRow.activityTitle}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${tokenRow.projectCode}</div></div>
-                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${tokenRow.poNumber}</div></div>
-                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Total Value (Actual)</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${vendorPoNum}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Your Amount</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
                             </div>
                         </div>
                         <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
-                            <thead><tr style="background:#1B4D8E;color:#fff;"><th style="padding:10px 12px;">#</th><th style="padding:10px 12px;">Item / Service</th><th style="padding:10px 12px;">Vendor</th><th style="padding:10px 12px;">Invoice No.</th><th style="padding:10px 12px;text-align:right;">Amount (₦)</th></tr></thead>
+                            <thead><tr style="background:#1B4D8E;color:#fff;">
+                                <th style="padding:10px 12px;">Item / Service</th>
+                                <th style="padding:10px 12px;">Vendor</th>
+                                <th style="padding:10px 12px;">Invoice No.</th>
+                                <th style="padding:10px 12px;text-align:center;">Qty</th>
+                                <th style="padding:10px 12px;text-align:right;">Amount (₦)</th>
+                            </tr></thead>
                             <tbody>${itemRowsHtml}</tbody>
-                            <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px;">Total Authorised</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${actualTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+                            <tfoot><tr style="background:#E8EEF8;">
+                                <td colspan="4" style="text-align:right;font-weight:700;padding:10px 12px;">Total Authorised</td>
+                                <td style="text-align:right;font-weight:700;padding:10px 12px;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                            </tr></tfoot>
                         </table>
                         <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:14px 18px;font-size:13px;margin-bottom:20px;">
                             <strong>Confirmation:</strong> By signing below, I confirm receipt of this Purchase Order and agree to supply the goods/services listed at the stated price.
                         </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
                             <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Your Full Name *</label>
-                            <input id="pvVendorName" type="text" placeholder="Vendor representative name" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+                            <input id="pvVendorName" type="text" value="${prefillName}" placeholder="Vendor representative name" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
                             <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Phone Number</label>
-                            <input id="pvVendorPhone" type="tel" placeholder="0811 234 5678" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
+                            <input id="pvVendorPhone" type="tel" value="${prefillPhone}" placeholder="0811 234 5678" style="padding:10px 14px;border:1px solid #ccc;border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;"></div>
                         </div>
                         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Signature *</label>
                         <canvas id="pvSigCanvas" width="580" height="200" style="border:2px solid #1B4D8E;border-radius:8px;width:100%;touch-action:none;cursor:crosshair;background:#fafafa;display:block;"></canvas>
@@ -3969,102 +4082,195 @@ ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<t
             // PO PREVIEW  (called from procurement upload screen + BO approval)
             // ══════════════════════════════════════════════════════════════
             async _previewPODraft(refNumber) {
-                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                // Always fetch fresh CN so poNumber, vendorsJson etc. are current
+                const { data: freshCN } = await supabaseClient
+                    .from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                const cn = freshCN || this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
-                const poNum = cn.poNumber || ('PO-' + refNumber + '-DRAFT');
 
-                // Fetch all signatures for this PO from document_signatures
-                const { data: sigs } = await supabaseClient
-                    .from('document_signatures')
-                    .select('*')
-                    .eq('docRef', poNum);
-                const allSigs = sigs || [];
-
-                const staffSig   = allSigs.find(s => s.pageContext === 'staff_po');
-                const boSig      = allSigs.find(s => s.pageContext === 'budget_owner_po')
-                               || (cn.budgetOwnerSignatureData
-                                   ? { signatureData: cn.budgetOwnerSignatureData, signerName: cn.budgetOwnerApprovedBy || cn.approvedBy, signedAt: cn.budgetOwnerSignedAt }
-                                   : null);
-                const finSig     = allSigs.find(s => s.pageContext === 'finance_sign');
-
-                const _sigBox = (label, sig) => sig
-                    ? `<div>
-                         <div class="label">${label}</div>
-                         <img src="${sig.signatureData}" style="height:64px;display:block;margin-top:8px;border-bottom:2px solid #285B3C;">
-                         <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
-                         <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleString('en-NG') : ''}</span>
-                       </div>`
-                    : `<div>
-                         <div class="label">${label}</div>
-                         <div style="height:64px;border-bottom:2px dashed #ccc;margin-top:8px;"></div>
-                         <span style="font-size:11px;color:#aaa;">Awaiting signature</span>
-                       </div>`;
-
-                // Multi-vendor rows if vendorsJson present, else single row
                 let vendors = [];
-                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e){}
-                const itemRows = vendors.length > 0
-                    ? vendors.map(v => `<tr><td>${v.items||cn.activityTitle}</td><td>${v.name}</td><td>${v.invoiceNo||'—'}</td><td style="text-align:right;">₦${Number(v.amount||0).toLocaleString()}</td></tr>`).join('')
-                    : `<tr><td>${cn.activityTitle}</td><td>${cn.grrVendorName||'—'}</td><td>${cn.vendorInvoiceNo||'—'}</td><td style="text-align:right;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td></tr>`;
-                const totalAmt = vendors.length > 0
-                    ? vendors.reduce((s,v) => s+(v.amount||0), 0)
-                    : Number(cn.actualProcurementCost||cn.estimatedCost);
+                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
 
-                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Purchase Order ${poNum}</title>
+                if (vendors.length === 0) {
+                    alert('No vendor details found. Procurement must complete the procurement form before a PO can be generated.');
+                    return;
+                }
+
+                const basePoNum   = cn.poNumber || ('PO-' + refNumber);
+                const grandTotal  = vendors.reduce((s,v) => s + (Number(v.amount||0) * (v.qty||1)), 0);
+                const issueDate   = new Date(cn.poGeneratedAt || Date.now())
+                                        .toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'});
+
+                // ── Fetch all signatures for the base PO ref ──────────────
+                const docRefsToFetch = vendors.length > 1
+                    ? [basePoNum, ...vendors.map((_,i) => basePoNum + '-V' + (i+1))]
+                    : [basePoNum];
+                const { data: sigsRaw } = await supabaseClient
+                    .from('document_signatures').select('*')
+                    .in('docRef', docRefsToFetch);
+                const allSigs = sigsRaw || [];
+
+                // ── BO sig may live on the CN row if captured during approval ──
+                const boSigFromCN = cn.budgetOwnerSignatureData
+                    ? { signatureData: cn.budgetOwnerSignatureData,
+                        signerName: cn.budgetOwnerApprovedBy || cn.approvedBy,
+                        signedAt:   cn.budgetOwnerSignedAt }
+                    : null;
+
+                const _sigBox = (label, sig) => {
+                    if (!sig) return `<div>
+                        <div class="label">${label}</div>
+                        <div style="height:60px;border-bottom:2px dashed #bbb;margin-top:8px;width:200px;"></div>
+                        <span style="font-size:11px;color:#aaa;">Awaiting signature</span>
+                    </div>`;
+                    if (sig.signatureData) return `<div>
+                        <div class="label">${label}</div>
+                        <img src="${sig.signatureData}" style="height:60px;display:block;margin-top:8px;border-bottom:2px solid #285B3C;max-width:220px;">
+                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
+                        <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) : ''}</span>
+                    </div>`;
+                    // name-only (e.g. remote sign fallback)
+                    return `<div>
+                        <div class="label">${label}</div>
+                        <div style="height:60px;border-bottom:2px solid #285B3C;margin-top:8px;display:flex;align-items:flex-end;padding-bottom:4px;">
+                            <span style="font-size:13px;font-style:italic;color:#285B3C;">✓ ${sig.signerName||'Signed'}</span>
+                        </div>
+                        <span style="font-size:10px;color:#777;display:block;margin-top:3px;">${sig.signedAt ? new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) : ''}</span>
+                    </div>`;
+                };
+
+                const commonStyle = `
 <style>
   @media print { body{margin:20px;} .no-print{display:none;} }
   body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
-  h1{color:#285B3C;font-size:22px;margin:0;}
-  table{width:100%;border-collapse:collapse;margin-top:16px;}
-  th{background:#285B3C;color:#fff;padding:10px 12px;text-align:left;font-size:12px;}
+  h1{color:#1B4D8E;font-size:22px;margin:0;}
+  table{width:100%;border-collapse:collapse;margin-top:12px;}
+  th{background:#1B4D8E;color:#fff;padding:10px 12px;text-align:left;font-size:12px;}
   td{padding:9px 12px;border-bottom:1px solid #ddd;vertical-align:top;}
-  tr:nth-child(even){background:#f9f9f9;}
-  tfoot td{background:#E8F5E9;font-weight:700;}
-  .header-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+  tr:nth-child(even) td{background:#f5f8ff;}
+  tfoot td{background:#E8EEF8;font-weight:700;}
   .label{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
   .value{font-weight:600;font-size:13px;}
-  .sig-grid{margin-top:48px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px;}
-  .stamp{display:inline-block;border:3px solid #285B3C;border-radius:50%;width:80px;height:80px;line-height:80px;text-align:center;color:#285B3C;font-weight:700;font-size:11px;margin-top:8px;}
-</style></head><body>
-<button class="no-print" onclick="window.print()" style="margin-bottom:20px;padding:10px 24px;background:#285B3C;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">🖨 Print / Save as PDF</button>
-<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:16px;margin-bottom:24px;">
+  .sig-grid{margin-top:48px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px;}
+</style>`;
+
+                // ── Open one window per vendor ────────────────────────────
+                for (let vi = 0; vi < vendors.length; vi++) {
+                    const v          = vendors[vi];
+                    const vendorPoNum = vendors.length > 1 ? (basePoNum + '-V' + (vi+1)) : basePoNum;
+                    const vendorTotal = Number(v.amount||0) * (v.qty||1);
+
+                    // Sigs scoped to this vendor's PO ref (or base ref for single-vendor)
+                    const vendorSigs  = allSigs.filter(s => s.docRef === vendorPoNum || (vendors.length === 1 && s.docRef === basePoNum));
+                    const staffSig    = vendorSigs.find(s => s.pageContext === 'staff_po');
+                    const boSig       = vendorSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
+                    const finSig      = vendorSigs.find(s => s.pageContext === 'finance_sign');
+                    const vendorSig   = vendorSigs.find(s =>
+                        s.signerRole === 'vendor' &&
+                        ['vendor_po_on_device','vendor_po_remote'].includes(s.pageContext));
+
+                    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Purchase Order — ${vendorPoNum}</title>${commonStyle}</head><body>
+<button class="no-print" onclick="window.print()"
+  style="margin-bottom:20px;padding:10px 24px;background:#1B4D8E;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;">
+  🖨 Print / Save as PDF
+</button>
+
+${vendors.length > 1 ? `
+<div style="background:#E8EEF8;border:1px solid #C7D2FE;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:#1B4D8E;font-weight:600;">
+  📄 PO ${vi+1} of ${vendors.length} — Vendor: <strong>${v.name}</strong>
+  &nbsp;|&nbsp; Grand Total across all vendors: <strong>₦${grandTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>
+</div>` : ''}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1B4D8E;padding-bottom:16px;margin-bottom:24px;">
   <div style="display:flex;align-items:center;gap:14px;">
-    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo" style="width:64px;height:64px;object-fit:contain;" onerror="this.style.display='none'">
+    <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA Logo"
+      style="width:64px;height:64px;object-fit:contain;" onerror="this.style.display='none'">
     <div>
       <h1>PURCHASE ORDER</h1>
       <div style="font-size:12px;color:#555;margin-top:4px;">RAHAMA Girl Child &amp; Women Empowerment Initiative</div>
     </div>
   </div>
   <div style="text-align:right;">
-    <div class="label">PO Number</div><div class="value" style="font-size:16px;color:#285B3C;">${poNum}</div>
+    <div class="label">PO Number</div>
+    <div class="value" style="font-size:16px;color:#1B4D8E;">${vendorPoNum}</div>
     <div class="label" style="margin-top:8px;">Date Issued</div>
-    <div class="value">${new Date(cn.poGeneratedAt||Date.now()).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div>
+    <div class="value">${issueDate}</div>
+    ${vendors.length > 1 ? `<div class="label" style="margin-top:8px;">Document</div><div class="value">${vi+1} of ${vendors.length}</div>` : ''}
   </div>
 </div>
-<div class="header-grid">
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;padding:16px;background:#f5f8ff;border:1px solid #C7D2FE;border-radius:8px;">
   <div><div class="label">Activity / Description</div><div class="value">${cn.activityTitle}</div></div>
   <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
   <div><div class="label">Concept Note Ref</div><div class="value">${cn.refNumber}</div></div>
   <div><div class="label">Staff / Requester</div><div class="value">${cn.staffName}</div></div>
-  <div style="grid-column:1/-1"><div class="label">Objective</div><div class="value" style="font-weight:400;">${cn.objective||'—'}</div></div>
 </div>
+
+<div style="padding:14px 16px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;margin-bottom:16px;font-size:13px;">
+  <strong>Vendor / Supplier Details</strong><br>
+  <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div><div class="label">Name</div><div class="value">${v.name}</div></div>
+    <div><div class="label">Phone</div><div class="value">${v.phone||'—'}</div></div>
+    ${v.address ? `<div style="grid-column:1/-1"><div class="label">Address / Contact</div><div class="value" style="font-weight:400;">${v.address}</div></div>` : ''}
+  </div>
+</div>
+
 <table>
-  <thead><tr><th>Description / Items</th><th>Vendor / Supplier</th><th>Invoice No.</th><th style="text-align:right;">Amount (₦)</th></tr></thead>
-  <tbody>${itemRows}</tbody>
-  <tfoot><tr><td colspan="3" style="text-align:right;">Total Authorised</td><td style="text-align:right;">₦${totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr></tfoot>
+  <thead><tr>
+    <th>Description / Items Supplied</th>
+    <th>Invoice No.</th>
+    <th style="text-align:center;">Qty</th>
+    <th style="text-align:right;">Unit Price (₦)</th>
+    <th style="text-align:right;">Total (₦)</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>${v.items || cn.activityTitle}</td>
+      <td>${v.invoiceNo||'—'}</td>
+      <td style="text-align:center;">${v.qty||1}</td>
+      <td style="text-align:right;">₦${Number(v.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="text-align:right;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="4" style="text-align:right;">Amount Authorised for this Vendor</td>
+      <td style="text-align:right;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>
+    ${vendors.length > 1 ? `<tr style="background:#E8EEF8;">
+      <td colspan="4" style="text-align:right;color:#1B4D8E;">Grand Total (All Vendors — CN ${cn.refNumber})</td>
+      <td style="text-align:right;color:#1B4D8E;">₦${grandTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>` : ''}
+  </tfoot>
 </table>
+
+<div style="margin-top:14px;padding:12px 16px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;font-size:12px;color:#1B4D8E;">
+  By signing below, all parties confirm this Purchase Order is accurate and authorised.
+  ${vendors.length > 1 ? `<strong>${v.name}</strong> is signing for their portion only (₦${vendorTotal.toLocaleString()}).` : ''}
+</div>
+
 <div class="sig-grid">
   ${_sigBox('1. Staff / Requester', staffSig)}
   ${_sigBox('2. Budget Owner / Authorisation', boSig)}
-  ${_sigBox('3. Finance Confirmation', finSig)}
+  ${_sigBox('3. Vendor — ' + v.name, vendorSig)}
+  ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
+
 <div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
-  Generated by RAHAMA Financial Management System · PO Ref: ${poNum} · CN Ref: ${refNumber}
-  ${allSigs.length > 0 ? ' · <strong style="color:#285B3C;">✓ Digitally signed</strong>' : ' · <em>Pending signatures</em>'}
+  RAHAMA Financial Management System · PO: ${vendorPoNum} · CN: ${refNumber}
+  ${vendorSigs.length > 0 ? ' · <strong style="color:#1B4D8E;">✓ Digitally signed</strong>' : ' · <em>Pending signatures</em>'}
 </div>
 </body></html>`;
-                const w = window.open('','_blank','width=860,height=780');
-                if (w) { w.document.write(html); w.document.close(); }
+
+                    const w = window.open('', '_blank', 'width=900,height=800');
+                    if (w) { w.document.write(html); w.document.close(); }
+
+                    // Slight delay between windows so browsers don't suppress them
+                    if (vi < vendors.length - 1) {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
+                }
             },
 
             // ══════════════════════════════════════════════════════════════
