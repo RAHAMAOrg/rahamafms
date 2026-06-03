@@ -1620,19 +1620,26 @@ if (role === 'procurement') {
         .eq('retirementresponsibility', 'procurement')
         .not('conceptNoteRef', 'is', null);
 
-    if (rejectedPays && rejectedPays.length > 0) {
-        for (const rp of rejectedPays) {
-            if (!rp.conceptNoteRef) continue;
-            // Only patch CNs where financeRejectionReason was never written
-            await supabaseClient.from('concept_notes').update({
-                currentApprover: 'procurement',
-                financeRejectionReason: rp.rejectionReason || 'Rejected by Finance',
-                financeRejectedAt: rp.rejectedDate || new Date().toISOString(),
-                financeRejectedBy: rp.rejectedBy || 'Finance'
-            }).eq('refNumber', rp.conceptNoteRef)
-              .is('financeRejectionReason', null); // only patch if not already set
-        }
-    }
+  if (rejectedPays && rejectedPays.length > 0) {
+                        for (const rp of rejectedPays) {
+                            if (!rp.conceptNoteRef) continue;
+                            // ── FIX 2: skip if a live (pending or paid) payment already exists ──
+                            const { data: livePays } = await supabaseClient
+                                .from('payments')
+                                .select('refNumber, status')
+                                .eq('conceptNoteRef', rp.conceptNoteRef)
+                                .in('status', ['pending', 'paid']);
+                            if (livePays && livePays.length > 0) continue;
+                            // Only patch CNs where financeRejectionReason was never written
+                            await supabaseClient.from('concept_notes').update({
+                                currentApprover: 'procurement',
+                                financeRejectionReason: rp.rejectionReason || 'Rejected by Finance',
+                                financeRejectedAt: rp.rejectedDate || new Date().toISOString(),
+                                financeRejectedBy: rp.rejectedBy || 'Finance'
+                            }).eq('refNumber', rp.conceptNoteRef)
+                              .is('financeRejectionReason', null);
+                        }
+                    }
 
     // Step 2: Fetch CNs where Finance rejected (now includes patched historical ones)
     const { data: finRejected } = await supabaseClient
@@ -1686,6 +1693,12 @@ if (role === 'procurement') {
     const actionableStatuses = ['pending', 'variance_rejected', 'finance_rejected', 'approved'];
     // approved but procurementComplete not set means procurement still needs to act
     // Exception: finance-rejected CNs always show even if procurementComplete is set
+  // ── FIX 3: hide if a live payment already exists for this CN ──
+    const hasLivePayment = this.data.payments.some(p =>
+        p.conceptNoteRef === cn.refNumber &&
+        ['pending', 'paid'].includes(p.status)
+    );
+    if (hasLivePayment) return false;
     if (cn.status === 'approved' && cn.procurementComplete && !cn.financeRejectionReason) return false;
     return actionableStatuses.includes(cn.status)
         || !!cn.financeRejectionReason; // finance-rejected always shows
@@ -2269,6 +2282,9 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                         approvedBy: this.currentUser,
                         procurementComplete: now,
                         retirementresponsibility: 'procurement',
+                        financeRejectionReason: null,   // ← clear any previous Finance rejection
+                        financeRejectedAt: null,        // ← clear timestamp
+                        financeRejectedBy: null,        // ← clear actor
                         procurementNotes: notes,
                         actualProcurementCost: actualCost,
                         procurementVariance: variance,
