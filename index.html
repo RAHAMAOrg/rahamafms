@@ -2210,46 +2210,86 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                 const variance = cn.estimatedCost - actualCost;
                 const overPct = cn.estimatedCost > 0 ? ((actualCost - cn.estimatedCost) / cn.estimatedCost) : 0;
 
-                // >20% variance: hard block — escalate to budget owner for approval
-                if (variance < -0.01 && overPct > 0.20) {
-                    const overAmt = Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 2 });
-                    const pctLabel = (overPct * 100).toFixed(1);
-                    const justification = prompt(
-                        `🚨 VARIANCE EXCEEDS 20% — Budget Owner Approval Required\n\n` +
-                        `Estimated: ₦${cn.estimatedCost.toLocaleString()}\n` +
-                        `Actual:    ₦${actualCost.toLocaleString()}\n` +
-                        `Over by:   ₦${overAmt} (${pctLabel}%)\n\n` +
-                        `This will be sent to the Budget Owner for approval before finance payment.\n\n` +
-                        `Enter a brief justification for the cost increase:`
-                    );
-                    if (justification === null) return; // cancelled
-                    if (!justification.trim()) { alert('A justification is required for variances above 20%.'); return; }
+             if (variance < -0.01 && overPct > 0.20) {
+    const overAmt = Math.abs(variance).toLocaleString(undefined, { minimumFractionDigits: 2 });
+    const pctLabel = (overPct * 100).toFixed(1);
+    const justification = prompt(
+        `🚨 VARIANCE EXCEEDS 20% — Budget Owner Approval Required\n\n` +
+        `Estimated: ₦${cn.estimatedCost.toLocaleString()}\n` +
+        `Actual:    ₦${actualCost.toLocaleString()}\n` +
+        `Over by:   ₦${overAmt} (${pctLabel}%)\n\n` +
+        `This will be sent to the Budget Owner for approval before finance payment.\n\n` +
+        `Enter a brief justification for the cost increase:`
+    );
+    if (justification === null) return;
+    if (!justification.trim()) { alert('A justification is required for variances above 20%.'); return; }
 
-                    try {
-                        submitBtn.disabled = true; submitBtn.textContent = 'Escalating…';
-                        await supabaseClient.from('concept_notes').update({
-                            status: 'variance_review',
-                            currentApprover: 'budgetOwner',
-                            actualProcurementCost: actualCost,
-                            procurementVariance: variance,
-                            procurementNotes: notes,
-                            varianceJustification: justification.trim(),
-                            varianceEscalatedAt: new Date().toISOString(),
-                            varianceEscalatedBy: this.currentUser,
-                            accountName, accountNumber, bankName
-                        }).eq('refNumber', refNumber);
-                        await this._logAudit('concept_notes', refNumber, 'variance_escalated',
-                            `${pctLabel}% over budget. Actual: ₦${actualCost.toLocaleString()}. Justification: ${justification.trim()}`);
-                        this.clearCache();
-                        alert(`Variance escalated to Budget Owner for approval.\n\nThe activity is on hold until approved. You will be able to complete once the Budget Owner approves the excess cost.`);
-                        this.showView('approvals');
-                    } catch(e) {
-                        alert('Error escalating variance: ' + e.message);
-                    } finally {
-                        submitBtn.disabled = false; submitBtn.textContent = 'Complete & Generate Documents →';
-                    }
-                    return;
-                }
+    try {
+        submitBtn.disabled = true; submitBtn.textContent = 'Escalating…';
+
+        const enrichedVendors = await this._uploadVendorInvoices(vendors);
+        const firstVendorWithInvoice = enrichedVendors.find(v => v.invoiceUrl);
+        const procInvoiceData = firstVendorWithInvoice ? { url: firstVendorWithInvoice.invoiceUrl, fileName: firstVendorWithInvoice.invoiceFileName } : null;
+        let procReceiptData = null;
+        if (procReceiptFile) procReceiptData = await this.uploadFile(procReceiptFile, 'procurement');
+
+        const projCode  = (cn.projectCode || 'GEN').replace(/[^A-Z0-9]/gi,'').toUpperCase();
+        const yearMonth = new Date().toISOString().slice(0,7).replace('-','');
+        const serial    = Date.now().toString().slice(-5);
+        const poNumber  = cn.poNumber  || `PO-${projCode}-${yearMonth}-${serial}`;
+        const grrNumber = cn.grrNumber || `GRR-${projCode}-${yearMonth}-${serial}`;
+        const now       = new Date().toISOString();
+
+        await supabaseClient.from('concept_notes').update({
+            status: 'variance_review',
+            currentApprover: 'budgetOwner',
+            actualProcurementCost: actualCost,
+            procurementVariance: variance,
+            procurementNotes: notes,
+            varianceJustification: justification.trim(),
+            varianceEscalatedAt: now,
+            varianceEscalatedBy: this.currentUser,
+            accountName, accountNumber, bankName,
+            retirementresponsibility: 'procurement',
+            financeRejectionReason: null,
+            financeRejectedAt: null,
+            financeRejectedBy: null,
+            poNumber, poGeneratedAt: cn.poGeneratedAt || now,
+            grrNumber, grrGeneratedAt: cn.grrGeneratedAt || now,
+            grrVendorName: vendorName,
+            grrVendorPhone: vendorPhone,
+            vendorAddress: vendorAddress || null,
+            vendorItemsSupplied: vendorItems,
+            vendorInvoiceNo: vendorInvoiceNo || null,
+            procurementInvoiceUrl:  procInvoiceData?.url      || cn.procurementInvoiceUrl  || null,
+            procurementInvoiceName: procInvoiceData?.fileName || cn.procurementInvoiceName || null,
+            procurementReceiptUrl:  procReceiptData?.url      || cn.procurementReceiptUrl  || null,
+            procurementReceiptName: procReceiptData?.fileName || cn.procurementReceiptName || null,
+            vendorsJson: JSON.stringify(enrichedVendors)
+        }).eq('refNumber', refNumber);
+
+        await this._logAudit('concept_notes', refNumber, 'variance_escalated',
+            `${pctLabel}% over budget. Actual: ₦${actualCost.toLocaleString()}. Justification: ${justification.trim()}. PO: ${poNumber} | GRR: ${grrNumber}.`);
+
+        const cnIdx = this.data.conceptNotes.findIndex(c => c.refNumber === refNumber);
+        if (cnIdx !== -1) Object.assign(this.data.conceptNotes[cnIdx], {
+            status: 'variance_review', currentApprover: 'budgetOwner',
+            actualProcurementCost: actualCost, procurementVariance: variance,
+            poNumber, grrNumber, grrVendorName: vendorName, grrVendorPhone: vendorPhone,
+            vendorsJson: JSON.stringify(enrichedVendors)
+        });
+        this.clearCache();
+
+        alert(`Variance escalated to Budget Owner for approval.\n\nPO ${poNumber} and GRR ${grrNumber} have been generated so you can confirm receipt now. Finance payment is released once the Budget Owner approves the excess cost.\n\nYou'll now be asked to sign the GRR as Procurement (received).`);
+
+        await this.showSigningView(grrNumber, 'grr', refNumber, 'procurement_received', refNumber);
+    } catch(e) {
+        alert('Error escalating variance: ' + e.message);
+    } finally {
+        submitBtn.disabled = false; submitBtn.textContent = 'Complete & Generate Documents →';
+    }
+    return;
+}
 
                 // ≤20% over budget: warn but allow through
                 if (variance < -0.01) {
@@ -4678,6 +4718,13 @@ ${vendors.length > 1 ? `
                             varianceApprovedAt: new Date().toISOString(),
                             varianceApprovalSignature: sigData
                         }).eq('refNumber', refNumber);
+                        // NEW — notify staff that the PO (already generated at escalation time) is ready to sign
+if (cn.poNumber) {
+    await this.createNotification(cn.staffName,
+        `Your concept note ${refNumber} (${cn.activityTitle}) had its cost variance approved by the Budget Owner. PO ${cn.poNumber} is ready for your signature.`,
+        'info', refNumber);
+}
+With this, procurement can sign the GRR ("received") right when they escalate, staff/BO/vendor can move through their PO/GRR signing steps in parallel with the variance review, and once the Budget Owner approves, Finance gets a payment tied to the same PO/GRR that already has signatures attached — instead of a dead-end note with no documents at all.
 
                         await supabaseClient.from('document_signatures').insert([{
                             docRef: refNumber, docType: 'variance_approval', relatedRef: refNumber,
