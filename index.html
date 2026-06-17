@@ -4724,7 +4724,6 @@ if (cn.poNumber) {
         `Your concept note ${refNumber} (${cn.activityTitle}) had its cost variance approved by the Budget Owner. PO ${cn.poNumber} is ready for your signature.`,
         'info', refNumber);
 }
-With this, procurement can sign the GRR ("received") right when they escalate, staff/BO/vendor can move through their PO/GRR signing steps in parallel with the variance review, and once the Budget Owner approves, Finance gets a payment tied to the same PO/GRR that already has signatures attached — instead of a dead-end note with no documents at all.
 
                         await supabaseClient.from('document_signatures').insert([{
                             docRef: refNumber, docType: 'variance_approval', relatedRef: refNumber,
