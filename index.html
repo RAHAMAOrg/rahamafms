@@ -609,7 +609,7 @@
                         case 'reconciliation': this.renderReconciliation(content).catch(e => console.error(e)); break;
                         case 'quarterlyReport': this.renderQuarterlyReport(content); break;
                         case 'conceptNote': this.renderConceptNoteForm(content).catch(e => console.error(e)); break;
-                        case 'payment': this.renderPaymentForm(content); break;
+                        case 'payment': this.renderPaymentForm(content).catch(e => console.error(e)); break;
                         case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
                         case 'approvals': this.renderApprovals(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
@@ -1146,7 +1146,20 @@
                 app._cnBudgetFile = file;
             },
 
-            renderPaymentForm(content) {
+            async renderPaymentForm(content) {
+                try {
+                    const { data: freshApproved } = await supabaseClient
+                        .from('concept_notes')
+                        .select('*')
+                        .eq('staffName', this.currentUser)
+                        .eq('status', 'approved');
+                    if (freshApproved) {
+                        const cMap = new Map(this.data.conceptNotes.map(c => [c.refNumber, c]));
+                        freshApproved.forEach(c => cMap.set(c.refNumber, c));
+                        this.data.conceptNotes = Array.from(cMap.values());
+                    }
+                } catch (e) { console.warn('Fresh CN fetch failed, using cache:', e); }
+
                 const approvedNotes = this.data.conceptNotes.filter(cn => {
                     if (cn.staffName !== this.currentUser) return false;
                     if (cn.status !== 'approved') return false;
