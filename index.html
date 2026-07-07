@@ -1245,9 +1245,12 @@
 
                 try {
                     if (userRole === 'procurement') {
-                        // Procurement sees ALL paid payments where they are responsible for retirement
-                        const { data: allPaid } = await supabaseClient.from('payments').select('*').eq('status', 'paid').eq('retirementresponsibility', 'procurement');
-                        freshPayments = allPaid || [];
+    const { data: allPaid } = await supabaseClient
+        .from('payments')
+        .select('*')
+        .eq('status', 'paid')
+        .or(`retirementresponsibility.eq.procurement,staffName.eq.${this.currentUser}`);
+    freshPayments = allPaid || [];
                     } else {
                         const { data: staffPay } = await supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).eq('status', 'paid');
                         freshPayments = staffPay || [];
@@ -1289,12 +1292,15 @@
                 }
 
                 const paidPayments = freshPayments.filter(p => {
-                    if (!p.paidDate) return false;
-                    const existingRetirement = freshRetirements.find(r => r.paymentRef === p.refNumber);
-                    if (existingRetirement && existingRetirement.status !== 'rejected') return false;
-                    if (userRole === 'procurement') return p.retirementresponsibility === 'procurement';
-                    return p.staffName === this.currentUser && (p.retirementresponsibility === 'staff' || !p.retirementresponsibility);
-                });
+    if (!p.paidDate) return false;
+    const existingRetirement = freshRetirements.find(r => r.paymentRef === p.refNumber);
+    if (existingRetirement && existingRetirement.status !== 'rejected') return false;
+    if (userRole === 'procurement') {
+        return p.retirementresponsibility === 'procurement'
+            || (p.staffName === this.currentUser && (p.retirementresponsibility === 'staff' || !p.retirementresponsibility));
+    }
+    return p.staffName === this.currentUser && (p.retirementresponsibility === 'staff' || !p.retirementresponsibility);
+});
 
                 const rejectedRetirementMap = {};
                 paidPayments.forEach(p => {
