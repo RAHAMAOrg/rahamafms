@@ -3050,28 +3050,58 @@ const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') 
                     </div>`;
             },
 
-            exportPaymentsReport() {
-                const payments = this.data.payments;
-                if (!payments.length) { alert('No payments available to export.'); return; }
-                let csv = [['Reference','Concept Note','Project Code','Staff Name','Amount','Payment Status','Request Date','Paid Date','Processed By','Retirement Ref','Retirement Status','Actual Spent','Amount Returned','Retired Date'].join(',')];
-                payments.forEach(p => {
-                    const ret = this.data.retirements.find(r => r.paymentRef === p.refNumber);
-                    csv.push([p.refNumber||'',p.conceptNoteRef||'',p.projectCode||'',p.staffName||'',p.amount||0,p.status||'',
-                        p.requestDate?new Date(p.requestDate).toLocaleDateString():'',
-                        p.paidDate?new Date(p.paidDate).toLocaleDateString():'',
-                        p.processedBy||'',
-                        ret?ret.refNumber:'',ret?ret.status:'not retired',
-                        ret?ret.actualSpent:'',ret?ret.amountReturned:'',
-                        ret&&ret.approvedDate?new Date(ret.approvedDate).toLocaleDateString():''
-                    ].join(','));
-                });
-                const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url; link.download = 'rahama_payments_retirements_report.csv';
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-            },
+         exportPaymentsReport() {
+    const payments = this.data.payments;
+    if (!payments.length) { alert('No payments available to export.'); return; }
+
+    const fmt = (d) => d ? new Date(d).toLocaleString('en-NG', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    }) : '';
+
+    const csvEscape = (val) => {
+        const s = (val === null || val === undefined) ? '' : String(val);
+        return (s.includes(',') || s.includes('"') || s.includes('\n'))
+            ? '"' + s.replace(/"/g, '""') + '"'
+            : s;
+    };
+
+    const headers = [
+        'Reference','Concept Note','Project Code','Staff Name','Amount','Payment Status',
+        'Request Date','Paid Date','Processed By',
+        'Retirement Ref','Retirement Status','Actual Spent','Amount Returned',
+        'Retirement Submitted Date','Retirement Decision Date'
+    ];
+    let csv = [headers.map(csvEscape).join(',')];
+
+    payments.forEach(p => {
+        const ret = this.data.retirements.find(r => r.paymentRef === p.refNumber);
+        const retDecisionDate = ret ? (ret.approvedDate || ret.rejectedDate) : '';
+        csv.push([
+            p.refNumber || '',
+            p.conceptNoteRef || '',
+            p.projectCode || '',
+            p.staffName || '',
+            p.amount || 0,
+            p.status || '',
+            fmt(p.requestDate),
+            fmt(p.paidDate),
+            p.processedBy || '',
+            ret ? ret.refNumber : '',
+            ret ? ret.status : 'not retired',
+            ret ? ret.actualSpent : '',
+            ret ? ret.amountReturned : '',
+            ret ? fmt(ret.submittedDate) : '',
+            fmt(retDecisionDate)
+        ].map(csvEscape).join(','));
+    });
+
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'rahama_payments_retirements_report.csv';
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+},
 
             exportRetirementReport() {
                 const retirements = this.data.retirements;
