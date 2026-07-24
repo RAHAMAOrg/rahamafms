@@ -269,12 +269,18 @@
                 roles: {
                     'Aisha Linatu Abdulrahman': 'budgetOwner',
                     'Fatima Tijjani': 'ed',
-                    'Khadijah Abdulrahman': 'procurement',
                     'Fatima Yusuf Matsayi': 'procurement',
                     'Suleiman Adamu': 'procurement',
                     'Salahuddeen Sambo': 'finance',
                     'Aminu Nuraddeen': 'finance',
                     'Sani Hamisu': 'finance'
+                },
+                // Sequential finance sign-off — reviewer must act before approver,
+                // approver before authorizer. Authorizer's action releases funds/finalizes.
+                financeStages: {
+                    'Aminu Nuraddeen': 'reviewer',
+                    'Sani Hamisu': 'approver',
+                    'Salahuddeen Sambo': 'authorizer'
                 }
             },
             
@@ -524,6 +530,159 @@
             },
             
             getUserRole() { return this.data.roles[this.currentUser] || 'staff'; },
+            getFinanceStage(name) { return this.data.financeStages[name || this.currentUser] || null; },
+            _financeStageLabel(s) { return { reviewer: 'Review', approver: 'Approve', authorizer: 'Authorize & Pay' }[s] || s; },
+            _financeStatusAfterStage(s) { return { reviewer: 'reviewed', approver: 'finance_approved', authorizer: 'paid' }[s]; },
+            _financeStageForCurrentStatus(status) { return { pending: 'reviewer', reviewed: 'approver', finance_approved: 'authorizer' }[status] || null; },
+            _financeOfficerForStage(stage) { return Object.entries(this.data.financeStages).find(([, s]) => s === stage)?.[0] || null; },
+            _canActOnFinanceStage(stage) { return this.getFinanceStage(this.currentUser) === stage; },
+            _financeStatusLabel(status) {
+                return { pending: 'Awaiting Review', reviewed: 'Awaiting Approval', finance_approved: 'Awaiting Authorization', paid: 'Paid', approved: 'Approved', rejected: 'Rejected' }[status] || status;
+            },
+            _renderFinancePaymentActions(p) {
+                const stage = this._financeStageForCurrentStatus(p.status);
+                if (!stage) return `<span style="font-size:12px;color:var(--text-muted);">${this._financeStatusLabel(p.status)}</span>`;
+                const officer = this._financeOfficerForStage(stage);
+                const iCanAct = this._canActOnFinanceStage(stage);
+                const badge = `<div style="font-size:11px;font-weight:600;color:${iCanAct ? '#047857' : '#9CA3AF'};margin-bottom:6px;">Stage: ${this._financeStatusLabel(p.status)}${!iCanAct ? ` (awaiting ${officer})` : ''}</div>`;
+                if (!iCanAct) return badge;
+                return badge +
+                    `<button class="action-btn approve" onclick="app.advancePaymentStage('${p.refNumber}')">✓ ${this._financeStageLabel(stage)}</button>` +
+                    `<button class="action-btn reject" onclick="app.rejectPayment('${p.refNumber}')">✗ Reject</button>`;
+            },
+            _renderFinanceRetirementActions(r) {
+                const stage = this._financeStageForCurrentStatus(r.status);
+                if (!stage) return `<span style="font-size:12px;color:var(--text-muted);">${this._financeStatusLabel(r.status)}</span>`;
+                const officer = this._financeOfficerForStage(stage);
+                const iCanAct = this._canActOnFinanceStage(stage);
+                const badge = `<div style="font-size:11px;font-weight:600;color:${iCanAct ? '#047857' : '#9CA3AF'};margin-bottom:6px;">Stage: ${this._financeStatusLabel(r.status)}${!iCanAct ? ` (awaiting ${officer})` : ''}</div>`;
+                if (!iCanAct) return badge;
+                return badge +
+                    `<button class="action-btn approve" onclick="app.advanceRetirementStage('${r.refNumber}')">✓ ${this._financeStageLabel(stage)}</button>` +
+                    `<button class="action-btn reject" onclick="app.rejectRetirement('${r.refNumber}')">✗ Reject</button>`;
+            },
+            async advancePaymentStage(refNumber) {
+                const payment = this.data.payments.find(p => p.refNumber === refNumber);
+                if (!payment) return;
+                const stage = this._financeStageForCurrentStatus(payment.status);
+                if (!stage) { alert('This payment is not currently awaiting a finance action.'); return; }
+                if (!this._canActOnFinanceStage(stage)) {
+                    alert(`Only ${this._financeOfficerForStage(stage)} (Finance ${stage}) can ${this._financeStageLabel(stage).toLowerCase()} this payment.`);
+                    return;
+                }
+                if (stage === 'authorizer') {
+                    if (payment.beneficiaryFileUrl) {
+                        if (!confirm(`Authorize batch payment of ₦${payment.amount.toLocaleString()}?\n\nBeneficiary file attached.\n\nConfirm payment?`)) return;
+                    } else {
+                        if (!payment.accountName || !payment.accountNumber || !payment.bankName) { alert('Error: Account details not provided by staff member.'); return; }
+                        if (!confirm(`Authorize payment of ₦${payment.amount.toLocaleString()} to:\n\nAccount Name: ${payment.accountName}\nAccount Number: ${payment.accountNumber}\nBank: ${payment.bankName}\n\nConfirm payment?`)) return;
+                    }
+                }
+                const sigData = await this._showSignaturePad(
+                    `Finance ${this._financeStageLabel(stage)} Signature`,
+                    stage === 'reviewer'
+                        ? `I, ${this.currentUser}, confirm I have reviewed payment ${refNumber} (₦${payment.amount.toLocaleString()}) and it is in order to proceed to approval.`
+                        : stage === 'approver'
+                        ? `I, ${this.currentUser}, approve payment ${refNumber} (₦${payment.amount.toLocaleString()}) to proceed to final authorization.`
+                        : `I, ${this.currentUser}, authorize payment ${refNumber} (₦${payment.amount.toLocaleString()}) and confirm it has been duly released.`
+                );
+                if (!sigData) return;
+                const now = new Date().toISOString();
+                const newStatus = this._financeStatusAfterStage(stage);
+                try {
+                    const updates = { status: newStatus };
+                    const conceptNote = this.data.conceptNotes.find(cn => cn.refNumber === payment.conceptNoteRef);
+                    if (stage === 'reviewer') {
+                        Object.assign(updates, { reviewedBy: this.currentUser, reviewedAt: now, reviewSignatureData: sigData });
+                    } else if (stage === 'approver') {
+                        Object.assign(updates, { financeApprovedBy: this.currentUser, financeApprovedAt: now, financeApproveSignatureData: sigData });
+                    } else {
+                        Object.assign(updates, {
+                            paidDate: now, processedBy: this.currentUser, authorizeSignatureData: sigData,
+                            retirementresponsibility: conceptNote?.retirementresponsibility || payment.retirementresponsibility || 'staff',
+                            bankReconciled: false, reconciliationNote: null
+                        });
+                    }
+                    const { error } = await supabaseClient.from('payments').update(updates).eq('refNumber', refNumber);
+                    if (error) throw error;
+                    if (stage === 'authorizer') {
+                        if (conceptNote?.poNumber) await supabaseClient.from('document_signatures').insert([{ docRef: conceptNote.poNumber, docType: 'purchase_order', relatedRef: conceptNote.refNumber, signerName: this.currentUser, signerRole: 'finance_authorizer', signatureData: sigData, signedAt: now, pageContext: 'finance_sign' }]);
+                        if (conceptNote?.grrNumber) await supabaseClient.from('document_signatures').insert([{ docRef: conceptNote.grrNumber, docType: 'grr', relatedRef: conceptNote.refNumber, signerName: this.currentUser, signerRole: 'finance_authorizer', signatureData: sigData, signedAt: now, pageContext: 'finance_sign' }]);
+                    }
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef: refNumber, docType: 'payment', relatedRef: payment.conceptNoteRef || refNumber,
+                        signerName: this.currentUser, signerRole: `finance_${stage}`, signatureData: sigData, signedAt: now,
+                        pageContext: `payment_${stage}`
+                    }]);
+                    await this._logAudit('payments', refNumber, `payment_${stage}ed`, `${this._financeStageLabel(stage)} by ${this.currentUser} (Finance ${stage}). Amount: ₦${payment.amount.toLocaleString()}. Staff: ${payment.staffName}.`);
+                    if (stage === 'authorizer') {
+                        await this.createNotification(payment.staffName, `Your payment of ₦${payment.amount.toLocaleString()} (${refNumber}) has been processed!`, 'success', refNumber);
+                        alert(`Payment of ₦${payment.amount.toLocaleString()} authorized and processed successfully!`);
+                    } else {
+                        const nextOfficer = this._financeOfficerForStage(stage === 'reviewer' ? 'approver' : 'authorizer');
+                        if (nextOfficer) await this.createNotification(nextOfficer, `Payment ${refNumber} (₦${payment.amount.toLocaleString()}) has been ${stage === 'reviewer' ? 'reviewed' : 'approved'} and is awaiting your ${stage === 'reviewer' ? 'approval' : 'authorization'}.`, 'info', refNumber);
+                        alert(`Payment ${this._financeStageLabel(stage).toLowerCase()}d. ${nextOfficer ? nextOfficer + ' has been notified.' : ''}`);
+                    }
+                    await this.loadData(); this.showView('approvals');
+                } catch (error) { console.error('Finance stage error:', error); alert('Error processing: ' + error.message); }
+            },
+            async advanceRetirementStage(refNumber) {
+                const retirement = this.data.retirements.find(r => r.refNumber === refNumber);
+                if (!retirement) return;
+                const stage = this._financeStageForCurrentStatus(retirement.status);
+                if (!stage) { alert('This retirement is not currently awaiting a finance action.'); return; }
+                if (!this._canActOnFinanceStage(stage)) {
+                    alert(`Only ${this._financeOfficerForStage(stage)} (Finance ${stage}) can ${this._financeStageLabel(stage).toLowerCase()} this retirement.`);
+                    return;
+                }
+                const sigData = await this._showSignaturePad(
+                    `Finance ${this._financeStageLabel(stage)} Signature`,
+                    stage === 'reviewer'
+                        ? `I, ${this.currentUser}, confirm I have reviewed retirement ${refNumber} (₦${Number(retirement.actualSpent||0).toLocaleString()} spent) and it is in order.`
+                        : stage === 'approver'
+                        ? `I, ${this.currentUser}, approve retirement ${refNumber} to proceed to final authorization.`
+                        : `I, ${this.currentUser}, authorize and finalize retirement ${refNumber}.`
+                );
+                if (!sigData) return;
+                const now = new Date().toISOString();
+                // Reviewer: new intermediate status. Approver: intermediate status, but
+                // recorded via the existing financeApprovedBy/financeApproved columns.
+                // Authorizer: final — writes 'approved' via the existing
+                // approvedBy/approvedDate/approversignaturedata/approversignedat columns.
+                const newStatus = stage === 'reviewer' ? 'reviewed'
+                                 : stage === 'approver' ? 'finance_approved'
+                                 : 'approved';
+                try {
+                    const updates = { status: newStatus };
+                    if (stage === 'reviewer') {
+                        Object.assign(updates, { reviewedBy: this.currentUser, reviewedAt: now, reviewSignatureData: sigData });
+                    } else if (stage === 'approver') {
+                        Object.assign(updates, { financeApprovedBy: this.currentUser, financeApproved: now, financeApproveSignatureData: sigData });
+                    } else {
+                        Object.assign(updates, {
+                            approvedDate: now, approvedBy: this.currentUser,
+                            approversignaturedata: sigData, approversignedat: now
+                        });
+                    }
+                    const { error } = await supabaseClient.from('retirements').update(updates).eq('refNumber', refNumber);
+                    if (error) throw error;
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef: refNumber, docType: 'retirement', relatedRef: retirement.paymentRef || refNumber,
+                        signerName: this.currentUser, signerRole: `finance_${stage}`, signatureData: sigData, signedAt: now,
+                        pageContext: `retirement_${stage}`
+                    }]);
+                    await this._logAudit('retirements', refNumber, `retirement_${stage}ed`, `${this._financeStageLabel(stage)} by ${this.currentUser} (Finance ${stage}). Staff: ${retirement.staffName}. Amount spent: ₦${Number(retirement.actualSpent||0).toLocaleString()}.`);
+                    if (stage === 'authorizer') {
+                        await this.createNotification(retirement.staffName, `Your retirement ${refNumber} has been approved by Finance.`, 'success', retirement.paymentRef || refNumber);
+                        alert('Retirement authorized and approved successfully!');
+                    } else {
+                        const nextOfficer = this._financeOfficerForStage(stage === 'reviewer' ? 'approver' : 'authorizer');
+                        if (nextOfficer) await this.createNotification(nextOfficer, `Retirement ${refNumber} has been ${stage === 'reviewer' ? 'reviewed' : 'approved'} and is awaiting your ${stage === 'reviewer' ? 'approval' : 'authorization'}.`, 'info', retirement.paymentRef || refNumber);
+                        alert(`Retirement ${this._financeStageLabel(stage).toLowerCase()}d. ${nextOfficer ? nextOfficer + ' has been notified.' : ''}`);
+                    }
+                    await this.loadData(); this.showView('approvals');
+                } catch (error) { console.error('Finance stage error:', error); alert('Error processing: ' + error.message); }
+            },
             getMyConceptNotes() { if (!this.cache.myConceptNotes) this.cache.myConceptNotes = this.data.conceptNotes.filter(cn => cn.staffName === this.currentUser); return this.cache.myConceptNotes; },
             getMyPayments() { if (!this.cache.myPayments) this.cache.myPayments = this.data.payments.filter(p => p.staffName === this.currentUser); return this.cache.myPayments; },
             getMyRetirements() { if (!this.cache.myRetirements) this.cache.myRetirements = this.data.retirements.filter(r => r.staffName === this.currentUser); return this.cache.myRetirements; },
