@@ -2069,18 +2069,17 @@ if (role === 'procurement') {
                     if (!boSigData) return; // cancelled
                 }
 
-                const now = new Date().toISOString();
-                const poNumber = 'PO-' + refNumber + '-' + Date.now();
+               const now = new Date().toISOString();
 
               switch(action) {
     case 'approve_under_1m':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser }
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'approve_with_note':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser }
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'approve_needs_ed':
@@ -2091,7 +2090,7 @@ if (role === 'procurement') {
     case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
     case 'ed_approve':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser }
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
 }
@@ -2099,30 +2098,13 @@ if (role === 'procurement') {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
                     if (error) throw error;
                     Object.assign(cn, updates); this.clearCache();
-                    await this._logAudit('concept_notes', refNumber, action, (() => {
+                  await this._logAudit('concept_notes', refNumber, action, (() => {
                         if (action === 'forward_to_ed') return `Forwarded to ED by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}.`;
                         if (action === 'approve_needs_ed') return `Pre-approved by BO ${this.currentUser} (₦${cn.estimatedCost.toLocaleString()} — above limit). Sent to ED for counter-signature.`;
-                        if (updates.sentToProcurement) return `Approved by ${this.currentUser} → sent to Procurement. Amount: ₦${cn.estimatedCost.toLocaleString()}. PO: ${updates.poNumber||'N/A'}.`;
+                        if (updates.sentToProcurement) return `Approved by ${this.currentUser} → sent to Procurement. Amount: ₦${cn.estimatedCost.toLocaleString()}. Procurement will run quotation analysis / create PO.`;
                         if (updates.status === 'approved') return `Approved by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}. Project: ${cn.projectCode}.`;
                         return `Action: ${action} by ${this.currentUser}.`;
                     })());
-
-                    // ── If PO was generated, record BO/ED signature against CN ref so dossier finds it ──
-                    if (boSigData && updates.poNumber) {
-                        await supabaseClient.from('document_signatures').insert([{
-                            docRef: updates.poNumber,
-                            docType: 'purchase_order',
-                            relatedRef: refNumber,          // CN ref — dossier queries by this
-                            signerName: this.currentUser,
-                            signerRole: action === 'ed_approve' ? 'ed' : 'budgetOwner',
-                            signatureData: boSigData,
-                            signedAt: now,
-                            pageContext: 'budget_owner_po'
-                        }]);
-                        if (confirm('Purchase Order ' + updates.poNumber + ' has been generated and your signature recorded.\n\nWould you like to preview the PO now?')) {
-                            await this._previewPODraft(refNumber);
-                        }
-                    }
                     const isFullyApproved = updates.status === 'approved';
                     const sentToProcurement = !!updates.sentToProcurement;
                     const forwardedToED = !!updates.forwardedToED;
