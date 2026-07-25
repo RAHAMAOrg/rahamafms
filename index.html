@@ -1251,8 +1251,12 @@
                     return '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;padding:6px 10px;margin-bottom:6px;max-width:200px;"><div style="font-size:11px;font-weight:700;color:#B71C1C;">⚠️ Finance Rejected</div><div style="font-size:11px;color:#C62828;margin-top:2px;">' + (cn.financeRejectionReason.length > 60 ? cn.financeRejectionReason.slice(0,60)+'…' : cn.financeRejectionReason) + '</div></div>' + fixBtn;
                 }
                 if (!cn.poNumber) {
-                    return '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>'
-                         + '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="border-color:#6B7280;color:#6B7280;font-size:12px;">📝 Skip Analysis — Enter PO Directly</button>';
+                    const QUOTE_THRESHOLD = 500000;
+                    if (Number(cn.estimatedCost) > QUOTE_THRESHOLD) {
+                        return '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>'
+                             + '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="border-color:#6B7280;color:#6B7280;font-size:12px;">📝 Skip Analysis — Enter PO Directly</button>';
+                    }
+                    return '<button class="action-btn approve" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')">📝 Create PO</button>';
                 }
                 if (!cn.grrNumber) {
                     return '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
