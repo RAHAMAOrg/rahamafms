@@ -704,9 +704,52 @@
                 return this.data.payments.filter(p => p.projectCode === projectCode && p.status === 'paid').reduce((sum, p) => sum + (p.amount || 0), 0);
             },
             
+            // Compress photos in the browser before upload. Phone cameras produce
+            // 3–5MB images; receipts remain perfectly legible at ~1600px wide and
+            // 72% JPEG quality, which is typically a 90% size reduction.
+            // Non-images (PDF, DOC, XLS) are returned untouched.
+            async _compressImage(file, maxDim = 1600, quality = 0.72) {
+                if (!file || !file.type || !file.type.startsWith('image/')) return file;
+                if (file.type === 'image/gif') return file;           // don't flatten animations
+                if (file.size < 400 * 1024) return file;              // already small enough
+                try {
+                    const dataUrl = await new Promise((res, rej) => {
+                        const r = new FileReader();
+                        r.onload = () => res(r.result); r.onerror = rej;
+                        r.readAsDataURL(file);
+                    });
+                    const img = await new Promise((res, rej) => {
+                        const i = new Image();
+                        i.onload = () => res(i); i.onerror = rej;
+                        i.src = dataUrl;
+                    });
+                    let { width: w, height: h } = img;
+                    if (w > maxDim || h > maxDim) {
+                        if (w >= h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+                        else        { w = Math.round(w * (maxDim / h)); h = maxDim; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h);  // flatten transparency
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+                    if (!blob || blob.size >= file.size) return file;      // no gain — keep original
+                    const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+                    const out = new File([blob], newName, { type: 'image/jpeg' });
+                    console.log(`Compressed ${file.name}: ${(file.size/1024).toFixed(0)}KB → ${(out.size/1024).toFixed(0)}KB`);
+                    return out;
+                } catch (e) {
+                    console.warn('Image compression failed, uploading original:', e);
+                    return file;
+                }
+            },
+
             async uploadFile(file, type = 'general') {
                 if (!file) return null;
                 if (file.size > MAX_FILE_SIZE) throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`);
+                const original = file;
+                file = await this._compressImage(file);
                 const timestamp = Date.now();
                 const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const fileName = `${type}/${timestamp}_${sanitizedName}`;
@@ -714,7 +757,7 @@
                     const { data, error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(fileName, file);
                     if (error) throw error;
                     const { data: urlData } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(fileName);
-                    return { url: urlData.publicUrl, fileName: file.name, size: file.size, type: file.type };
+                    return { url: urlData.publicUrl, fileName: original.name, size: file.size, type: file.type };
                 } catch (error) {
                     console.error('Upload error:', error);
                     throw new Error('Failed to upload file: ' + error.message);
@@ -1251,12 +1294,8 @@
                     return '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;padding:6px 10px;margin-bottom:6px;max-width:200px;"><div style="font-size:11px;font-weight:700;color:#B71C1C;">⚠️ Finance Rejected</div><div style="font-size:11px;color:#C62828;margin-top:2px;">' + (cn.financeRejectionReason.length > 60 ? cn.financeRejectionReason.slice(0,60)+'…' : cn.financeRejectionReason) + '</div></div>' + fixBtn;
                 }
                 if (!cn.poNumber) {
-                    const QUOTE_THRESHOLD = 500000;
-                    if (Number(cn.estimatedCost) > QUOTE_THRESHOLD) {
-                        return '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>'
-                             + '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="border-color:#6B7280;color:#6B7280;font-size:12px;">📝 Skip Analysis — Enter PO Directly</button>';
-                    }
-                    return '<button class="action-btn approve" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')">📝 Create PO</button>';
+                    return '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>'
+                         + '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="border-color:#6B7280;color:#6B7280;font-size:12px;">📝 Skip Analysis — Enter PO Directly</button>';
                 }
                 if (!cn.grrNumber) {
                     return '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
@@ -1539,7 +1578,7 @@
                             <div class="file-upload-area" id="invoiceUploadArea" onclick="document.getElementById('invoiceFile').click()"><p>📄 Click to upload vendor invoice</p><span class="form-hint">Vendor's invoice for goods/services — PDF, JPG, PNG — Max 5MB</span></div>
                             <input type="file" id="invoiceFile" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="app.handleInvoiceUpload(this)">
                         </div>
-                        <div class="btn-group full-width"><button type="submit" class="btn btn-primary">Submit Retirement</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
+                        <div class="btn-group full-width"><button type="submit" class="btn btn-primary" id="submitRetirementBtn">Submit Retirement</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
                     </form>`}`;
             },
             
@@ -1745,8 +1784,22 @@
                 const file = document.getElementById('retirementFile').files[0];
                 const invoiceFile = document.getElementById('invoiceFile')?.files[0];
                 let receiptFileData = null, invoiceFileData = null;
-                if (file) receiptFileData = await this.uploadFile(file, 'retirements');
-                if (invoiceFile) invoiceFileData = await this.uploadFile(invoiceFile, 'retirements');
+                // Lock the button BEFORE uploading. Without this, a second tap on a
+                // slow connection re-uploads the same files and creates duplicates.
+                const retBtn = document.getElementById('submitRetirementBtn');
+                if (retBtn) {
+                    if (retBtn.disabled) return;          // already submitting
+                    retBtn.disabled = true; retBtn.textContent = 'Uploading…';
+                }
+                try {
+                    if (file) receiptFileData = await this.uploadFile(file, 'retirements');
+                    if (invoiceFile) invoiceFileData = await this.uploadFile(invoiceFile, 'retirements');
+                } catch (upErr) {
+                    if (retBtn) { retBtn.disabled = false; retBtn.textContent = 'Submit Retirement'; }
+                    alert('Error uploading file: ' + upErr.message);
+                    return;
+                }
+                if (retBtn) retBtn.textContent = 'Saving…';
               try {
     const paymentRef = formData.get('paymentRef');
     const retirementPayload = {
@@ -1800,7 +1853,12 @@
                         await this.createNotification(f, `Retirement ${savedRetirement.refNumber} submitted by ${this.currentUser} is pending your review.`, 'info', savedRetirement.paymentRef);
                     }
                     alert('Retirement submitted successfully!'); this.showView('dashboard');
-                } catch (error) { console.error('Submit error:', error); alert('Error submitting retirement: ' + error.message); }
+                } catch (error) {
+                    console.error('Submit error:', error);
+                    alert('Error submitting retirement: ' + error.message);
+                    const b = document.getElementById('submitRetirementBtn');
+                    if (b) { b.disabled = false; b.textContent = 'Submit Retirement'; }
+                }
             },
             
             async renderApprovals(content) {
@@ -2073,17 +2131,18 @@ if (role === 'procurement') {
                     if (!boSigData) return; // cancelled
                 }
 
-               const now = new Date().toISOString();
+                const now = new Date().toISOString();
+                const poNumber = 'PO-' + refNumber + '-' + Date.now();
 
               switch(action) {
     case 'approve_under_1m':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser }
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'approve_with_note':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser }
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'approve_needs_ed':
@@ -2094,7 +2153,7 @@ if (role === 'procurement') {
     case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
     case 'ed_approve':
         updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser }
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
 }
@@ -2102,13 +2161,30 @@ if (role === 'procurement') {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
                     if (error) throw error;
                     Object.assign(cn, updates); this.clearCache();
-                  await this._logAudit('concept_notes', refNumber, action, (() => {
+                    await this._logAudit('concept_notes', refNumber, action, (() => {
                         if (action === 'forward_to_ed') return `Forwarded to ED by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}.`;
                         if (action === 'approve_needs_ed') return `Pre-approved by BO ${this.currentUser} (₦${cn.estimatedCost.toLocaleString()} — above limit). Sent to ED for counter-signature.`;
-                        if (updates.sentToProcurement) return `Approved by ${this.currentUser} → sent to Procurement. Amount: ₦${cn.estimatedCost.toLocaleString()}. Procurement will run quotation analysis / create PO.`;
+                        if (updates.sentToProcurement) return `Approved by ${this.currentUser} → sent to Procurement. Amount: ₦${cn.estimatedCost.toLocaleString()}. PO: ${updates.poNumber||'N/A'}.`;
                         if (updates.status === 'approved') return `Approved by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}. Project: ${cn.projectCode}.`;
                         return `Action: ${action} by ${this.currentUser}.`;
                     })());
+
+                    // ── If PO was generated, record BO/ED signature against CN ref so dossier finds it ──
+                    if (boSigData && updates.poNumber) {
+                        await supabaseClient.from('document_signatures').insert([{
+                            docRef: updates.poNumber,
+                            docType: 'purchase_order',
+                            relatedRef: refNumber,          // CN ref — dossier queries by this
+                            signerName: this.currentUser,
+                            signerRole: action === 'ed_approve' ? 'ed' : 'budgetOwner',
+                            signatureData: boSigData,
+                            signedAt: now,
+                            pageContext: 'budget_owner_po'
+                        }]);
+                        if (confirm('Purchase Order ' + updates.poNumber + ' has been generated and your signature recorded.\n\nWould you like to preview the PO now?')) {
+                            await this._previewPODraft(refNumber);
+                        }
+                    }
                     const isFullyApproved = updates.status === 'approved';
                     const sentToProcurement = !!updates.sentToProcurement;
                     const forwardedToED = !!updates.forwardedToED;
