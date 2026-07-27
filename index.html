@@ -266,6 +266,10 @@
                     { code: 'RAM101', name: 'Ramadan Contribution', budget: 212000 },
                     { code: 'ADM001', name: 'Admin & Operations', budget: 2000000 }
                 ],
+                // Security clearance is held independently of the finance/procurement
+                // role map, so the same person can hold both until a dedicated
+                // security consultant is appointed.
+                securityOfficers: ['Salahuddeen Sambo'],
                 roles: {
                     'Aisha Linatu Abdulrahman': 'budgetOwner',
                     'Fatima Tijjani': 'ed',
@@ -1204,15 +1208,258 @@
                         </div>
                         <div class="form-group"><label>Implementation Date <span class="required">*</span></label><input type="date" name="implementation_date" id="implementation_date" required></div>
                         <div class="form-group full-width"><label>Are items/services to be procured? <span class="required">*</span></label><select name="requiresProcurement" required><option value="no">No - Direct payment</option><option value="yes">Yes - Procurement needed</option></select><span class="form-hint">Select "Yes" if items need to be purchased by Procurement team</span></div>
+                        <div class="form-group full-width"><label>Does this activity involve travel? <span class="required">*</span></label><select name="travelRequired" id="travelRequiredSelect" required onchange="app._onTravelToggle(this.value)"><option value="no">No</option><option value="yes">Yes - Travel required</option></select><span class="form-hint">Travel requires security clearance before procurement or payment can proceed</span></div>
+                        <div class="form-group full-width" id="travelSummaryBox" style="display:none;">
+                            <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:10px;padding:14px 18px;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                                    <div><div style="font-weight:700;color:#E65100;font-size:13px;">🚗 Travel Details</div>
+                                        <div id="travelSummaryText" style="font-size:12px;color:#BF360C;margin-top:3px;">Not yet provided</div></div>
+                                    <button type="button" onclick="app._showTravelModal()" style="padding:8px 16px;background:#E65100;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Enter Travel Details</button>
+                                </div>
+                            </div>
+                        </div>
                         <div class="btn-group full-width"><button type="submit" class="btn btn-primary">Submit Concept Note</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
                     </form>`;
             },
             
+            // Security officer reviews travel and grants or denies clearance.
+            async showSecurityReview(refNumber) {
+                if (!this._isSecurityOfficer()) { alert('Only the designated security officer can grant clearance.'); return; }
+                let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data;
+                }
+                let t = {};
+                try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e) {}
+                const content = document.getElementById('mainContent');
+                const row = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;">${v||'—'}</div></div>`;
+                content.innerHTML = `
+                    <div class="header"><h2>🛡️ Security Clearance</h2>
+                        <p>Review the travel request and issue clearance before procurement or payment proceeds</p></div>
+
+                    <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+                        <div style="font-weight:700;color:#E65100;font-size:14px;margin-bottom:14px;">🚗 Travel Request — ${cn.refNumber}</div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;">
+                            ${row('Activity', cn.activityTitle)}
+                            ${row('Requested By', cn.staffName)}
+                            ${row('Project', cn.projectCode)}
+                            ${row('Destination', t.destination)}
+                            ${row('Proposed Route', t.route)}
+                            ${row('Type of Travel', t.travelType)}
+                            ${row('Travellers', t.travellers)}
+                            ${row('Departure', t.departDate)}
+                            ${row('Return', t.returnDate)}
+                            ${row('Accommodation', t.accommodation)}
+                        </div>
+                        ${t.travellerNames ? `<div style="margin-top:14px;">${row('Names of Travellers', String(t.travellerNames).replace(/\n/g,', '))}</div>` : ''}
+                        ${t.purpose ? `<div style="margin-top:14px;">${row('Purpose', t.purpose)}</div>` : ''}
+                    </div>
+
+                    <form class="form-grid" onsubmit="app.submitSecurityClearance(event,'${refNumber}')">
+                        <div class="form-group full-width">
+                            <label>Risk Level <span class="required">*</span></label>
+                            <select id="secRisk" required>
+                                <option value="">Select risk level</option>
+                                <option value="Low">🟢 Low — routine travel, no known threat</option>
+                                <option value="Medium">🟡 Medium — proceed with stated precautions</option>
+                                <option value="High">🔴 High — significant risk</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Approved Route <span class="required">*</span></label>
+                            <textarea id="secRoute" rows="2" required placeholder="The route that must be followed — may differ from the route proposed">${t.route||''}</textarea>
+                            <span class="form-hint">Staff are required to follow this route</span>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Security Advice <span class="required">*</span></label>
+                            <textarea id="secAdvice" rows="5" required placeholder="Movement timings, checkpoints, contacts, communication protocol, no-go areas, curfew, escort requirements…"></textarea>
+                        </div>
+                        <div class="btn-group full-width" style="flex-wrap:wrap;gap:10px;">
+                            <button type="submit" class="btn btn-primary" id="secClearBtn">🛡️ Grant Clearance &amp; Sign</button>
+                            <button type="button" class="btn btn-secondary" style="border-color:var(--danger);color:var(--danger);" onclick="app.denySecurityClearance('${refNumber}')">✗ Deny Clearance</button>
+                            <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">Cancel</button>
+                        </div>
+                    </form>`;
+            },
+
+            async submitSecurityClearance(event, refNumber) {
+                event.preventDefault();
+                const risk   = document.getElementById('secRisk').value;
+                const route  = document.getElementById('secRoute').value.trim();
+                const advice = document.getElementById('secAdvice').value.trim();
+                if (!risk || !route || !advice) { alert('Risk level, approved route and security advice are all required.'); return; }
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber)
+                        || (await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single()).data;
+                if (!cn) { alert('Concept note not found.'); return; }
+
+                const sig = await this._showSignaturePad('Security Clearance',
+                    `I, ${this.currentUser}, have assessed this travel request and grant clearance at ${risk} risk, subject to the advice and route stated.`);
+                if (!sig) return;
+
+                const btn = document.getElementById('secClearBtn');
+                if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+                try {
+                    const now = new Date().toISOString();
+                    // Cleared — resume the normal route: procurement, or straight to payment
+                    const onward = cn.requiresProcurement === 'yes'
+                        ? { status: 'pending', currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement' }
+                        : { status: 'approved', approvedDate: now, approvedBy: cn.approvedBy || cn.edApprovedBy || this.currentUser, retirementresponsibility: 'staff' };
+                    const { error } = await supabaseClient.from('concept_notes').update({
+                        securityStatus: 'cleared', securityRiskLevel: risk,
+                        securityApprovedRoute: route, securityAdvice: advice,
+                        securityClearedBy: this.currentUser, securityClearedAt: now,
+                        securityDenialReason: null, ...onward
+                    }).eq('refNumber', refNumber);
+                    if (error) throw error;
+
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef: refNumber, docType: 'security_clearance', relatedRef: refNumber,
+                        signerName: this.currentUser, signerRole: 'security',
+                        signatureData: sig, signedAt: now, pageContext: 'security_clearance'
+                    }]);
+
+                    await this._logAudit('concept_notes', refNumber, 'security_cleared',
+                        `Security clearance granted by ${this.currentUser}. Risk: ${risk}. Route: ${route}.`);
+                    await this.createNotification(cn.staffName,
+                        `Security clearance granted for ${refNumber} (${cn.activityTitle}). Risk level: ${risk}. Please follow the approved route and security advice.`,
+                        'success', refNumber);
+                    this.clearCache();
+                    alert(`Clearance granted (${risk} risk).\n\n${cn.requiresProcurement === 'yes' ? 'Sent to Procurement.' : 'Staff can now request payment.'}`);
+                    this.showView('approvals');
+                } catch(e) {
+                    alert('Error saving clearance: ' + e.message);
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = '🛡️ Grant Clearance & Sign'; }
+                }
+            },
+
+            async denySecurityClearance(refNumber) {
+                const reason = prompt('Reason for denying security clearance:\n\nThe concept note will be closed and the staff member must submit a new one.');
+                if (reason === null) return;
+                if (!reason.trim()) { alert('A reason is required.'); return; }
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber)
+                        || (await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single()).data;
+                if (!confirm(`Deny clearance for ${refNumber}?\n\nThis closes the concept note permanently. ${cn?.staffName||'The staff member'} will need to submit a new one.`)) return;
+                try {
+                    const now = new Date().toISOString();
+                    const { error } = await supabaseClient.from('concept_notes').update({
+                        securityStatus: 'denied', securityDenialReason: reason.trim(),
+                        securityClearedBy: this.currentUser, securityClearedAt: now,
+                        status: 'rejected', currentApprover: null,
+                        rejectedBy: this.currentUser, rejectedDate: now,
+                        rejectionReason: 'Security clearance denied: ' + reason.trim()
+                    }).eq('refNumber', refNumber);
+                    if (error) throw error;
+                    await this._logAudit('concept_notes', refNumber, 'security_denied',
+                        `Security clearance DENIED by ${this.currentUser}. Reason: ${reason.trim()}`);
+                    if (cn) await this.createNotification(cn.staffName,
+                        `Security clearance was denied for ${refNumber} (${cn.activityTitle}). Reason: ${reason.trim()} — this concept note is closed; please submit a new one if the travel is still required.`,
+                        'error', refNumber);
+                    this.clearCache();
+                    alert('Clearance denied. The concept note is now closed.');
+                    this.showView('approvals');
+                } catch(e) { alert('Error: ' + e.message); }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // TRAVEL & SECURITY CLEARANCE
+            // Travel details are captured by staff at creation; security advice,
+            // approved route and risk level are added by the security officer
+            // after ED approval and before procurement or payment can proceed.
+            // ══════════════════════════════════════════════════════════════
+            _travelDetails: null,
+            _isSecurityOfficer(name) {
+                return (this.data.securityOfficers || []).includes(name || this.currentUser);
+            },
+            _onTravelToggle(val) {
+                const box = document.getElementById('travelSummaryBox');
+                if (box) box.style.display = (val === 'yes') ? '' : 'none';
+                if (val !== 'yes') { app._travelDetails = null; this._refreshTravelSummary(); }
+                else if (!app._travelDetails) this._showTravelModal();
+            },
+            _refreshTravelSummary() {
+                const el = document.getElementById('travelSummaryText');
+                if (!el) return;
+                const t = app._travelDetails;
+                el.innerHTML = t
+                    ? `<strong>${t.destination}</strong> · ${t.travelType} · ${t.departDate||'—'} → ${t.returnDate||'—'} · ${t.travellers} traveller(s)`
+                    : 'Not yet provided';
+            },
+            _showTravelModal() {
+                let ov = document.getElementById('travelModalOverlay');
+                if (!ov) {
+                    ov = document.createElement('div');
+                    ov.id = 'travelModalOverlay';
+                    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;';
+                    document.body.appendChild(ov);
+                }
+                const t = app._travelDetails || {};
+                const esc = s => String(s==null?'':s).replace(/"/g,'&quot;');
+                ov.innerHTML = `
+                    <div style="background:#fff;border-radius:14px;max-width:700px;width:100%;max-height:92vh;overflow:auto;">
+                        <div style="background:#E65100;color:#fff;padding:18px 24px;border-radius:14px 14px 0 0;display:flex;align-items:center;gap:12px;">
+                            <div style="font-size:22px;">🚗</div>
+                            <div><h3 style="margin:0;font-family:'Archivo',sans-serif;">Travel Details</h3>
+                            <div style="font-size:12px;opacity:.9;">Required for security clearance</div></div>
+                        </div>
+                        <div style="padding:24px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                                <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Destination <span style="color:var(--danger)">*</span></label>
+                                    <input type="text" id="tvDest" value="${esc(t.destination)}" placeholder="e.g. Zango LGA, Katsina State" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Proposed Route <span style="color:var(--danger)">*</span></label>
+                                    <input type="text" id="tvRoute" value="${esc(t.route)}" placeholder="e.g. Kano → Kazaure → Daura → Zango" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Type of Travel <span style="color:var(--danger)">*</span></label>
+                                    <select id="tvType" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
+                                        ${['Road - Project vehicle','Road - Hired vehicle','Road - Public transport','Air','Mixed'].map(o=>`<option value="${o}"${t.travelType===o?' selected':''}>${o}</option>`).join('')}
+                                    </select></div>
+                                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Number of Travellers <span style="color:var(--danger)">*</span></label>
+                                    <input type="number" id="tvCount" min="1" value="${t.travellers||1}" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Departure Date <span style="color:var(--danger)">*</span></label>
+                                    <input type="date" id="tvDepart" value="${esc(t.departDate)}" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Return Date <span style="color:var(--danger)">*</span></label>
+                                    <input type="date" id="tvReturn" value="${esc(t.returnDate)}" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Names of Travellers</label>
+                                    <textarea id="tvNames" rows="2" placeholder="One per line, or comma separated" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${t.travellerNames||''}</textarea></div>
+                                <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Overnight Stay / Accommodation</label>
+                                    <input type="text" id="tvStay" value="${esc(t.accommodation)}" placeholder="e.g. Day trip — no overnight stay" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Purpose of Travel</label>
+                                    <textarea id="tvPurpose" rows="2" placeholder="What will be done at the destination" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${t.purpose||''}</textarea></div>
+                            </div>
+                            <div style="display:flex;gap:12px;margin-top:22px;">
+                                <button type="button" onclick="document.getElementById('travelModalOverlay').remove()" style="flex:1;padding:13px;background:#F3F4F6;border:none;border-radius:10px;font-weight:700;cursor:pointer;">Cancel</button>
+                                <button type="button" onclick="app._saveTravelDetails()" style="flex:1;padding:13px;background:#E65100;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;">Save Travel Details</button>
+                            </div>
+                        </div>
+                    </div>`;
+            },
+            _saveTravelDetails() {
+                const g = id => (document.getElementById(id)?.value || '').trim();
+                const d = {
+                    destination: g('tvDest'), route: g('tvRoute'),
+                    travelType: g('tvType'), travellers: parseInt(g('tvCount')) || 1,
+                    departDate: g('tvDepart'), returnDate: g('tvReturn'),
+                    travellerNames: g('tvNames'), accommodation: g('tvStay'), purpose: g('tvPurpose')
+                };
+                if (!d.destination) { alert('Destination is required.'); return; }
+                if (!d.route)       { alert('Proposed route is required.'); return; }
+                if (!d.departDate || !d.returnDate) { alert('Departure and return dates are required.'); return; }
+                if (new Date(d.returnDate) < new Date(d.departDate)) { alert('Return date cannot be before the departure date.'); return; }
+                app._travelDetails = d;
+                document.getElementById('travelModalOverlay')?.remove();
+                this._refreshTravelSummary();
+            },
+
             async submitConceptNote(event) {
                 event.preventDefault(); this.clearErrors();
                 const form = event.target; const formData = new FormData(form);
                 const amount = parseFloat(document.getElementById('estimatedCost')?.value) || 0;
                 if (amount <= 0) { alert('Please fill in at least one budget line item before submitting.'); return; }
+                if (formData.get('travelRequired') === 'yes' && !app._travelDetails) {
+                    alert('You indicated this activity involves travel.\n\nPlease enter the travel details before submitting — they are needed for security clearance.');
+                    this._showTravelModal(); return;
+                }
 
                 // ── Capture staff signature before proceeding ──
                 const sigData = await this._showSignaturePad(
@@ -1229,7 +1476,7 @@
                     const firstApprover = submitterRole === 'budgetOwner' ? 'ed' : 'budgetOwner';
                     // Collect budget line items as text for storage
                     const budgetLinesText = this.getCNBudgetLinesText();
-                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, budgetBreakdown: budgetLinesText || null, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
+                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, budgetBreakdown: budgetLinesText || null, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), travelRequired: formData.get('travelRequired') || 'no', travelDetailsJson: (formData.get('travelRequired') === 'yes' && app._travelDetails) ? JSON.stringify(app._travelDetails) : null, securityStatus: (formData.get('travelRequired') === 'yes') ? 'pending' : null, status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
                     const { data, error } = await supabaseClient.from('concept_notes').insert([conceptNote]).select();
                     if (error) throw error;
                     // Upload optional budget document
@@ -1294,8 +1541,16 @@
                     return '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;padding:6px 10px;margin-bottom:6px;max-width:200px;"><div style="font-size:11px;font-weight:700;color:#B71C1C;">⚠️ Finance Rejected</div><div style="font-size:11px;color:#C62828;margin-top:2px;">' + (cn.financeRejectionReason.length > 60 ? cn.financeRejectionReason.slice(0,60)+'…' : cn.financeRejectionReason) + '</div></div>' + fixBtn;
                 }
                 if (!cn.poNumber) {
-                    return '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>'
-                         + '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="border-color:#6B7280;color:#6B7280;font-size:12px;">📝 Skip Analysis — Enter PO Directly</button>';
+                    // At or above ₦500,000 the quotation analysis is mandatory —
+                    // procurement cannot enter a PO directly.
+                    const mustAnalyse = Number(cn.estimatedCost || 0) >= 500000;
+                    let out = '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>';
+                    if (mustAnalyse) {
+                        out += '<div style="font-size:11px;color:#B45309;max-width:190px;">⚠️ Above ₦500,000 — quotation analysis is required, with at least 3 quotes.</div>';
+                    } else {
+                        out += '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="border-color:#6B7280;color:#6B7280;font-size:12px;">📝 Skip Analysis — Enter PO Directly</button>';
+                    }
+                    return out;
                 }
                 if (!cn.grrNumber) {
                     return '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
@@ -1969,6 +2224,10 @@ if (role === 'procurement') {
         || !!cn.financeRejectionReason; // finance-rejected always shows
 });
                 const allCNs = this.data.conceptNotes;
+                // Travel awaiting security clearance — visible to security officers
+                const securityQueue = this._isSecurityOfficer()
+                    ? this.data.conceptNotes.filter(cn => cn.travelRequired === 'yes' && cn.securityStatus === 'pending' && cn.status === 'security_review')
+                    : [];
                 const financeActionableStatuses = ['pending','reviewed','finance_approved'];
                 const pendingPayments = this.data.payments.filter(p => financeActionableStatuses.includes(p.status) && ['finance','finance_manager'].includes(role));
                 const pendingRetirements = this.data.retirements.filter(r => financeActionableStatuses.includes(r.status) && ['finance','finance_manager'].includes(role));
@@ -2092,6 +2351,7 @@ if (role === 'procurement') {
                         </tr>`).join('')}
                         </tbody></table></div>
                     </div>` : ''}
+                    ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${t.destination||'—'}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${app._renderFinancePaymentActions(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br>${app._renderFinanceRetirementActions(r)}</td></tr>`).join('')}</tbody></table></div>` : ''}
@@ -2132,30 +2392,44 @@ if (role === 'procurement') {
                 }
 
                 const now = new Date().toISOString();
-                const poNumber = 'PO-' + refNumber + '-' + Date.now();
+                // NOTE: the PO is no longer generated here. Under the PO-first flow
+                // Procurement raises it after the quotation analysis, so pre-setting
+                // a number caused the analysis step to be skipped entirely.
 
               switch(action) {
+    // Every terminal approval routes through the same decision, so travel is
+    // held for security clearance whether the note was approved by the Budget
+    // Owner (under threshold) or counter-signed by the ED (above 1M, or when
+    // the requester is the Budget Owner).
     case 'approve_under_1m':
-        updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
-        break;
-    case 'approve_with_note':
-        updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerNote: approvalNote, budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
-        break;
+    case 'approve_with_note': {
+        const boFields = { budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
+        if (action === 'approve_with_note') boFields.budgetOwnerNote = approvalNote;
+        const needsSecurity = cn.travelRequired === 'yes' && cn.securityStatus !== 'cleared';
+        updates = needsSecurity
+            ? { status: 'security_review', currentApprover: 'security', securityStatus: 'pending',
+                approvedBy: this.currentUser, approvedDate: null, ...boFields }
+            : cn.requiresProcurement === 'yes'
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', ...boFields }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', ...boFields };
+        break; }
     case 'approve_needs_ed':
         // BO signs first, then routes to ED for counter-signature
         updates = { currentApprover: 'ed', forwardedToED: now, boPreApprovedAt: now,
             budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
         break;
     case 'forward_to_ed': updates = { currentApprover: 'ed', forwardedToED: now }; break;
-    case 'ed_approve':
-        updates = cn.requiresProcurement === 'yes'
-            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser, poNumber, poGeneratedAt: now }
-            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
-        break;
+    case 'ed_approve': {
+        const boFields = { budgetOwnerSignatureData: boSigData, budgetOwnerSignedAt: now, budgetOwnerApprovedBy: this.currentUser };
+        // Travel needs security clearance before procurement or payment can start.
+        const needsSecurity = cn.travelRequired === 'yes' && cn.securityStatus !== 'cleared';
+        updates = needsSecurity
+            ? { status: 'security_review', currentApprover: 'security', securityStatus: 'pending',
+                edApprovedAt: now, edApprovedBy: this.currentUser, ...boFields }
+            : cn.requiresProcurement === 'yes'
+            ? { currentApprover: 'procurement', sentToProcurement: now, retirementresponsibility: 'procurement', ...boFields }
+            : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', ...boFields };
+        break; }
 }
                 try {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
@@ -2299,7 +2573,7 @@ if (role === 'procurement') {
                                 <h3 style="font-family:'Archivo',sans-serif;margin:0;">Competing Quotations</h3>
                                 <button type="button" onclick="app._addQAVendor()" style="padding:8px 16px;background:#EEF2FF;border:1px dashed #C7D2FE;border-radius:6px;color:#1B4D8E;font-size:13px;font-weight:600;cursor:pointer;">+ Add Another Quote</button>
                             </div>
-                            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">A minimum of 3 quotations is required for procurements above ₦500,000</p>
+                            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">A minimum of 3 quotations is required for procurements at or above ₦500,000</p>
                             <div id="qaVendorsContainer">
                                 ${vendorCard(1)}${vendorCard(2)}${vendorCard(3)}
                             </div>
@@ -2307,7 +2581,7 @@ if (role === 'procurement') {
 
                         <div class="btn-group full-width">
                             <button type="submit" class="btn btn-primary" id="qaSubmitBtn">📊 Run Analysis &amp; Select Vendor →</button>
-                            <button type="button" class="btn btn-secondary" onclick="app.showPOCreationForm('${refNumber}')">Skip — Enter PO Directly</button>
+                            ${Number(cn.estimatedCost||0) >= 500000 ? '' : `<button type="button" class="btn btn-secondary" onclick="app.showPOCreationForm('${refNumber}')">Skip — Enter PO Directly</button>`}
                             <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">Cancel</button>
                         </div>
                     </form>`;
@@ -2443,8 +2717,8 @@ if (role === 'procurement') {
 
                 // Three-quote rule applies to the winning total
                 const QUOTE_THRESHOLD = 500000;
-                if (result.winner.totalQuoted > QUOTE_THRESHOLD && vendors.length < 3) {
-                    alert(`This procurement (₦${result.winner.totalQuoted.toLocaleString()}) exceeds ₦500,000. At least 3 quotations are required — you have ${vendors.length}. Please add more.`);
+                if (result.winner.totalQuoted >= QUOTE_THRESHOLD && vendors.length < 3) {
+                    alert(`This procurement (₦${result.winner.totalQuoted.toLocaleString()}) is at or above ₦500,000. At least 3 quotations are required — you have ${vendors.length}. Please add more.`);
                     return;
                 }
 
@@ -2739,6 +3013,13 @@ if (role === 'procurement') {
             showPOCreationForm(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
+                // Backstop: direct PO entry is not permitted at or above ₦500,000
+                // unless a quotation analysis has already been recorded.
+                if (Number(cn.estimatedCost || 0) >= 500000 && !cn.quotationAnalysisJson) {
+                    alert('This procurement is ₦' + Number(cn.estimatedCost).toLocaleString() + ', which is at or above the ₦500,000 threshold.\n\nA quotation analysis with at least 3 quotes is required before a PO can be raised.');
+                    this.showQuotationAnalysis(refNumber);
+                    return;
+                }
                 app._vendorCount = 1;
                 // Pre-filled from a completed quotation analysis, if one was just run
                 const pf = app._qaPrefillVendor || null;
@@ -2831,8 +3112,8 @@ if (role === 'procurement') {
                 // Three-quote rule: require at least 3 vendor blocks for totals > 500,000
                 const QUOTE_THRESHOLD = 500000;
                 const vendorBlockCount = document.querySelectorAll('[id^="vendorBlock_"]').length;
-                if (total > QUOTE_THRESHOLD && vendorBlockCount < 3) {
-                    alert(`This procurement (₦${total.toLocaleString()}) exceeds ₦500,000. You must provide at least 3 vendor quotes. Currently you have ${vendorBlockCount}. Please add more vendors.`);
+                if (total >= QUOTE_THRESHOLD && vendorBlockCount < 3) {
+                    alert(`This procurement (₦${total.toLocaleString()}) is at or above ₦500,000. You must provide at least 3 vendor quotes. Currently you have ${vendorBlockCount}. Please add more vendors.`);
                     return;
                 }
 
@@ -3341,6 +3622,9 @@ if (role === 'procurement') {
                                 // Finance: confirm PO at commitment stage
                                 if (['finance','finance_manager'].includes(myRole) && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app._financeSignPO('${cn.refNumber}')" style="border-color:#0D47A1;color:#0D47A1;">✍️ Confirm PO (Finance)</button>`;
+                                // Procurement: sign the PO they raised
+                                if (myRole === 'procurement' && isProcurement && hasPO)
+                                    btns += `<button class="btn btn-secondary" onclick="app._procurementSignPO('${cn.refNumber}')" style="border-color:#7B1FA2;color:#7B1FA2;">✍️ Sign PO (Procurement)</button>`;
                                 // Procurement: vendor sign PO
                                 if (myRole === 'procurement' && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignPO('${cn.refNumber}')" style="border-color:#1B4D8E;color:#1B4D8E;">✍️ Vendor Sign PO</button>`;
@@ -3387,9 +3671,10 @@ if (role === 'procurement') {
                             .order('signedAt', { ascending: true });
                         const allSigs = sigs || [];
                         const poSteps = [
+                            { ctx: 'procurement_po',  label: 'Procurement raises PO' },
                             { ctx: 'staff_po',        label: 'Staff signs PO' },
                             { ctx: 'budget_owner_po', label: cn.forwardedToED ? 'ED authorises PO' : 'Budget Owner authorises PO' },
-                            { ctx: 'finance_sign',    label: 'Finance confirms payment' },
+                            { ctx: 'finance_sign',    label: 'Finance confirms PO' },
                         ];
                         const grrSteps = [
                             { ctx: 'procurement_received', label: 'Procurement signs GRR (received)' },
@@ -3403,7 +3688,7 @@ if (role === 'procurement') {
                                 ? `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #D1FAE5;"><span style="color:#059669;font-size:16px;">&#x2705;</span><div><div style="font-size:13px;font-weight:600;color:#065F46;">${step.label}</div><div style="font-size:11px;color:#6B7280;">${sig.signerName} &middot; ${new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</div></div></div>`
                                 : `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #D1FAE5;"><span style="color:#D1D5DB;font-size:16px;">&#x25EF;</span><div style="font-size:13px;color:#9CA3AF;">${step.label} <em style="font-size:11px;">(pending)</em></div></div>`;
                         };
-                        const poSigs  = allSigs.filter(s => s.docType === 'purchase_order' || ['staff_po','budget_owner_po'].includes(s.pageContext));
+                        const poSigs  = allSigs.filter(s => s.docType === 'purchase_order' || ['procurement_po','staff_po','budget_owner_po'].includes(s.pageContext));
                         const grrSigs = allSigs.filter(s => s.docType === 'grr' || ['procurement_received','staff_grr_verify','vendor_on_device','vendor_remote'].includes(s.pageContext));
                         // finance_sign appears in both — split by docType
                         allSigs.filter(s => s.pageContext === 'finance_sign').forEach(s => {
@@ -3938,6 +4223,48 @@ if (role === 'procurement') {
                     </div>`;
                 };
 
+                // Travel & security clearance — part of the permanent audit record
+                const travelSection = (() => {
+                    if (cn.travelRequired !== 'yes') return '';
+                    let t = {}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e) {}
+                    const st = cn.securityStatus || 'pending';
+                    const badge = st === 'cleared'
+                        ? '<span style="background:#E8F5E9;color:#1B5E20;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">CLEARED</span>'
+                        : st === 'denied'
+                        ? '<span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">DENIED</span>'
+                        : '<span style="background:#FFF3E0;color:#E65100;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">PENDING</span>';
+                    const riskColour = cn.securityRiskLevel === 'High' ? '#B71C1C' : cn.securityRiskLevel === 'Medium' ? '#E65100' : '#1B5E20';
+                    return `
+                <h2 style="font-size:14px;border-bottom:2px solid #E65100;padding-bottom:6px;margin-top:32px;color:#E65100;">TRAVEL &amp; SECURITY CLEARANCE ${badge}</h2>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
+                    <div><div class="lbl">Destination</div><div class="val">${t.destination||'—'}</div></div>
+                    <div><div class="lbl">Type of Travel</div><div class="val">${t.travelType||'—'}</div></div>
+                    <div><div class="lbl">Travellers</div><div class="val">${t.travellers||'—'}</div></div>
+                    <div><div class="lbl">Departure</div><div class="val">${t.departDate||'—'}</div></div>
+                    <div><div class="lbl">Return</div><div class="val">${t.returnDate||'—'}</div></div>
+                    <div><div class="lbl">Accommodation</div><div class="val">${t.accommodation||'—'}</div></div>
+                    <div style="grid-column:1/-1;"><div class="lbl">Route Proposed by Staff</div><div class="val">${t.route||'—'}</div></div>
+                    ${t.travellerNames ? `<div style="grid-column:1/-1;"><div class="lbl">Names of Travellers</div><div class="val">${String(t.travellerNames).replace(/\n/g,', ')}</div></div>` : ''}
+                    ${t.purpose ? `<div style="grid-column:1/-1;"><div class="lbl">Purpose</div><div class="val">${t.purpose}</div></div>` : ''}
+                </div>
+                ${st === 'cleared' ? `
+                <div style="background:#F1F8F4;border:1px solid #A5D6A7;border-radius:8px;padding:14px 18px;margin-top:10px;">
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                        <div><div class="lbl">Risk Level</div><div class="val" style="color:${riskColour};">${cn.securityRiskLevel||'—'}</div></div>
+                        <div><div class="lbl">Cleared By</div><div class="val">${cn.securityClearedBy||'—'}</div></div>
+                        <div><div class="lbl">Date Cleared</div><div class="val">${cn.securityClearedAt ? fmtD(cn.securityClearedAt) : '—'}</div></div>
+                    </div>
+                    <div style="margin-top:12px;"><div class="lbl">Approved Route (must be followed)</div><div style="font-weight:600;font-size:13px;margin-top:3px;white-space:pre-wrap;">${cn.securityApprovedRoute||'—'}</div></div>
+                    <div style="margin-top:12px;"><div class="lbl">Security Advice</div><div style="font-size:13px;margin-top:3px;white-space:pre-wrap;line-height:1.6;">${cn.securityAdvice||'—'}</div></div>
+                </div>` : st === 'denied' ? `
+                <div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:14px 18px;margin-top:10px;">
+                    <div class="lbl" style="color:#B71C1C;">Clearance Denied</div>
+                    <div style="font-size:13px;margin-top:4px;color:#C62828;">${cn.securityDenialReason||'—'}</div>
+                    <div style="font-size:11px;color:#777;margin-top:6px;">By ${cn.securityClearedBy||'—'}${cn.securityClearedAt ? ' on ' + fmtD(cn.securityClearedAt) : ''}</div>
+                </div>` : `
+                <p style="color:#E65100;font-size:12px;font-style:italic;">Security clearance not yet issued.</p>`}`;
+                })();
+
                 const qaSection = (() => {
                     if (!cn.quotationAnalysisJson) return '';
                     let qa; try { qa = JSON.parse(cn.quotationAnalysisJson); } catch(e) { return ''; }
@@ -4111,7 +4438,8 @@ ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E
   <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${cn.rejectionReason||'—'}</div></div>
 </div>
 ${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
-${procSection}
+${travelSection}
+                ${procSection}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Reviewed By</th><th>Approved By</th><th>Authorised / Paid By</th><th>Bank Reconciliation</th><th>Justification</th><th>Rejection Reason</th></tr></thead><tbody>${payRows}</tbody></table>`}
 <h2>RETIREMENT HISTORY</h2>
@@ -5133,10 +5461,15 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const vendorTotal = Number(v.amount||0) * (v.qty||1);
 
                     // Sigs scoped to this vendor's PO ref (or base ref for single-vendor)
+                    // Vendor signs only their own PO; the organisation's signatories
+                    // (procurement, staff, budget owner, finance) sign once for the
+                    // whole procurement, so their signatures are matched across
+                    // the base ref and any vendor ref.
                     const vendorSigs  = allSigs.filter(s => s.docRef === vendorPoNum || (vendors.length === 1 && s.docRef === basePoNum));
-                    const staffSig    = vendorSigs.find(s => s.pageContext === 'staff_po');
-                    const boSig       = vendorSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
-                    const finSig      = vendorSigs.find(s => s.pageContext === 'finance_sign');
+                    const procSig     = allSigs.find(s => s.pageContext === 'procurement_po');
+                    const staffSig    = allSigs.find(s => s.pageContext === 'staff_po');
+                    const boSig       = allSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
+                    const finSig      = allSigs.find(s => s.pageContext === 'finance_sign');
                     const vendorSig   = vendorSigs.find(s =>
                         s.signerRole === 'vendor' &&
                         ['vendor_po_on_device','vendor_po_remote'].includes(s.pageContext));
@@ -5223,10 +5556,11 @@ ${vendors.length > 1 ? `
 </div>
 
 <div class="sig-grid">
-  ${_sigBox('1. Staff / Requester', staffSig)}
-  ${_sigBox('2. Budget Owner / Authorisation', boSig)}
-  ${_sigBox('3. Vendor — ' + v.name, vendorSig)}
-  ${_sigBox('4. Finance Confirmation', finSig)}
+  ${_sigBox('1. Procurement / Raised By', procSig)}
+  ${_sigBox('2. Staff / Requester', staffSig)}
+  ${_sigBox('3. Budget Owner / Authorisation', boSig)}
+  ${_sigBox('4. Vendor — ' + v.name, vendorSig)}
+  ${_sigBox('5. Finance Confirmation', finSig)}
 </div>
 
 <div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
@@ -5261,8 +5595,14 @@ ${vendors.length > 1 ? `
 
                 // Fetch all signatures for this GRR — cast a wide net using both
                 // the resolved grrNum AND relatedRef=refNumber, then deduplicate
+                // Vendors are needed up front so we can fetch per-vendor GRR refs too
+                let vendors = [];
+                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e){}
+                const grrRefsToFetch = vendors.length > 1
+                    ? [grrNum, ...vendors.map((_,i) => grrNum + '-V' + (i+1))]
+                    : [grrNum];
                 const [{ data: sigsByDoc }, { data: sigsByRef }] = await Promise.all([
-                    supabaseClient.from('document_signatures').select('*').eq('docRef', grrNum),
+                    supabaseClient.from('document_signatures').select('*').in('docRef', grrRefsToFetch),
                     supabaseClient.from('document_signatures').select('*').eq('relatedRef', refNumber).eq('docType', 'grr')
                 ]);
                 const seen = new Set();
@@ -5307,9 +5647,6 @@ ${vendors.length > 1 ? `
                     </div>`;
                 };
 
-                // Multi-vendor rows if vendorsJson present, else single row
-                let vendors = [];
-                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e){}
                 const itemRows = vendors.length > 0
                     ? vendors.map(v => { const qty=v.qty||1; const qBadge=v.quality==='Poor'?'❌ Poor':v.quality==='Partial'?'⚠️ Partial':'✅ Good'; return `<tr>
                         <td>${v.items||cn.activityTitle}</td>
@@ -5331,7 +5668,32 @@ ${vendors.length > 1 ? `
     ? vendors.reduce((s,v) => s+(Number(v.amount||0)*(v.qty||1)), 0)
     : Number(cn.actualProcurementCost||cn.estimatedCost);
 
-                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GRR ${grrNum}</title>
+                // One GRR per vendor — a receiving report records what ONE vendor
+                // delivered, so each vendor signs only for their own goods.
+                const _grrDocs = vendors.length > 1 ? vendors : [null];
+                for (let gi = 0; gi < _grrDocs.length; gi++) {
+                const _gv2      = _grrDocs[gi];
+                const vGrrNum   = _gv2 ? (grrNum + '-V' + (gi+1)) : grrNum;
+                const vRows     = _gv2
+                    ? (() => { const v=_gv2, qty=v.qty||1, qBadge=v.quality==='Poor'?'❌ Poor':v.quality==='Partial'?'⚠️ Partial':'✅ Good';
+                        return `<tr>
+                        <td>${v.items||cn.activityTitle}</td>
+                        <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
+                        <td>${v.invoiceNo||'—'}</td>
+                        <td style="text-align:center;">${qty}</td><td style="text-align:center;">${qty}</td>
+                        <td style="text-align:right;">₦${(Number(v.amount||0)*qty).toLocaleString()}</td>
+                        <td style="text-align:center;">${qBadge}</td>
+                      </tr>`; })()
+                    : itemRows;
+                const vTotal    = _gv2 ? (Number(_gv2.amount||0)*(_gv2.qty||1)) : totalAmt;
+                // This vendor's own signature only
+                const vVendorSig = _gv2
+                    ? (allSigs.find(s => s.signerRole==='vendor' && s.docRef===vGrrNum)
+                       || allSigs.find(s => s.signerRole==='vendor' && (s.signerName||'').trim().toLowerCase()===String(_gv2.name||'').trim().toLowerCase())
+                       || null)
+                    : (allVendorSigs[0] || null);
+
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GRR ${vGrrNum}</title>
 <style>
   @media print { body{margin:20px;} .no-print{display:none;} }
   body{font-family:Arial,sans-serif;margin:40px;color:#111;font-size:13px;}
@@ -5369,23 +5731,25 @@ ${vendors.length > 1 ? `
 </div>
 <table>
   <thead><tr><th>Item / Service Description</th><th>Vendor &amp; Phone</th><th>Invoice No.</th><th>Qty Ordered</th><th>Qty Received</th><th style="text-align:right;">Cost (₦)</th><th>Condition</th></tr></thead>
-  <tbody>${itemRows}</tbody>
-  <tfoot><tr><td colspan="5" style="text-align:right;">Total Received</td><td style="text-align:right;">₦${totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td></td></tr></tfoot>
+  <tbody>${vRows}</tbody>
+  <tfoot><tr><td colspan="5" style="text-align:right;">${_gv2?'Received from this Vendor':'Total Received'}</td><td style="text-align:right;">₦${vTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td></td></tr>
+  ${_gv2?`<tr><td colspan="5" style="text-align:right;color:#285B3C;">Grand Total (All Vendors — CN ${refNumber})</td><td style="text-align:right;color:#285B3C;">₦${totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td></td></tr>`:''}</tfoot>
 </table>
 <div class="sig-grid">
   ${_sigBox('1. Received By (Procurement)', procSig)}
   ${_sigBox('2. Verified By (Programme Staff)', staffSig)}
-  ${_sigBox('3. Vendor Representative', allVendorSigs[0] || null)}
-  ${allVendorSigs.slice(1).map((vs, i) => _sigBox(`3.${i+2} Vendor Representative`, vs)).join('\n  ')}
+  ${_sigBox('3. Vendor — ' + (_gv2 ? _gv2.name : 'Representative'), vVendorSig)}
   ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
 <div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
-  Generated by RAHAMA Financial Management System · GRR Ref: ${grrNum} · CN Ref: ${refNumber} · PO Ref: ${cn.poNumber||'N/A'}
+  Generated by RAHAMA Financial Management System · GRR Ref: ${vGrrNum}${_gv2?` · Document ${gi+1} of ${_grrDocs.length}`:''} · CN Ref: ${refNumber} · PO Ref: ${cn.poNumber||'N/A'}
   ${allSigs.length > 0 ? ' · <strong style="color:#285B3C;">✓ Digitally signed</strong>' : ' · <em>Pending signatures</em>'}
 </div>
 </body></html>`;
                 const w = window.open('','_blank','width=1000,height=780');
                 if (w) { w.document.write(html); w.document.close(); }
+                if (gi < _grrDocs.length - 1) await new Promise(r => setTimeout(r, 500));
+                }
             },
 
             // ══════════════════════════════════════════════════════════════
@@ -5405,6 +5769,7 @@ ${vendors.length > 1 ? `
                 }
 
                 const roleLabels = {
+                    'security_clearance':   'Security Clearance Officer',
                     'procurement_received': 'Received By (Procurement)',
                     'staff_po':             'Staff Authorisation (Requester)',
                     'staff_grr_verify':     'Verified By Programme Staff',
@@ -5532,6 +5897,21 @@ ${vendors.length > 1 ? `
                     pay = payDb && payDb[0];
                 }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'staff_po', cnRef);
+            },
+
+            // Procurement signs the PO they raised.
+            async _procurementSignPO(cnRef) {
+                let cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data; this.data.conceptNotes.push(cn);
+                }
+                if (!cn.poNumber) { alert('PO has not been generated yet.'); return; }
+                const { data: existing } = await supabaseClient.from('document_signatures')
+                    .select('id').eq('docRef', cn.poNumber).eq('signerName', this.currentUser).eq('pageContext', 'procurement_po');
+                if (existing && existing.length > 0) { alert('You have already signed this Purchase Order.'); return; }
+                await this.showSigningView(cn.poNumber, 'purchase_order', cnRef, 'procurement_po', cnRef);
             },
 
             // Finance confirms the PO at commitment stage.
