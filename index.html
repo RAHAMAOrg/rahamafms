@@ -902,7 +902,7 @@
                             .from('concept_notes').select('refNumber,activityTitle,poNumber,grrNumber,requiresProcurement,status')
                             .eq('staffName', this.currentUser)
                             .eq('requiresProcurement', 'yes')
-                            .eq('status', 'approved')
+                            .in('status', ['pending','approved','variance_review'])
                             .not('poNumber', 'is', null);
                         if (!myCNs || myCNs.length === 0) return;
                         const poNumbers = myCNs.map(c => c.poNumber).filter(Boolean);
@@ -3338,6 +3338,9 @@ if (role === 'procurement') {
                                 // Procurement: vendor sign GRR
                                 if (myRole === 'procurement' && isProcurement && hasGRR)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>`;
+                                // Finance: confirm PO at commitment stage
+                                if (['finance','finance_manager'].includes(myRole) && isProcurement && hasPO)
+                                    btns += `<button class="btn btn-secondary" onclick="app._financeSignPO('${cn.refNumber}')" style="border-color:#0D47A1;color:#0D47A1;">✍️ Confirm PO (Finance)</button>`;
                                 // Procurement: vendor sign PO
                                 if (myRole === 'procurement' && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignPO('${cn.refNumber}')" style="border-color:#1B4D8E;color:#1B4D8E;">✍️ Vendor Sign PO</button>`;
@@ -4132,9 +4135,52 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             // ══════════════════════════════════════════════════════════════
             // GRR VENDOR SIGNING — ON-DEVICE
             // ══════════════════════════════════════════════════════════════
-            async vendorSignGRR(refNumber) {
+            async vendorSignGRR(refNumber, vendorIndex) {
+                // vendorIndex: 0-based index into vendorsJson.
+                // A GRR records what ONE vendor delivered, so with several vendors
+                // each gets their own GRR and signs only for their own goods.
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
+
+                let _pickVendors = [];
+                try { if (cn.vendorsJson) _pickVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                if (_pickVendors.length > 1 && vendorIndex === undefined) {
+                    let pick = document.getElementById('grrPickOverlay');
+                    if (!pick) {
+                        pick = document.createElement('div');
+                        pick.id = 'grrPickOverlay';
+                        pick.className = 'vendor-sign-overlay';
+                        document.body.appendChild(pick);
+                    }
+                    const baseG = cn.grrNumber || ('GRR-' + refNumber);
+                    pick.innerHTML = `
+                        <div class="vendor-sign-header" style="background:#285B3C;">
+                            <div style="font-size:20px;">📦</div>
+                            <div><h2>Select Vendor to Sign GRR</h2>
+                            <div style="font-size:12px;opacity:.8;">Each vendor signs for their own delivery</div></div>
+                            <button onclick="document.getElementById('grrPickOverlay').classList.remove('open')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+                        </div>
+                        <div class="vendor-sign-body">
+                            <p style="color:#555;font-size:13px;margin-bottom:20px;">This procurement has ${_pickVendors.length} vendors. Select which vendor is confirming delivery now:</p>
+                            <div style="display:flex;flex-direction:column;gap:12px;">
+                                ${_pickVendors.map((v,i) => {
+                                    const gN = baseG + '-V' + (i+1);
+                                    return `<button onclick="document.getElementById('grrPickOverlay').classList.remove('open');app.vendorSignGRR('${refNumber}',${i})"
+                                        style="background:#ECFDF5;border:2px solid #A7F3D0;border-radius:10px;padding:16px 20px;text-align:left;cursor:pointer;"
+                                        onmouseover="this.style.borderColor='#285B3C';this.style.background='#D1FAE5'"
+                                        onmouseout="this.style.borderColor='#A7F3D0';this.style.background='#ECFDF5'">
+                                        <div style="font-weight:700;color:#285B3C;font-size:14px;">${v.name}</div>
+                                        <div style="font-size:12px;color:#555;margin-top:4px;">${v.items||cn.activityTitle} · ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()} · GRR: ${gN}</div>
+                                        <div style="font-size:11px;color:#7B7B7B;margin-top:2px;">${v.phone||''}</div>
+                                    </button>`;
+                                }).join('')}
+                            </div>
+                        </div>`;
+                    pick.classList.add('open');
+                    return;
+                }
+                const _gvi = vendorIndex !== undefined ? vendorIndex : 0;
+                const _gv  = _pickVendors.length > 0 ? _pickVendors[_gvi] : null;
 
                 // Build fullscreen overlay
                 let overlay = document.getElementById('vendorSignOverlay');
@@ -4145,10 +4191,12 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     document.body.appendChild(overlay);
                 }
 
-                const grrNum = cn.grrNumber || ('GRR-' + refNumber);
-                // Build item rows: prefer multi-vendor JSON captured during procurement entry
-                let _grrVendors = [];
-                try { if (cn.vendorsJson) _grrVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const _baseGrr = cn.grrNumber || ('GRR-' + refNumber);
+                // With several vendors each gets their own GRR number, so the
+                // document a vendor signs covers only their own delivery.
+                const grrNum = (_pickVendors.length > 1) ? (_baseGrr + '-V' + (_gvi+1)) : _baseGrr;
+                // Only the selected vendor appears on this GRR
+                let _grrVendors = _gv ? [_gv] : [];
                 const itemRows = cn.requiresProcurement === 'yes'
                     ? (_grrVendors.length > 0
                         ? _grrVendors.map((v, i) => { const qty = v.qty||1; const qualityBadge = v.quality==='Good'?'<span style="color:#047857;font-weight:700;">✅ Good</span>':v.quality==='Poor'?'<span style="color:#DC2626;font-weight:700;">❌ Poor</span>':'<span style="color:#D97706;font-weight:700;">⚠️ Partial</span>'; return `<tr><td>${i+1}</td><td>${v.items || cn.activityTitle}</td><td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:right">₦${(Number(v.amount||0)*qty).toLocaleString()}</td><td style="text-align:center">${qualityBadge}</td></tr>`; }).join('')
@@ -4191,9 +4239,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
 
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
                             <div class="form-group"><label style="font-size:13px;font-weight:600;">Vendor / Supplier Name <span class="required">*</span></label>
-                                <input type="text" id="vendorNameInput" placeholder="Full name of vendor representative" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;margin-top:6px;"></div>
+                                <input type="text" id="vendorNameInput" value="${_gv ? String(_gv.name||'').replace(/"/g,'&quot;') : ''}" placeholder="Full name of vendor representative" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;margin-top:6px;"></div>
                             <div class="form-group"><label style="font-size:13px;font-weight:600;">Phone Number</label>
-                                <input type="tel" id="vendorPhoneInput" placeholder="e.g. 0811 234 5678" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;margin-top:6px;"></div>
+                                <input type="tel" id="vendorPhoneInput" value="${_gv ? String(_gv.phone||'').replace(/"/g,'&quot;') : ''}" placeholder="e.g. 0811 234 5678" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;margin-top:6px;"></div>
                         </div>
 
                         <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Vendor Signature <span class="required">*</span></label>
@@ -4258,7 +4306,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const btn = document.querySelector('#vendorSignOverlay .btn.btn-primary');
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
                 try {
-                    const grrNum = cn.grrNumber || ('GRR-' + refNumber);
+                    const _bg = cn.grrNumber || ('GRR-' + refNumber);
+                    const grrNum = (_pickVendors.length > 1) ? (_bg + '-V' + (_gvi+1)) : _bg;
                     const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
                         docRef: grrNum, docType: 'grr', relatedRef: refNumber,
                         signerName: vendorName, signerRole: 'vendor',
@@ -4266,13 +4315,21 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         pageContext: 'vendor_on_device'
                     }]);
                     if (sigErr) throw sigErr;
-                    // also update concept_note with vendor name for the download
-                    await supabaseClient.from('concept_notes').update({
-                        grrVendorName: vendorName,
-                        grrVendorPhone: vendorPhone || null,
-                        grrVendorSignedAt: new Date().toISOString(),
-                        grrNumber: grrNum
-                    }).eq('refNumber', refNumber);
+                    // Update the concept note for the download — but with several
+                    // vendors, don't overwrite the combined list or the base GRR
+                    // number with a single vendor's details.
+                    if (_pickVendors.length > 1) {
+                        await supabaseClient.from('concept_notes').update({
+                            grrVendorSignedAt: new Date().toISOString()
+                        }).eq('refNumber', refNumber);
+                    } else {
+                        await supabaseClient.from('concept_notes').update({
+                            grrVendorName: vendorName,
+                            grrVendorPhone: vendorPhone || null,
+                            grrVendorSignedAt: new Date().toISOString(),
+                            grrNumber: grrNum
+                        }).eq('refNumber', refNumber);
+                    }
                     await this._logAudit('document_signatures', grrNum, 'grr_vendor_signed', `Vendor: ${vendorName}`);
                     document.getElementById('vendorSignStatus').innerHTML = '<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:14px 18px;color:#1B5E20;font-weight:600;">✓ GRR signed by vendor and recorded successfully.</div>';
                     if (btn) btn.textContent = '✓ Signed';
@@ -5475,6 +5532,29 @@ ${vendors.length > 1 ? `
                     pay = payDb && payDb[0];
                 }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'staff_po', cnRef);
+            },
+
+            // Finance confirms the PO at commitment stage.
+            // Previously Finance only signed a PO implicitly when authorising the
+            // payment — but under PO-first there is no payment until goods are
+            // received, so the Finance slot sat empty for the whole procurement.
+            async _financeSignPO(cnRef) {
+                let cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data; this.data.conceptNotes.push(cn);
+                }
+                if (!cn.poNumber) { alert('PO has not been generated yet.'); return; }
+                const { data: existing } = await supabaseClient.from('document_signatures')
+                    .select('id').eq('docRef', cn.poNumber).eq('signerName', this.currentUser).eq('pageContext', 'finance_sign');
+                if (existing && existing.length > 0) { alert('You have already confirmed this Purchase Order.'); return; }
+                let pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) {
+                    const { data: payDb } = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef).limit(1);
+                    pay = payDb && payDb[0];
+                }
+                await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'finance_sign', cnRef);
             },
 
             // Staff verifies GRR (programme staff verification)
