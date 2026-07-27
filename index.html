@@ -437,6 +437,12 @@
                         if (['budgetOwner','ed','procurement','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('concept_notes').select('*').eq('status', 'pending').order('submittedDate', { ascending: false }).limit(50));
                         }
+                        // Security officers hold clearance independently of their
+                        // finance/procurement role, so fetch travel awaiting clearance
+                        // regardless of which role they carry.
+                        if (this._isSecurityOfficer()) {
+                            queries.push(supabaseClient.from('concept_notes').select('*').eq('status', 'security_review').order('submittedDate', { ascending: false }).limit(50));
+                        }
                         if (['budgetOwner','ed','finance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('retirements').select('*').in('status', ['pending','reviewed','finance_approved']).order('submittedDate', { ascending: false }).limit(50));
                         }
@@ -1554,6 +1560,8 @@
                 }
                 if (!cn.grrNumber) {
                     return '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
+                         + '<button class="action-btn" onclick="app.editPO(\'' + cn.refNumber + '\')" style="border-color:#E65100;color:#E65100;font-size:12px;margin-bottom:6px;">✏️ Edit PO</button><br>'
+                         + '<button class="action-btn" onclick="app.cancelAndReissuePO(\'' + cn.refNumber + '\')" style="border-color:#B71C1C;color:#B71C1C;font-size:12px;margin-bottom:6px;">🚫 Cancel &amp; Reissue PO</button><br>'
                          + '<button class="action-btn" onclick="app._previewPODraft(\'' + cn.refNumber + '\')" style="border-color:#059669;color:#059669;font-size:12px;margin-bottom:6px;">🛒 View / Download PO</button><br>'
                          + '<button class="action-btn" onclick="app.vendorSignPO(\'' + cn.refNumber + '\')" style="border-color:#1B4D8E;color:#1B4D8E;font-size:12px;">✍️ Share / Sign PO with Vendor</button>';
                 }
@@ -3022,14 +3030,22 @@ if (role === 'procurement') {
                 }
                 app._vendorCount = 1;
                 // Pre-filled from a completed quotation analysis, if one was just run
-                const pf = app._qaPrefillVendor || null;
+                let pf = app._qaPrefillVendor || null;
                 app._qaPrefillVendor = null;
+                // Editing an unsigned PO: prefill from what's already saved
+                const isEdit = !!app._poEditMode;
+                app._poEditMode = false;
+                let existingVendors = [];
+                if (isEdit) {
+                    try { if (cn.vendorsJson) existingVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                    if (existingVendors.length) pf = existingVendors[0];
+                }
                 const content = document.getElementById('mainContent');
 
                 content.innerHTML = `
                     <div class="header">
-                        <h2>Create Purchase Order</h2>
-                        <p>Enter vendor(s) and agreed pricing, then generate and share the PO before any purchase is made</p>
+                        <h2>${isEdit ? 'Edit Purchase Order' : 'Create Purchase Order'}</h2>
+                        <p>${isEdit ? 'Amending ' + (cn.poNumber||'') + ' — no signatures have been recorded yet, so this PO can still be changed' : 'Enter vendor(s) and agreed pricing, then generate and share the PO before any purchase is made'}</p>
                     </div>
 
                     ${cn.status === 'variance_rejected' && cn.rejectionReason ? `
@@ -3085,10 +3101,24 @@ if (role === 'procurement') {
                         </div>
 
                         <div class="btn-group full-width">
-                            <button type="submit" class="btn btn-primary" id="poCreationSubmitBtn">Generate &amp; Share PO(s) →</button>
+                            <button type="submit" class="btn btn-primary" id="poCreationSubmitBtn">${isEdit ? 'Save Changes to PO →' : 'Generate &amp; Share PO(s) →'}</button>
                             <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">Cancel</button>
                         </div>
                     </form>`;
+
+                // Rebuild any additional vendor blocks when editing a multi-vendor PO
+                if (isEdit && existingVendors.length > 1) {
+                    for (let i = 1; i < existingVendors.length; i++) {
+                        this._addVendorBlock();
+                        const id = app._vendorCount;
+                        const v = existingVendors[i];
+                        const set = (pre, val) => { const el = document.getElementById(pre + '_' + id); if (el) el.value = val ?? ''; };
+                        set('vName', v.name); set('vPhone', v.phone); set('vItems', v.items);
+                        set('vInvoice', v.invoiceNo); set('vAmount', v.amount); set('vQty', v.qty || 1);
+                        set('vAddress', v.address);
+                    }
+                    this._recalcVendorTotal();
+                }
             },
 
             async submitPOCreation(event, refNumber) {
@@ -3179,7 +3209,9 @@ if (role === 'procurement') {
                     const projCode  = (cn.projectCode || 'GEN').replace(/[^A-Z0-9]/gi,'').toUpperCase();
                     const yearMonth = new Date().toISOString().slice(0,7).replace('-','');
                     const serial    = Date.now().toString().slice(-5);
-                    const poNumber  = `PO-${projCode}-${yearMonth}-${serial}`;
+                    // Amending an unsigned PO keeps its number — a new one would
+                    // orphan the document already shared with vendors.
+                    const poNumber  = cn.poNumber || `PO-${projCode}-${yearMonth}-${serial}`;
                     const now       = new Date().toISOString();
 
                     const { error: cnError } = await supabaseClient.from('concept_notes').update({
@@ -3207,7 +3239,7 @@ if (role === 'procurement') {
                         `PO ${poNumber} has been generated for ${refNumber} (${cn.activityTitle}) and is ready for your signature.`,
                         'info', refNumber);
 
-                    alert(`PO ${poNumber} generated!\n\nYou can now preview/download it and share it with the vendor(s) — use "Share / Sign PO with Vendor" on the Approvals screen.\n\nOnce goods/services are received, come back and click "Confirm Receipt & Forward to Finance".`);
+                    alert(`PO ${poNumber} saved!\n\nYou can now preview/download it and share it with the vendor(s) — use "Share / Sign PO with Vendor" on the Approvals screen.\n\nOnce goods/services are received, come back and click "Confirm Receipt & Forward to Finance".`);
                     this.showView('approvals');
                 } catch(e) {
                     alert('Error generating PO: ' + e.message);
@@ -3625,6 +3657,9 @@ if (role === 'procurement') {
                                 // Procurement: sign the PO they raised
                                 if (myRole === 'procurement' && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app._procurementSignPO('${cn.refNumber}')" style="border-color:#7B1FA2;color:#7B1FA2;">✍️ Sign PO (Procurement)</button>`;
+                                // Procurement: sign receipt on the GRR
+                                if (myRole === 'procurement' && isProcurement && cn.grrNumber)
+                                    btns += `<button class="btn btn-secondary" onclick="app._procurementSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">📦 Sign GRR — Received (Procurement)</button>`;
                                 // Procurement: vendor sign PO
                                 if (myRole === 'procurement' && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignPO('${cn.refNumber}')" style="border-color:#1B4D8E;color:#1B4D8E;">✍️ Vendor Sign PO</button>`;
@@ -5897,6 +5932,87 @@ ${vendors.length > 1 ? `
                     pay = payDb && payDb[0];
                 }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'staff_po', cnRef);
+            },
+
+            // ── PO amendment ──────────────────────────────────────────────
+            // A PO is editable only until the first signature. Once anyone has
+            // signed, the document is an accepted agreement and must not change
+            // underneath them — corrections go through Cancel & Reissue instead.
+            async _poSignatureCount(cn) {
+                if (!cn || !cn.poNumber) return 0;
+                let vendors = [];
+                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const refs = vendors.length > 1
+                    ? [cn.poNumber, ...vendors.map((_,i) => cn.poNumber + '-V' + (i+1))]
+                    : [cn.poNumber];
+                const { data } = await supabaseClient.from('document_signatures')
+                    .select('id').in('docRef', refs);
+                return (data || []).length;
+            },
+
+            async editPO(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                if (!cn.poNumber) { alert('No PO has been raised yet.'); return; }
+                const n = await this._poSignatureCount(cn);
+                if (n > 0) {
+                    alert(`This Purchase Order already carries ${n} signature${n!==1?'s':''} and can no longer be edited.\n\nA signed PO is an accepted agreement — changing it would mean signatories appear to have agreed to terms they never saw.\n\nUse "Cancel & Reissue PO" if the details are wrong.`);
+                    return;
+                }
+                app._poEditMode = true;
+                this.showPOCreationForm(refNumber);
+            },
+
+            async cancelAndReissuePO(refNumber) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                if (!cn.poNumber) { alert('No PO to cancel.'); return; }
+                const n = await this._poSignatureCount(cn);
+                const reason = prompt(
+                    `Cancel Purchase Order ${cn.poNumber}?\n\n` +
+                    (n > 0 ? `⚠️ This PO carries ${n} signature${n!==1?'s':''}. Cancelling voids it — everyone must sign the replacement.\n\n` : '') +
+                    `The cancelled PO stays in the audit trail.\n\nReason for cancellation:`);
+                if (reason === null) return;
+                if (!reason.trim()) { alert('A reason is required.'); return; }
+                try {
+                    const now = new Date().toISOString();
+                    await this._logAudit('concept_notes', refNumber, 'po_cancelled',
+                        `PO ${cn.poNumber} cancelled by ${this.currentUser}${n>0?` (voiding ${n} signature(s))`:''}. Reason: ${reason.trim()}`);
+                    const { error } = await supabaseClient.from('concept_notes').update({
+                        poNumber: null, poGeneratedAt: null,
+                        poCancelledNumber: cn.poNumber, poCancelledAt: now,
+                        poCancelledBy: this.currentUser, poCancelReason: reason.trim()
+                    }).eq('refNumber', refNumber);
+                    if (error) throw error;
+                    const i = this.data.conceptNotes.findIndex(x => x.refNumber === refNumber);
+                    if (i !== -1) Object.assign(this.data.conceptNotes[i], { poNumber: null, poGeneratedAt: null });
+                    this.clearCache();
+                    alert(`PO ${cn.poNumber} cancelled.\n\nRaise a replacement from the Approvals screen.`);
+                    this.showView('approvals');
+                } catch(e) { alert('Error cancelling PO: ' + e.message); }
+            },
+
+            // Procurement confirms receipt on the GRR.
+            // This normally happens automatically at the end of receipt confirmation,
+            // but if that signing view was closed there was previously no way back —
+            // the GRR would sit unsigned permanently.
+            async _procurementSignGRR(cnRef) {
+                let cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) {
+                    const { data } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                    if (!data) { alert('Concept note not found.'); return; }
+                    cn = data; this.data.conceptNotes.push(cn);
+                }
+                if (!cn.grrNumber) { alert('GRR has not been generated yet. Confirm receipt first.'); return; }
+                const { data: existing } = await supabaseClient.from('document_signatures')
+                    .select('id').eq('relatedRef', cnRef).eq('pageContext', 'procurement_received');
+                if (existing && existing.length > 0) { alert('Receipt has already been signed for on this GRR.'); return; }
+                let pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
+                if (!pay) {
+                    const { data: payDb } = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef).limit(1);
+                    pay = payDb && payDb[0];
+                }
+                await this.showSigningView(cn.grrNumber, 'grr', pay?.refNumber || cnRef, 'procurement_received', cnRef);
             },
 
             // Procurement signs the PO they raised.
