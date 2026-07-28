@@ -113,6 +113,10 @@
         table { width: 100%; border-collapse: collapse; }
         thead { background: var(--bg); }
         th { padding: 16px; text-align: left; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        /* Header rows painted a dark colour inline need light text — the rule above
+           would otherwise leave grey-on-dark and make the headings unreadable. */
+        thead tr[style*="#1B4D8E"] th, thead tr[style*="#285B3C"] th,
+        thead tr[style*="#047857"] th { color: #fff; }
         td { padding: 16px; border-top: 1px solid var(--border); font-size: 14px; }
         tr:hover { background: var(--bg); }
         
@@ -450,7 +454,14 @@
                             queries.push(supabaseClient.from('concept_notes').select('*')
                                 .not('poNumber','is',null)
                                 .not('status','in','("rejected","variance_rejected")')
-                                .order('poGeneratedAt', { ascending: false }).limit(100));
+                                .order('poGeneratedAt', { ascending: false }).limit(200));
+                            // Which POs Finance has already confirmed — used to drop
+                            // them out of the queue rather than listing them as done.
+                            try {
+                                const { data: finSigs } = await supabaseClient.from('document_signatures')
+                                    .select('docRef,signerName').eq('pageContext','finance_sign');
+                                this.data.confirmedPOs = new Set((finSigs || []).map(s => s.docRef));
+                            } catch(e) { this.data.confirmedPOs = new Set(); }
                         }
                         // Security officers hold clearance independently of their
                         // finance/procurement role, so fetch travel awaiting clearance
@@ -2347,9 +2358,19 @@ if (role === 'procurement') {
                 const allCNs = this.data.conceptNotes;
                 // POs awaiting Finance confirmation. Signature state is resolved
                 // asynchronously after render, so the list appears immediately.
-                const poQueue = ['finance','finance_manager'].includes(role)
+                const confirmedPOs = this.data.confirmedPOs || new Set();
+                const poAll = ['finance','finance_manager'].includes(role)
                     ? this.data.conceptNotes.filter(cn => cn.poNumber && !['rejected','variance_rejected'].includes(cn.status))
                     : [];
+                // Legacy POs were auto-generated at approval time under the old flow
+                // and numbered PO-CN…; Finance was never meant to confirm those.
+                // PO-first numbers are PO-{PROJECT}-{YYYYMM}-{serial}.
+                const isLegacyPO = ref => /^PO-CN/i.test(String(ref || ''));
+                const poCurrent  = poAll.filter(cn => !isLegacyPO(cn.poNumber));
+                const poLegacyCount = poAll.length - poCurrent.length;
+                // Only POs still needing Finance's confirmation
+                const poQueue = poCurrent.filter(cn => !confirmedPOs.has(cn.poNumber));
+                const poConfirmedCount = poCurrent.length - poQueue.length;
                 // Travel awaiting security clearance — visible to security officers
                 const securityQueue = this._isSecurityOfficer()
                     ? this.data.conceptNotes.filter(cn => cn.travelRequired === 'yes' && cn.securityStatus === 'pending' && cn.status === 'security_review')
@@ -2477,7 +2498,7 @@ if (role === 'procurement') {
                         </tr>`).join('')}
                         </tbody></table></div>
                     </div>` : ''}
-                    ${poQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛒 Purchase Orders — Finance Confirmation (${poQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>PO Number</th><th>Concept Note</th><th>Project</th><th>Requester</th><th>Activity</th><th>Amount</th><th>Raised</th><th>Actions</th></tr></thead><tbody>${poQueue.map(cn => { let vs=[]; try { if (cn.vendorsJson) vs=JSON.parse(cn.vendorsJson); } catch(e){} const tot=vs.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0)||cn.estimatedCost||0; return `<tr id="poq_${cn.refNumber}"><td style="font-weight:700;color:var(--primary);">${cn.poNumber}</td><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td>${cn.staffName}</td><td style="max-width:220px;">${cn.activityTitle}</td><td style="font-weight:600;">₦${tot.toLocaleString()}</td><td style="font-size:12px;">${cn.poGeneratedAt ? new Date(cn.poGeneratedAt).toLocaleDateString('en-NG') : '—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:140px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Concept Note</button><button class="action-btn" onclick="app._previewPODraft('${cn.refNumber}')" style="min-width:140px;border-color:#059669;color:#059669;font-size:12px;">🛒 View PO</button><span id="poqact_${cn.refNumber}"><button class="action-btn approve" onclick="app._financeSignPO('${cn.refNumber}')" style="min-width:140px;font-size:12px;">✍️ Confirm PO</button></span></td></tr>`; }).join('')}</tbody></table></div>` : ''}
+                    ${poQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛒 Purchase Orders — Finance Confirmation (${poQueue.length})</h3>${(poConfirmedCount > 0 || poLegacyCount > 0) ? `<p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">${[poConfirmedCount > 0 ? `${poConfirmedCount} already confirmed` : '', poLegacyCount > 0 ? `${poLegacyCount} legacy PO${poLegacyCount!==1?'s':''} raised under the old flow` : ''].filter(Boolean).join(' · ')} — not listed.</p>` : ''}<div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>PO Number</th><th>Concept Note</th><th>Project</th><th>Requester</th><th>Activity</th><th>Amount</th><th>Raised</th><th>Actions</th></tr></thead><tbody>${poQueue.map(cn => { let vs=[]; try { if (cn.vendorsJson) vs=JSON.parse(cn.vendorsJson); } catch(e){} const tot=vs.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0)||cn.estimatedCost||0; return `<tr id="poq_${cn.refNumber}"><td style="font-weight:700;color:var(--primary);">${cn.poNumber}</td><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td>${cn.staffName}</td><td style="max-width:220px;">${cn.activityTitle}</td><td style="font-weight:600;">₦${tot.toLocaleString()}</td><td style="font-size:12px;">${cn.poGeneratedAt ? new Date(cn.poGeneratedAt).toLocaleDateString('en-NG') : '—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:140px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Concept Note</button><button class="action-btn" onclick="app._previewPODraft('${cn.refNumber}')" style="min-width:140px;border-color:#059669;color:#059669;font-size:12px;">🛒 View PO</button><span id="poqact_${cn.refNumber}"><button class="action-btn approve" onclick="app._financeSignPO('${cn.refNumber}')" style="min-width:140px;font-size:12px;">✍️ Confirm PO</button></span></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${t.destination||'—'}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${app._renderFinancePaymentActions(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
@@ -2486,19 +2507,20 @@ if (role === 'procurement') {
                     ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
                     ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected.</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Retirement Ref</th><th>Payment Ref</th><th>Staff</th><th>Amount Spent</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyRetirements.map(r => { const linkedCN = app.data.conceptNotes.find(c => app.data.payments.find(p => p.refNumber===r.paymentRef && p.conceptNoteRef===c.refNumber)); const cnRef = linkedCN?.refNumber; return `<tr><td>${r.refNumber}</td><td>${r.paymentRef}</td><td>${r.staffName}</td><td>₦${Number(r.actualSpent||0).toLocaleString()}</td><td><span class="status-badge ${r.status==='approved'?'status-approved':'status-rejected'}">${r.status==='approved'?'Approved':'Rejected'}</span></td><td>${r.status==='approved'?(r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'-'):(r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
 
-                // Mark POs Finance has already confirmed, so the queue shows only
-                // what still needs action.
+                // Safety net: if a confirmation landed since this data was loaded,
+                // drop the row rather than leaving a stale action button.
                 if (poQueue.length) {
                     (async () => {
                         try {
                             const refs = poQueue.map(cn => cn.poNumber);
                             const { data: sigs } = await supabaseClient.from('document_signatures')
-                                .select('docRef,signerName,signedAt').eq('pageContext','finance_sign').in('docRef', refs);
+                                .select('docRef').eq('pageContext','finance_sign').in('docRef', refs);
                             (sigs || []).forEach(s => {
                                 const cn = poQueue.find(x => x.poNumber === s.docRef);
                                 if (!cn) return;
-                                const cell = document.getElementById('poqact_' + cn.refNumber);
-                                if (cell) cell.innerHTML = `<span style="display:inline-block;background:#E8F5E9;color:#1B5E20;padding:5px 10px;border-radius:8px;font-size:11px;font-weight:700;">✓ Confirmed${s.signerName ? ' — ' + s.signerName : ''}</span>`;
+                                (this.data.confirmedPOs = this.data.confirmedPOs || new Set()).add(s.docRef);
+                                const row = document.getElementById('poq_' + cn.refNumber);
+                                if (row) row.remove();
                             });
                         } catch(e) {}
                     })();
@@ -2888,7 +2910,7 @@ if (role === 'procurement') {
                 const money = n => '₦' + Number(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
                 const vs = r.vendors;
 
-                const headRow = vs.map(v => `<th style="padding:10px 12px;text-align:right;${v===r.winner?'background:#047857;':''}">${v.name}${v===r.winner?' ★':''}</th>`).join('');
+                const headRow = vs.map(v => `<th style="color:#fff;padding:10px 12px;text-align:right;${v===r.winner?'background:#047857;':''}">${v.name}${v===r.winner?' ★':''}</th>`).join('');
                 const row = (label, cells, bold) => `<tr><td style="padding:9px 12px;border-bottom:1px solid #E5E7EB;font-weight:${bold?'700':'500'};">${label}</td>${cells.map((c,i) => `<td style="padding:9px 12px;border-bottom:1px solid #E5E7EB;text-align:right;font-weight:${bold?'700':'400'};${vs[i]===r.winner?'background:#ECFDF5;':''}">${c}</td>`).join('')}</tr>`;
 
                 content.innerHTML = `
@@ -2912,7 +2934,7 @@ if (role === 'procurement') {
                     <h3 style="font-family:'Archivo',sans-serif;margin-bottom:12px;">Price Comparison</h3>
                     <div class="table-container" style="margin-bottom:28px;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
                         <thead><tr style="background:#1B4D8E;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">
-                            <th style="padding:10px 12px;text-align:left;">Criterion</th>${headRow}
+                            <th style="color:#fff;padding:10px 12px;text-align:left;">Criterion</th>${headRow}
                         </tr></thead>
                         <tbody>
                             ${row('Unit Price', vs.map(v => money(v.price)))}
@@ -2925,7 +2947,7 @@ if (role === 'procurement') {
                     <h3 style="font-family:'Archivo',sans-serif;margin-bottom:12px;">Quality Scoring (Panel, 1–5)</h3>
                     <div class="table-container" style="margin-bottom:28px;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
                         <thead><tr style="background:#1B4D8E;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">
-                            <th style="padding:10px 12px;text-align:left;">Sub-Criterion (weight)</th>${headRow}
+                            <th style="color:#fff;padding:10px 12px;text-align:left;">Sub-Criterion (weight)</th>${headRow}
                         </tr></thead>
                         <tbody>
                             ${qc.map(c => row(`${c.label} (${c.weight}%)`, vs.map(v => v.quality[c.key].toFixed(0)))).join('')}
@@ -2937,7 +2959,7 @@ if (role === 'procurement') {
                     <h3 style="font-family:'Archivo',sans-serif;margin-bottom:12px;">Weighted Scoring &amp; Recommendation</h3>
                     <div class="table-container" style="margin-bottom:28px;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
                         <thead><tr style="background:#1B4D8E;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.5px;">
-                            <th style="padding:10px 12px;text-align:left;">Criterion (weight)</th>${headRow}
+                            <th style="color:#fff;padding:10px 12px;text-align:left;">Criterion (weight)</th>${headRow}
                         </tr></thead>
                         <tbody>
                             ${row(`Price Competitiveness (${w.price}%)`, vs.map(v => v.norm.price.toFixed(1)))}
@@ -6398,6 +6420,8 @@ ${vendors.length > 1 ? `
                     pay = payDb && payDb[0];
                 }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'finance_sign', cnRef);
+                // Record locally so the queue drops it without a full reload
+                (this.data.confirmedPOs = this.data.confirmedPOs || new Set()).add(cn.poNumber);
             },
 
             // Staff verifies GRR (programme staff verification)
