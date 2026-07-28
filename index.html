@@ -78,6 +78,12 @@
         
         .form-grid { display: grid; gap: 20px; background: var(--surface); padding: 32px; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); }
         .form-grid.two-col { grid-template-columns: 1fr 1fr; }
+        /* Stack the two-column layout on phones — the tracking view carries the
+           travel security briefing, which staff read on the road. */
+        @media (max-width: 720px) {
+            .form-grid.two-col { grid-template-columns: 1fr; }
+            .form-grid { padding: 18px; }
+        }
         .form-group { display: flex; flex-direction: column; gap: 8px; }
         .form-group.full-width { grid-column: 1 / -1; }
         .form-group label { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -1010,6 +1016,31 @@
                             <div style="font-size:11px;color:var(--text-muted);">Unretired</div>
                         </div>
                     </div>
+                    ${(() => {
+                        // Travel briefings matter most on a phone — this is what
+                        // staff will have with them on the road.
+                        const travelCNs = myConceptNotes.filter(cn => cn.travelRequired === 'yes');
+                        if (!travelCNs.length) return '';
+                        return `<div style="margin-bottom:16px;">
+                            <div style="font-size:13px;font-weight:700;margin-bottom:8px;">🚗 My Travel</div>
+                            ${travelCNs.slice(0,5).map(cn => {
+                                let t={}; try { if (cn.travelDetailsJson) t=JSON.parse(cn.travelDetailsJson); } catch(e){}
+                                const st = cn.securityStatus || 'pending';
+                                const cleared = st==='cleared', denied = st==='denied';
+                                const bg = cleared?'#F1F8F4':denied?'#FFEBEE':'#FFF8E1';
+                                const bd = cleared?'#A5D6A7':denied?'#FFCDD2':'#FFD54F';
+                                const fg = cleared?'#1B5E20':denied?'#B71C1C':'#E65100';
+                                const lbl = cleared?`✅ Cleared · ${cn.securityRiskLevel||''} risk`:denied?'❌ Clearance denied':'⏳ Awaiting clearance';
+                                return `<button onclick="app.showConceptNoteTracking('${cn.refNumber}')"
+                                    style="width:100%;text-align:left;background:${bg};border:1px solid ${bd};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
+                                    <div style="font-size:11px;font-weight:700;color:${fg};">${lbl}</div>
+                                    <div style="font-size:13px;font-weight:600;margin-top:3px;">${t.destination||cn.activityTitle}</div>
+                                    <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${t.departDate||'—'} → ${t.returnDate||'—'}</div>
+                                    ${cleared ? `<div style="font-size:11px;color:${fg};margin-top:6px;font-weight:600;">Tap to read the security advice →</div>` : ''}
+                                </button>`;
+                            }).join('')}
+                        </div>`;
+                    })()}
                     <button onclick="window.innerWidth=9999;app.renderDashboard(document.getElementById('mainContent'))" style="width:100%;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-muted);cursor:pointer;">Switch to full view →</button>
                 </div>`;
             },
@@ -1068,6 +1099,57 @@
                 return progress;
             },
             
+            // Travel & security clearance panel — rendered wherever staff or
+            // reviewers look at a concept note, so the advice is never trapped
+            // inside a dismissible notification.
+            _travelPanel(cn) {
+                if (cn.travelRequired !== 'yes') return '';
+                let t = {}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e) {}
+                const st = cn.securityStatus || 'pending';
+                const cleared = st === 'cleared', denied = st === 'denied';
+                const riskColour = cn.securityRiskLevel === 'High' ? '#B71C1C' : cn.securityRiskLevel === 'Medium' ? '#E65100' : '#1B5E20';
+                const bg = cleared ? '#F1F8F4' : denied ? '#FFEBEE' : '#FFF8E1';
+                const bd = cleared ? '#A5D6A7' : denied ? '#FFCDD2' : '#FFD54F';
+                const hd = cleared ? '#1B5E20' : denied ? '#B71C1C' : '#E65100';
+                const fld = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;">${v||'—'}</div></div>`;
+                return `<div class="form-group full-width" style="background:${bg};border:2px solid ${bd};border-radius:10px;padding:20px;">
+                    <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${hd};margin-bottom:14px;display:block;">
+                        🚗 Travel &amp; Security Clearance — ${cleared ? '✅ CLEARED' : denied ? '❌ DENIED' : '⏳ AWAITING CLEARANCE'}</label>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;">
+                        ${fld('Destination', t.destination)}
+                        ${fld('Type of Travel', t.travelType)}
+                        ${fld('Travellers', t.travellers)}
+                        ${fld('Departure', t.departDate)}
+                        ${fld('Return', t.returnDate)}
+                        ${fld('Accommodation', t.accommodation)}
+                    </div>
+                    <div style="margin-top:14px;">${fld('Route Proposed', t.route)}</div>
+                    ${cleared ? `
+                    <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:14px;">
+                            <div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">Risk Level</div>
+                                <div style="font-weight:700;font-size:15px;margin-top:2px;color:${riskColour};">${cn.securityRiskLevel||'—'}</div></div>
+                            ${fld('Cleared By', cn.securityClearedBy)}
+                            ${fld('Date Cleared', cn.securityClearedAt ? new Date(cn.securityClearedAt).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}) : '—')}
+                        </div>
+                        <div style="background:#fff;border:1px solid ${bd};border-radius:8px;padding:14px 16px;margin-bottom:12px;">
+                            <div style="font-size:11px;font-weight:700;color:${hd};text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">✅ Approved Route — must be followed</div>
+                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${cn.securityApprovedRoute||'—'}</div>
+                        </div>
+                        <div style="background:#fff;border:1px solid ${bd};border-radius:8px;padding:14px 16px;">
+                            <div style="font-size:11px;font-weight:700;color:${hd};text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">🛡️ Security Advice</div>
+                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.7;">${cn.securityAdvice||'—'}</div>
+                        </div>
+                    </div>` : denied ? `
+                    <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
+                        <div style="font-size:11px;font-weight:700;color:#B71C1C;text-transform:uppercase;letter-spacing:.4px;">Reason for Denial</div>
+                        <div style="font-size:13px;color:#C62828;margin-top:4px;white-space:pre-wrap;">${cn.securityDenialReason||'—'}</div>
+                        <div style="font-size:11px;color:#777;margin-top:8px;">By ${cn.securityClearedBy||'—'}</div>
+                    </div>` : `
+                    <p style="font-size:12px;color:#E65100;font-style:italic;margin-top:14px;">Security clearance has not been issued yet. Travel must not begin until it is.</p>`}
+                </div>`;
+            },
+
             showConceptNoteTracking(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
@@ -1085,6 +1167,7 @@
                     <div class="form-grid two-col">
                         <div class="form-group"><label>Project Code</label><input type="text" value="${cn.projectCode}" readonly></div>
                         <div class="form-group"><label>Requires Procurement</label><input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly></div>
+                        ${this._travelPanel(cn)}
                         <div class="form-group full-width"><label>Objective</label><textarea rows="3" readonly>${cn.objective}</textarea></div>
                         <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${cn.description}</textarea></div>
                         ${cn.budgetBreakdown ? '<div class="form-group full-width"><label>Budget Breakdown</label><div style="border:2px solid #A7F3D0;border-radius:10px;overflow:hidden;"><div style="background:#285B3C;color:white;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">📋 Budget Breakdown</div>' + (function(bb){var lines=bb.split('\n').filter(function(l){return l.trim();});var hasStructured=lines.some(function(l){return /^\d+\.\s*.+?:\s*₦[\d,]+\s*×\s*[\d.]+\s*=\s*₦[\d,]+/.test(l);});if(hasStructured){var rows=lines.map(function(line,i){var m=line.match(/^\d+\.\s*(.+?):\s*₦([\d,]+)\s*×\s*([\d.]+)\s*=\s*₦([\d,]+)/);if(!m)return '';return '<tr><td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">'+(i+1)+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;">'+m[1]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">₦'+m[2]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">'+m[3]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;">₦'+m[4]+'</td></tr>';}).join('');var total=0;lines.forEach(function(l){var m=l.match(/=\s*₦([\d,]+)/);if(m)total+=parseInt(m[1].replace(/,/g,''));});return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#D1FAE5;"><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">S/N</th><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Unit (₦)</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Qty</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Total (₦)</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:#D1FAE5;"><td colspan="4" style="padding:10px 12px;border:1px solid #A7F3D0;font-weight:700;color:#065F46;">Total Estimated Cost</td><td style="padding:10px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:700;color:#047857;font-size:15px;">₦'+total.toLocaleString()+'</td></tr></tfoot></table>';}return '<div style="padding:16px 20px;background:#F0FDF4;font-size:13px;color:#374151;white-space:pre-wrap;line-height:1.7;">'+bb+'</div>';})(cn.budgetBreakdown) + '</div></div>' : ''}
@@ -3648,52 +3731,7 @@ if (role === 'procurement') {
                         <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${cn.description}</textarea></div>
                         ${cn.budgetBreakdown ? '<div class="form-group full-width"><label>Budget Breakdown</label><div style="border:2px solid #A7F3D0;border-radius:10px;overflow:hidden;"><div style="background:#285B3C;color:white;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">📋 Budget Breakdown</div>' + (function(bb){var lines=bb.split('\n').filter(function(l){return l.trim();});var hasStructured=lines.some(function(l){return /^\d+\.\s*.+?:\s*₦[\d,]+\s*×\s*[\d.]+\s*=\s*₦[\d,]+/.test(l);});if(hasStructured){var rows=lines.map(function(line,i){var m=line.match(/^\d+\.\s*(.+?):\s*₦([\d,]+)\s*×\s*([\d.]+)\s*=\s*₦([\d,]+)/);if(!m)return '';return '<tr><td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">'+(i+1)+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;">'+m[1]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">₦'+m[2]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">'+m[3]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;">₦'+m[4]+'</td></tr>';}).join('');var total=0;lines.forEach(function(l){var m=l.match(/=\s*₦([\d,]+)/);if(m)total+=parseInt(m[1].replace(/,/g,''));});return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#D1FAE5;"><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">S/N</th><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Unit (₦)</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Qty</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Total (₦)</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:#D1FAE5;"><td colspan="4" style="padding:10px 12px;border:1px solid #A7F3D0;font-weight:700;color:#065F46;">Total Estimated Cost</td><td style="padding:10px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:700;color:#047857;font-size:15px;">₦'+total.toLocaleString()+'</td></tr></tfoot></table>';}return '<div style="padding:16px 20px;background:#F0FDF4;font-size:13px;color:#374151;white-space:pre-wrap;line-height:1.7;">'+bb+'</div>';})(cn.budgetBreakdown) + '</div></div>' : ''}
                         <div class="form-group"><label>Requires Procurement?</label><input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly></div>
-                        ${cn.travelRequired === 'yes' ? (() => {
-                            let t = {}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e) {}
-                            const st = cn.securityStatus || 'pending';
-                            const cleared = st === 'cleared', denied = st === 'denied';
-                            const riskColour = cn.securityRiskLevel === 'High' ? '#B71C1C' : cn.securityRiskLevel === 'Medium' ? '#E65100' : '#1B5E20';
-                            const bg = cleared ? '#F1F8F4' : denied ? '#FFEBEE' : '#FFF8E1';
-                            const bd = cleared ? '#A5D6A7' : denied ? '#FFCDD2' : '#FFD54F';
-                            const hd = cleared ? '#1B5E20' : denied ? '#B71C1C' : '#E65100';
-                            const fld = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;">${v||'—'}</div></div>`;
-                            return `<div class="form-group full-width" style="background:${bg};border:2px solid ${bd};border-radius:10px;padding:20px;">
-                                <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${hd};margin-bottom:14px;display:block;">
-                                    🚗 Travel &amp; Security Clearance — ${cleared ? '✅ CLEARED' : denied ? '❌ DENIED' : '⏳ AWAITING CLEARANCE'}</label>
-                                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;">
-                                    ${fld('Destination', t.destination)}
-                                    ${fld('Type of Travel', t.travelType)}
-                                    ${fld('Travellers', t.travellers)}
-                                    ${fld('Departure', t.departDate)}
-                                    ${fld('Return', t.returnDate)}
-                                    ${fld('Accommodation', t.accommodation)}
-                                </div>
-                                <div style="margin-top:14px;">${fld('Route Proposed', t.route)}</div>
-                                ${cleared ? `
-                                <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
-                                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:14px;">
-                                        <div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">Risk Level</div>
-                                            <div style="font-weight:700;font-size:15px;margin-top:2px;color:${riskColour};">${cn.securityRiskLevel||'—'}</div></div>
-                                        ${fld('Cleared By', cn.securityClearedBy)}
-                                        ${fld('Date Cleared', cn.securityClearedAt ? new Date(cn.securityClearedAt).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}) : '—')}
-                                    </div>
-                                    <div style="background:#fff;border:1px solid ${bd};border-radius:8px;padding:14px 16px;margin-bottom:12px;">
-                                        <div style="font-size:11px;font-weight:700;color:${hd};text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">✅ Approved Route — must be followed</div>
-                                        <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${cn.securityApprovedRoute||'—'}</div>
-                                    </div>
-                                    <div style="background:#fff;border:1px solid ${bd};border-radius:8px;padding:14px 16px;">
-                                        <div style="font-size:11px;font-weight:700;color:${hd};text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">🛡️ Security Advice</div>
-                                        <div style="font-size:13px;white-space:pre-wrap;line-height:1.7;">${cn.securityAdvice||'—'}</div>
-                                    </div>
-                                </div>` : denied ? `
-                                <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
-                                    <div style="font-size:11px;font-weight:700;color:#B71C1C;text-transform:uppercase;letter-spacing:.4px;">Reason for Denial</div>
-                                    <div style="font-size:13px;color:#C62828;margin-top:4px;white-space:pre-wrap;">${cn.securityDenialReason||'—'}</div>
-                                    <div style="font-size:11px;color:#777;margin-top:8px;">By ${cn.securityClearedBy||'—'}</div>
-                                </div>` : `
-                                <p style="font-size:12px;color:#E65100;font-style:italic;margin-top:14px;">Security clearance has not been issued yet. Travel must not begin until it is.</p>`}
-                            </div>`;
-                        })() : ''}
+                        ${this._travelPanel(cn)}
                         ${cn.procurementNotes ? `<div class="form-group full-width"><label>Procurement Notes</label><textarea rows="2" readonly>${cn.procurementNotes}</textarea></div>` : ''}
                         ${cn.requiresProcurement === 'yes' ? `
                         <div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;">
