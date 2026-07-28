@@ -4213,13 +4213,19 @@ if (role === 'procurement') {
         // Fetch fresh — the local cache is scoped to the current user's role and
         // would otherwise omit notes they aren't personally involved in.
         const [cnRes, payRes, retRes] = await Promise.all([
-            supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }),
-            supabaseClient.from('payments').select('*'),
-            supabaseClient.from('retirements').select('*')
+            supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }).limit(5000),
+            supabaseClient.from('payments').select('*').limit(5000),
+            supabaseClient.from('retirements').select('*').limit(5000)
         ]);
+        // Surface errors — previously a failed query silently became an empty
+        // list, which looked identical to "no records in this period".
+        if (cnRes.error)  throw new Error('concept_notes: ' + cnRes.error.message);
+        if (payRes.error) throw new Error('payments: ' + payRes.error.message);
+        if (retRes.error) throw new Error('retirements: ' + retRes.error.message);
         cns  = cnRes.data  || [];
         pays = payRes.data || [];
         rets = retRes.data || [];
+        if (!cns.length) { alert('No concept notes were returned from the database at all.\n\nThis is a data access problem, not a date filter issue.'); return; }
     } catch (e) {
         alert('Could not load report data: ' + e.message); return;
     }
@@ -4246,6 +4252,8 @@ if (role === 'procurement') {
         if (basis === 'approvedDate') return cn.approvedDate || cn.budgetOwnerSignedAt || null;
         return cn.submittedDate || null;
     };
+    const preFilter = inScope.slice();
+    const approvedCount = inScope.length;
     if (fromTs || toTs) {
         inScope = inScope.filter(cn => {
             const pay = pays.find(p => p.conceptNoteRef === cn.refNumber);
@@ -4258,9 +4266,17 @@ if (role === 'procurement') {
         });
     }
     if (!inScope.length) {
-        alert(fromTs || toTs
-            ? 'No approved concept notes fall within that period on the selected date basis.'
-            : 'No approved concept notes available to export.');
+        if (fromTs || toTs) {
+            // Show what the period actually excluded, so the cause is obvious
+            const sample = approvedCount > 0
+                ? preFilter.slice(0, 5).map(cn => `  • ${cn.refNumber}: ${basisDate(cn, pays.find(p=>p.conceptNoteRef===cn.refNumber)) || 'no date on this basis'}`).join('\n')
+                : '';
+            alert(`${approvedCount} approved concept note(s) exist, but none fall between ${fromVal||'the earliest record'} and ${toVal||'today'} using "${basisLbl}".\n\n` +
+                  (sample ? `Most recent dates on that basis:\n${sample}\n\n` : '') +
+                  `Try "All time", or change the date basis.`);
+        } else {
+            alert(`${cns.length} concept note(s) were found, but none have been approved yet.`);
+        }
         return;
     }
 
