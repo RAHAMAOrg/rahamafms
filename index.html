@@ -1579,7 +1579,8 @@
                     return out;
                 }
                 if (!cn.grrNumber) {
-                    return '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
+                    return '<button class="action-btn" onclick="app._procurementSignPO(\'' + cn.refNumber + '\')" style="border-color:#7B1FA2;color:#7B1FA2;font-size:12px;margin-bottom:6px;">✍️ Sign PO (Procurement)</button><br>'
+                         + '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
                          + '<button class="action-btn" onclick="app.editPO(\'' + cn.refNumber + '\')" style="border-color:#E65100;color:#E65100;font-size:12px;margin-bottom:6px;">✏️ Edit PO</button><br>'
                          + '<button class="action-btn" onclick="app.cancelAndReissuePO(\'' + cn.refNumber + '\')" style="border-color:#B71C1C;color:#B71C1C;font-size:12px;margin-bottom:6px;">🚫 Cancel &amp; Reissue PO</button><br>'
                          + '<button class="action-btn" onclick="app._previewPODraft(\'' + cn.refNumber + '\')" style="border-color:#059669;color:#059669;font-size:12px;margin-bottom:6px;">🛒 View / Download PO</button><br>'
@@ -3151,6 +3152,7 @@ if (role === 'procurement') {
 
             async submitPOCreation(event, refNumber) {
                 event.preventDefault();
+                const wasEdit = !!(this.data.conceptNotes.find(c => c.refNumber === refNumber) || {}).poNumber;
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 const submitBtn = document.getElementById('poCreationSubmitBtn');
@@ -3267,8 +3269,20 @@ if (role === 'procurement') {
                         `PO ${poNumber} has been generated for ${refNumber} (${cn.activityTitle}) and is ready for your signature.`,
                         'info', refNumber);
 
-                    alert(`PO ${poNumber} saved!\n\nYou can now preview/download it and share it with the vendor(s) — use "Share / Sign PO with Vendor" on the Approvals screen.\n\nOnce goods/services are received, come back and click "Confirm Receipt & Forward to Finance".`);
-                    this.showView('approvals');
+                    // Amending replaces procurement's earlier signature — it must
+                    // attest to the terms as they now stand, not the previous ones.
+                    if (wasEdit) {
+                        await supabaseClient.from('document_signatures')
+                            .delete().eq('docRef', poNumber).eq('pageContext', 'procurement_po');
+                    }
+                    alert(`PO ${poNumber} saved!\n\n${wasEdit ? 'Because the details changed, you will be asked to sign again.' : 'You will now be asked to sign it as Procurement.'}\n\nAfter that, share it with the vendor(s) — the requester will be prompted to sign too.`);
+                    const { data: alreadySigned } = await supabaseClient.from('document_signatures')
+                        .select('id').eq('docRef', poNumber).eq('pageContext', 'procurement_po');
+                    if (!alreadySigned || alreadySigned.length === 0) {
+                        await this.showSigningView(poNumber, 'purchase_order', refNumber, 'procurement_po', refNumber);
+                    } else {
+                        this.showView('approvals');
+                    }
                 } catch(e) {
                     alert('Error generating PO: ' + e.message);
                 } finally {
@@ -6125,25 +6139,41 @@ ${vendors.length > 1 ? `
             // A PO is editable only until the first signature. Once anyone has
             // signed, the document is an accepted agreement and must not change
             // underneath them — corrections go through Cancel & Reissue instead.
-            async _poSignatureCount(cn) {
-                if (!cn || !cn.poNumber) return 0;
+            _poRefs(cn) {
+                if (!cn || !cn.poNumber) return [];
                 let vendors = [];
                 try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
-                const refs = vendors.length > 1
+                return vendors.length > 1
                     ? [cn.poNumber, ...vendors.map((_,i) => cn.poNumber + '-V' + (i+1))]
                     : [cn.poNumber];
+            },
+            async _poSignatureCount(cn) {
+                const refs = this._poRefs(cn);
+                if (!refs.length) return 0;
                 const { data } = await supabaseClient.from('document_signatures')
                     .select('id').in('docRef', refs);
                 return (data || []).length;
+            },
+            // A PO is only locked once a SECOND party has signed. Procurement's own
+            // signature doesn't lock the document they raised — it's re-taken when
+            // they amend it — but staff, budget owner, vendor or finance signing
+            // makes it an agreed document that must not change underneath them.
+            async _poExternalSignatures(cn) {
+                const refs = this._poRefs(cn);
+                if (!refs.length) return [];
+                const { data } = await supabaseClient.from('document_signatures')
+                    .select('id,pageContext,signerName').in('docRef', refs);
+                return (data || []).filter(s => s.pageContext !== 'procurement_po');
             },
 
             async editPO(refNumber) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
                 if (!cn.poNumber) { alert('No PO has been raised yet.'); return; }
-                const n = await this._poSignatureCount(cn);
-                if (n > 0) {
-                    alert(`This Purchase Order already carries ${n} signature${n!==1?'s':''} and can no longer be edited.\n\nA signed PO is an accepted agreement — changing it would mean signatories appear to have agreed to terms they never saw.\n\nUse "Cancel & Reissue PO" if the details are wrong.`);
+                const ext = await this._poExternalSignatures(cn);
+                if (ext.length > 0) {
+                    const who = [...new Set(ext.map(s => s.signerName).filter(Boolean))].join(', ');
+                    alert(`This Purchase Order has been signed by ${who || 'another party'} and can no longer be edited.\n\nChanging it now would mean they appear to have agreed to terms they never saw.\n\nUse "Cancel & Reissue PO" instead.`);
                     return;
                 }
                 app._poEditMode = true;
