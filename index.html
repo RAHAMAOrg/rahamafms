@@ -3875,8 +3875,30 @@ if (role === 'procurement') {
                         <div class="stat-card danger"><h3>Unretired Advances</h3><div class="stat-value">${paidPayments.filter(p => !allRetirements.find(r => r.paymentRef === p.refNumber)).length}</div><div class="stat-label">Need retirement</div></div>
                     </div>
                     <h3 style="margin-bottom:16px;font-family:'Archivo',sans-serif;">Project Budget Status</h3>
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px 20px;margin-bottom:16px;">
+                        <div style="font-size:11px;font-weight:700;color:#1B4D8E;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;">Reporting Period</div>
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">From</label>
+                                <input type="date" id="rptFrom" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">To</label>
+                                <input type="date" id="rptTo" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Date basis</label>
+                                <select id="rptBasis" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
+                                    <option value="submittedDate">Concept note submitted</option>
+                                    <option value="approvedDate">Approved</option>
+                                    <option value="paidDate">Payment made</option>
+                                </select></div>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" class="action-btn" onclick="app._setReportRange('month')" style="font-size:12px;">This month</button>
+                                <button type="button" class="action-btn" onclick="app._setReportRange('quarter')" style="font-size:12px;">This quarter</button>
+                                <button type="button" class="action-btn" onclick="app._setReportRange('year')" style="font-size:12px;">This year</button>
+                                <button type="button" class="action-btn" onclick="app._setReportRange('clear')" style="font-size:12px;">All time</button>
+                            </div>
+                        </div>
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:10px;font-style:italic;">Leave the dates blank to report on everything. The period and basis are recorded at the top of the file.</p>
+                    </div>
                     <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
-                        <button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Payments Report</button>
+                        <button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Pipeline Report (All Stages)</button>
                         <button class="btn btn-secondary" onclick="app.exportRetirementReport()">⬇ Download Retirement Report</button>
                     </div>
                     <div class="table-container"><table><thead><tr>
@@ -4157,57 +4179,178 @@ if (role === 'procurement') {
                     </div>`;
             },
 
-         exportPaymentsReport() {
-    const payments = this.data.payments;
-    if (!payments.length) { alert('No payments available to export.'); return; }
+         // Quick reporting-period presets
+         _setReportRange(kind) {
+             const f = document.getElementById('rptFrom'), t = document.getElementById('rptTo');
+             if (!f || !t) return;
+             const iso = d => d.toISOString().slice(0,10);
+             const now = new Date();
+             if (kind === 'clear') { f.value = ''; t.value = ''; return; }
+             let start;
+             if (kind === 'month')   start = new Date(now.getFullYear(), now.getMonth(), 1);
+             if (kind === 'quarter') start = new Date(now.getFullYear(), Math.floor(now.getMonth()/3)*3, 1);
+             if (kind === 'year')    start = new Date(now.getFullYear(), 0, 1);
+             f.value = iso(start); t.value = iso(now);
+         },
 
+         // Concept-note-driven pipeline report.
+         // Previously this started from payments, so an approved concept note that
+         // hadn't reached payment yet was invisible. It now lists every approved
+         // note and shows the stage it has reached, with payment and retirement
+         // attached where they exist.
+         async exportPaymentsReport() {
     const fmt = (d) => d ? new Date(d).toLocaleString('en-NG', {
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
     }) : '';
-
     const csvEscape = (val) => {
         const s = (val === null || val === undefined) ? '' : String(val);
         return (s.includes(',') || s.includes('"') || s.includes('\n'))
-            ? '"' + s.replace(/"/g, '""') + '"'
-            : s;
+            ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+
+    let cns = [], pays = [], rets = [];
+    try {
+        // Fetch fresh — the local cache is scoped to the current user's role and
+        // would otherwise omit notes they aren't personally involved in.
+        const [cnRes, payRes, retRes] = await Promise.all([
+            supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }),
+            supabaseClient.from('payments').select('*'),
+            supabaseClient.from('retirements').select('*')
+        ]);
+        cns  = cnRes.data  || [];
+        pays = payRes.data || [];
+        rets = retRes.data || [];
+    } catch (e) {
+        alert('Could not load report data: ' + e.message); return;
+    }
+
+    // Everything that has cleared approval, at whatever stage it has reached
+    let inScope = cns.filter(cn => {
+        if (['rejected','variance_rejected'].includes(cn.status)) return false;
+        const hasPayment = pays.some(p => p.conceptNoteRef === cn.refNumber);
+        return cn.status === 'approved'
+            || cn.budgetOwnerApprovedBy || cn.approvedBy
+            || cn.currentApprover === 'procurement'
+            || cn.poNumber || cn.grrNumber || hasPayment;
+    });
+    // Reporting period filter
+    const fromVal  = document.getElementById('rptFrom')?.value || '';
+    const toVal    = document.getElementById('rptTo')?.value   || '';
+    const basis    = document.getElementById('rptBasis')?.value || 'submittedDate';
+    const basisLbl = { submittedDate:'Concept note submitted', approvedDate:'Approved', paidDate:'Payment made' }[basis] || basis;
+    const fromTs = fromVal ? new Date(fromVal + 'T00:00:00').getTime() : null;
+    const toTs   = toVal   ? new Date(toVal   + 'T23:59:59').getTime() : null;
+
+    const basisDate = (cn, pay) => {
+        if (basis === 'paidDate')     return pay ? pay.paidDate : null;
+        if (basis === 'approvedDate') return cn.approvedDate || cn.budgetOwnerSignedAt || null;
+        return cn.submittedDate || null;
+    };
+    if (fromTs || toTs) {
+        inScope = inScope.filter(cn => {
+            const pay = pays.find(p => p.conceptNoteRef === cn.refNumber);
+            const d = basisDate(cn, pay);
+            if (!d) return false;                       // no date on this basis — out of period
+            const ts = new Date(d).getTime();
+            if (fromTs && ts < fromTs) return false;
+            if (toTs   && ts > toTs)   return false;
+            return true;
+        });
+    }
+    if (!inScope.length) {
+        alert(fromTs || toTs
+            ? 'No approved concept notes fall within that period on the selected date basis.'
+            : 'No approved concept notes available to export.');
+        return;
+    }
+
+    const stageOf = (cn, pay, ret) => {
+        if (cn.status === 'security_review')  return '1. Awaiting security clearance';
+        if (cn.status === 'variance_review')  return '2. Cost variance with Budget Owner';
+        if (cn.requiresProcurement === 'yes' && !cn.poNumber)  return '3. With Procurement — PO not raised';
+        if (cn.poNumber && !cn.grrNumber)     return '4. PO raised — awaiting delivery';
+        if (cn.grrNumber && !pay)             return '5. Goods received — payment not raised';
+        if (pay && pay.status === 'pending')  return '6. Payment awaiting review';
+        if (pay && pay.status === 'reviewed') return '7. Payment awaiting approval';
+        if (pay && pay.status === 'finance_approved') return '8. Payment awaiting authorisation';
+        if (pay && pay.status === 'paid' && !ret) return '9. Paid — retirement outstanding';
+        if (ret && ret.status === 'pending')  return '10. Retirement submitted';
+        if (ret && ret.status === 'approved') return '11. Complete — retirement approved';
+        if (ret && ret.status === 'rejected') return '12. Retirement rejected';
+        if (!pay)                             return '5. Approved — payment not raised';
+        return '—';
     };
 
     const headers = [
-        'Reference','Concept Note','Project Code','Staff Name','Amount','Payment Status',
-        'Request Date','Paid Date','Processed By',
+        'Concept Note','Stage','Project Code','Staff Name','Activity','Estimated Cost',
+        'Requires Procurement','Travel','Security Status','Security Risk','Security Cleared By',
+        'Approved By','Approved Date',
+        'PO Number','PO Generated','GRR Number','Actual Procurement Cost','Variance',
+        'Payment Ref','Payment Amount','Payment Status','Reviewed By','Approved By (Finance)','Authorised/Paid By','Paid Date',
         'Retirement Ref','Retirement Status','Actual Spent','Amount Returned',
-        'Retirement Submitted Date','Retirement Decision Date'
+        'Retirement Submitted','Retirement Decision'
     ];
-    let csv = [headers.map(csvEscape).join(',')];
+    const periodLabel = (fromVal || toVal)
+        ? `${fromVal || 'earliest'} to ${toVal || 'today'}`
+        : 'All time';
+    let csv = [
+        ['RAHAMA Girl Child & Women Empowerment Initiative'].map(csvEscape).join(','),
+        ['Concept Note Pipeline Report'].map(csvEscape).join(','),
+        ['Reporting period', periodLabel].map(csvEscape).join(','),
+        ['Date basis', basisLbl].map(csvEscape).join(','),
+        ['Generated', fmt(new Date().toISOString())].map(csvEscape).join(','),
+        ['Generated by', this.currentUser || ''].map(csvEscape).join(','),
+        ['Records', inScope.length].map(csvEscape).join(','),
+        '',
+        headers.map(csvEscape).join(',')
+    ];
 
-    payments.forEach(p => {
-        const ret = this.data.retirements.find(r => r.paymentRef === p.refNumber);
-        const retDecisionDate = ret ? (ret.approvedDate || ret.rejectedDate) : '';
+    inScope.forEach(cn => {
+        const pay = pays.find(p => p.conceptNoteRef === cn.refNumber);
+        const ret = pay ? rets.find(r => r.paymentRef === pay.refNumber) : null;
         csv.push([
-            p.refNumber || '',
-            p.conceptNoteRef || '',
-            p.projectCode || '',
-            p.staffName || '',
-            p.amount || 0,
-            p.status || '',
-            fmt(p.requestDate),
-            fmt(p.paidDate),
-            p.processedBy || '',
+            cn.refNumber || '',
+            stageOf(cn, pay, ret),
+            cn.projectCode || '',
+            cn.staffName || '',
+            cn.activityTitle || '',
+            cn.estimatedCost || 0,
+            cn.requiresProcurement === 'yes' ? 'Yes' : 'No',
+            cn.travelRequired === 'yes' ? 'Yes' : 'No',
+            cn.securityStatus || '',
+            cn.securityRiskLevel || '',
+            cn.securityClearedBy || '',
+            cn.approvedBy || cn.budgetOwnerApprovedBy || '',
+            fmt(cn.approvedDate || cn.budgetOwnerSignedAt),
+            cn.poNumber || '',
+            fmt(cn.poGeneratedAt),
+            cn.grrNumber || '',
+            cn.actualProcurementCost || '',
+            cn.procurementVariance || '',
+            pay ? pay.refNumber : '',
+            pay ? pay.amount : '',
+            pay ? pay.status : 'no payment raised',
+            pay ? (pay.reviewedBy || '') : '',
+            pay ? (pay.financeApprovedBy || '') : '',
+            pay ? (pay.processedBy || '') : '',
+            pay ? fmt(pay.paidDate) : '',
             ret ? ret.refNumber : '',
-            ret ? ret.status : 'not retired',
+            ret ? ret.status : (pay && pay.status === 'paid' ? 'not retired' : ''),
             ret ? ret.actualSpent : '',
             ret ? ret.amountReturned : '',
             ret ? fmt(ret.submittedDate) : '',
-            fmt(retDecisionDate)
+            ret ? fmt(ret.approvedDate || ret.rejectedDate) : ''
         ].map(csvEscape).join(','));
     });
 
     const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url; link.download = 'rahama_payments_retirements_report.csv';
+    const fileTag = (fromVal || toVal) ? `${fromVal||'start'}_to_${toVal||'today'}` : 'all_time';
+    link.href = url; link.download = `rahama_pipeline_report_${fileTag}.csv`;
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
+    alert(`Report downloaded.\n\nPeriod: ${periodLabel}\nBasis: ${basisLbl}\nRecords: ${inScope.length}`);
 },
 
             exportRetirementReport() {
@@ -4226,7 +4369,7 @@ if (role === 'procurement') {
                 const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.href = url; link.download = 'rahama_retirement_report.csv';
+                link.href = url; link.download = `rahama_retirement_report_${new Date().toISOString().slice(0,10)}.csv`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 window.URL.revokeObjectURL(url);
             },
