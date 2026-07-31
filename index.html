@@ -1188,6 +1188,16 @@
                         <div class="form-group"><label>Project Code</label><input type="text" value="${cn.projectCode}" readonly></div>
                         <div class="form-group"><label>Requires Procurement</label><input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly></div>
                         ${this._travelPanel(cn)}
+                        ${cn.quoteExceptionReason ? `<div class="form-group full-width" style="background:${cn.quoteExceptionStatus==='approved'?'#F1F8F4':cn.quoteExceptionStatus==='declined'?'#FFEBEE':'#FFF8E1'};border:2px solid ${cn.quoteExceptionStatus==='approved'?'#A5D6A7':cn.quoteExceptionStatus==='declined'?'#FFCDD2':'#FFD54F'};border-radius:10px;padding:18px;">
+                            <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${cn.quoteExceptionStatus==='approved'?'#1B5E20':cn.quoteExceptionStatus==='declined'?'#B71C1C':'#E65100'};margin-bottom:10px;display:block;">⚖️ 3-Quote Exception — ${(cn.quoteExceptionStatus||'pending').toUpperCase()}</label>
+                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${cn.quoteExceptionReason}</div>
+                            <div style="font-size:11px;color:#6B7280;margin-top:8px;">Requested by ${cn.quoteExceptionRequestedBy||'—'}${cn.quoteExceptionApprovedBy?` · decided by ${cn.quoteExceptionApprovedBy}`:''}</div>
+                            ${cn.quoteExceptionDeclineReason?`<div style="font-size:12px;color:#C62828;margin-top:8px;">Declined: ${cn.quoteExceptionDeclineReason}</div>`:''}
+                            ${(this.getUserRole()==='budgetOwner' && cn.quoteExceptionStatus==='pending') ? `<div style="display:flex;gap:10px;margin-top:14px;">
+                                <button type="button" class="btn btn-primary" onclick="app.resolveQuoteException('${cn.refNumber}', true)">✓ Approve Exception</button>
+                                <button type="button" class="btn btn-secondary" style="border-color:var(--danger);color:var(--danger);" onclick="app.resolveQuoteException('${cn.refNumber}', false)">✗ Decline</button>
+                            </div>` : ''}
+                        </div>` : ''}
                         <div class="form-group full-width"><label>Objective</label><textarea rows="3" readonly>${cn.objective}</textarea></div>
                         <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${cn.description}</textarea></div>
                         ${cn.budgetBreakdown ? '<div class="form-group full-width"><label>Budget Breakdown</label><div style="border:2px solid #A7F3D0;border-radius:10px;overflow:hidden;"><div style="background:#285B3C;color:white;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">📋 Budget Breakdown</div>' + (function(bb){var lines=bb.split('\n').filter(function(l){return l.trim();});var hasStructured=lines.some(function(l){return /^\d+\.\s*.+?:\s*₦[\d,]+\s*×\s*[\d.]+\s*=\s*₦[\d,]+/.test(l);});if(hasStructured){var rows=lines.map(function(line,i){var m=line.match(/^\d+\.\s*(.+?):\s*₦([\d,]+)\s*×\s*([\d.]+)\s*=\s*₦([\d,]+)/);if(!m)return '';return '<tr><td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">'+(i+1)+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;">'+m[1]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">₦'+m[2]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">'+m[3]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;">₦'+m[4]+'</td></tr>';}).join('');var total=0;lines.forEach(function(l){var m=l.match(/=\s*₦([\d,]+)/);if(m)total+=parseInt(m[1].replace(/,/g,''));});return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#D1FAE5;"><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">S/N</th><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Unit (₦)</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Qty</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Total (₦)</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:#D1FAE5;"><td colspan="4" style="padding:10px 12px;border:1px solid #A7F3D0;font-weight:700;color:#065F46;">Total Estimated Cost</td><td style="padding:10px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:700;color:#047857;font-size:15px;">₦'+total.toLocaleString()+'</td></tr></tfoot></table>';}return '<div style="padding:16px 20px;background:#F0FDF4;font-size:13px;color:#374151;white-space:pre-wrap;line-height:1.7;">'+bb+'</div>';})(cn.budgetBreakdown) + '</div></div>' : ''}
@@ -3140,15 +3150,24 @@ if (role === 'procurement') {
                 window.URL.revokeObjectURL(url);
             },
 
-            async acceptQuotationAnalysis(refNumber) {
+            async acceptQuotationAnalysis(refNumber, splitIdx, splitReason) {
                 const r = app._qaResult;
                 if (!r) { alert('No analysis result found. Please run the analysis again.'); return; }
+                // splitIdx: indices of vendors being awarded when the work is shared
+                // between several suppliers (e.g. three radio stations, each covering
+                // a different area). The comparison still stands — it documents that
+                // quotes were obtained; the award simply isn't winner-takes-all.
+                const isSplit  = Array.isArray(splitIdx) && splitIdx.length > 1;
+                const awarded  = isSplit ? splitIdx.map(i => r.vendors[i]).filter(Boolean) : [r.winner];
                 try {
                     const payload = {
                         itemDesc: r.itemDesc, itemUnit: r.itemUnit, itemQty: r.itemQty,
                         analysedBy: r.analysedBy, analysedAt: r.analysedAt,
                         weights: this._qaWeights,
-                        selectedVendor: r.winner.name,
+                        awardType: isSplit ? 'split' : 'single',
+                        splitJustification: isSplit ? (splitReason || '') : null,
+                        awardedVendors: awarded.map(v => v.name),
+                        selectedVendor: isSplit ? awarded.map(v => v.name).join(' | ') : r.winner.name,
                         selectedScore: Number(r.winner.compositeScore.toFixed(2)),
                         vendors: r.vendors.map(v => ({
                             name: v.name, phone: v.phone, address: v.address,
@@ -3157,7 +3176,7 @@ if (role === 'procurement') {
                             quality: v.quality,
                             qualityScore10: Number(v.qualityScore10.toFixed(2)),
                             compositeScore: Number(v.compositeScore.toFixed(2)),
-                            selected: v === r.winner
+                            selected: awarded.includes(v)
                         }))
                     };
                     const { error } = await supabaseClient.from('concept_notes')
@@ -3173,10 +3192,11 @@ if (role === 'procurement') {
                 } catch(e) {
                     if (!confirm('Could not save the analysis record: ' + e.message + '\n\nThe quotationAnalysisJson column may be missing from your concept_notes table.\n\nContinue to PO creation anyway?')) return;
                 }
-                app._qaPrefillVendor = {
-                    name: r.winner.name, phone: r.winner.phone, address: r.winner.address,
-                    items: r.itemDesc, amount: r.winner.price, qty: r.itemQty
-                };
+                app._qaPrefillVendors = awarded.map(v => ({
+                    name: v.name, phone: v.phone, address: v.address,
+                    items: r.itemDesc, amount: v.price, qty: r.itemQty
+                }));
+                app._qaPrefillVendor = app._qaPrefillVendors[0];
                 this.showPOCreationForm(refNumber);
             },
 
@@ -3316,9 +3336,92 @@ if (role === 'procurement') {
                 // from ever raising the PO the analysis had just chosen.
                 let quotesOnRecord = 0;
                 try { quotesOnRecord = (JSON.parse(cn.quotationAnalysisJson || '{}').vendors || []).length; } catch(e) {}
-                if (total >= QUOTE_THRESHOLD && vendorBlockCount < 3 && quotesOnRecord < 3) {
-                    alert(`This procurement (₦${total.toLocaleString()}) is at or above ₦500,000. You must provide at least 3 vendor quotes. Currently you have ${vendorBlockCount}. Either add more vendors, or run the quotation analysis first.`);
+                // The local copy can be stale — an analysis saved moments ago may not
+                // be in this session's cache. Check the database before blocking.
+                if (quotesOnRecord < 3) {
+                    try {
+                        const { data: fresh } = await supabaseClient.from('concept_notes')
+                            .select('quotationAnalysisJson').eq('refNumber', refNumber).single();
+                        if (fresh?.quotationAnalysisJson) {
+                            quotesOnRecord = (JSON.parse(fresh.quotationAnalysisJson).vendors || []).length;
+                            const li = this.data.conceptNotes.findIndex(x => x.refNumber === refNumber);
+                            if (li !== -1) this.data.conceptNotes[li].quotationAnalysisJson = fresh.quotationAnalysisJson;
+                        }
+                    } catch(e) {}
+                }
+                // The three-quote rule applies per service, not to the concept note
+                // total. Several vendors supplying DIFFERENT services (venue, catering,
+                // printing) can't be compared against each other — only a single
+                // service worth ₦500,000 or more needs competing quotes.
+                const largestLine = vendors.reduce((mx,v) => Math.max(mx, Number(v.amount||0) * (v.qty||1)), 0);
+                const bigLines = vendors.filter(v => (Number(v.amount||0) * (v.qty||1)) >= QUOTE_THRESHOLD);
+
+                if (bigLines.length > 0 && vendorBlockCount < 3 && quotesOnRecord < 3 && !cn.quoteExceptionReason) {
+                    const choice = confirm(
+                        `These service(s) are individually at or above ₦500,000:\n\n` +
+                        `${bigLines.map(v => `  • ${v.name} — ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}`).join('\n')}\n\n` +
+                        `Normally this needs at least 3 competing quotes.\n\n` +
+                        `Press OK if fewer than 3 providers exist for this service (limited market or sole source) ` +
+                        `and you want to record an exception.\n\n` +
+                        `Press Cancel to go back and add competing vendors or run the analysis.`);
+                    if (!choice) return;
+                    const why = prompt(
+                        `Why can't 3 quotes be obtained?\n\n` +
+                        `State how many providers exist and why the others aren't viable — e.g. ` +
+                        `"Only 2 radio stations broadcast in Zango and Kankia; both quoted."\n\n` +
+                        `This is sent to the Budget Owner for approval before the PO is raised.`);
+                    if (why === null) return;
+                    if (!why.trim() || why.trim().length < 25) {
+                        alert('Please give a fuller explanation — this bypasses a procurement control and the Budget Owner has to approve it.');
+                        return;
+                    }
+                    // The exception is a control bypass, so it isn't self-certified —
+                    // it goes to the Budget Owner before any PO exists.
+                    try {
+                        const now = new Date().toISOString();
+                        await supabaseClient.from('concept_notes').update({
+                            quoteExceptionReason: why.trim(),
+                            quoteExceptionRequestedBy: this.currentUser,
+                            quoteExceptionRequestedAt: now,
+                            quoteExceptionStatus: 'pending',
+                            vendorsJson: JSON.stringify(vendors)
+                        }).eq('refNumber', refNumber);
+                        await this._logAudit('concept_notes', refNumber, 'quote_exception_requested',
+                            `${this.currentUser} requested a 3-quote exception for ${bigLines.map(v=>v.name).join(', ')}. Reason: ${why.trim()}`);
+                        const bos = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
+                        for (const bo of bos) {
+                            await this.createNotification(bo,
+                                `Procurement has requested a 3-quote exception on ${refNumber} (${cn.activityTitle}) — limited market. Open the concept note to approve or decline.`,
+                                'warning', refNumber);
+                        }
+                        this.clearCache();
+                        alert('Exception request sent to the Budget Owner.\n\nThe PO can be raised once it is approved.');
+                        this.showView('approvals');
+                    } catch(e) { alert('Error saving exception request: ' + e.message); }
                     return;
+                }
+                if (bigLines.length > 0 && cn.quoteExceptionStatus === 'pending') {
+                    alert('The 3-quote exception for this concept note is still awaiting Budget Owner approval.');
+                    return;
+                }
+
+                // Total is above the threshold only because several distinct services
+                // are combined — record why, so the audit trail shows it wasn't a
+                // single purchase split to stay under the limit.
+                if (bigLines.length === 0 && total >= QUOTE_THRESHOLD && vendors.length > 1 && quotesOnRecord < 3) {
+                    if (!app._multiServiceReason) {
+                        const reason = prompt(
+                            `This concept note totals ₦${total.toLocaleString()} across ${vendors.length} vendors, ` +
+                            `but no single service reaches ₦500,000 (largest is ₦${largestLine.toLocaleString()}).\n\n` +
+                            `If these vendors are supplying DIFFERENT services, no quotation analysis is required.\n\n` +
+                            `Briefly state what each vendor is providing:`);
+                        if (reason === null) return;
+                        if (!reason.trim() || reason.trim().length < 15) {
+                            alert('Please describe what each vendor is supplying — this is recorded in the audit trail.');
+                            return;
+                        }
+                        app._multiServiceReason = reason.trim();
+                    }
                 }
 
                 const variance = cn.estimatedCost - total;
@@ -3393,6 +3496,7 @@ if (role === 'procurement') {
                         poGeneratedAt: now,
                         procurementNotes: notes,
                         vendorsJson: JSON.stringify(vendors),
+                        multiServiceJustification: app._multiServiceReason || null,
                         rejectionReason: null,
                         financeRejectionReason: null,
                         financeRejectedAt: null,
@@ -3406,6 +3510,10 @@ if (role === 'procurement') {
                     });
                     this.clearCache();
 
+                    if (app._multiServiceReason) {
+                        await this._logAudit('concept_notes', refNumber, 'multi_service_declared',
+                            `No quotation analysis required — ${vendors.length} vendors supplying different services, largest single line ₦${largestLine.toLocaleString()} (below the ₦500,000 threshold). Declared by ${this.currentUser}: ${app._multiServiceReason}`);
+                    }
                     await this._logAudit('concept_notes', refNumber, 'po_created',
                         `PO ${poNumber} created by ${this.currentUser}. Vendors: ${vendors.map(v=>v.name).join(', ')}. Total: ₦${total.toLocaleString()}.`);
 
@@ -3432,6 +3540,7 @@ if (role === 'procurement') {
                         await supabaseClient.from('document_signatures')
                             .delete().eq('docRef', poNumber).eq('pageContext', 'procurement_po');
                     }
+                    app._multiServiceReason = null;
                     alert(`PO ${poNumber} saved!\n\n${wasEdit ? 'Because the details changed, you will be asked to sign again.' : 'You will now be asked to sign it as Procurement.'}\n\nAfter that, share it with the vendor(s) — the requester will be prompted to sign too.`);
                     const { data: alreadySigned } = await supabaseClient.from('document_signatures')
                         .select('id').eq('docRef', poNumber).eq('pageContext', 'procurement_po');
@@ -6414,6 +6523,56 @@ ${vendors.length > 1 ? `
                     pay = payDb && payDb[0];
                 }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'staff_po', cnRef);
+            },
+
+            // Budget Owner decides on a 3-quote exception. Procurement can't
+            // self-certify a control bypass.
+            async resolveQuoteException(refNumber, approve) {
+                if (this.getUserRole() !== 'budgetOwner') { alert('Only the Budget Owner can decide this.'); return; }
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber)
+                        || (await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single()).data;
+                if (!cn) { alert('Concept note not found.'); return; }
+                const now = new Date().toISOString();
+                if (approve) {
+                    const sig = await this._showSignaturePad('Approve 3-Quote Exception',
+                        `I, ${this.currentUser}, accept that fewer than 3 quotes could be obtained for ${refNumber}, for the reason stated by Procurement.`);
+                    if (!sig) return;
+                    await supabaseClient.from('concept_notes').update({
+                        quoteExceptionStatus: 'approved',
+                        quoteExceptionApprovedBy: this.currentUser,
+                        quoteExceptionApprovedAt: now
+                    }).eq('refNumber', refNumber);
+                    await supabaseClient.from('document_signatures').insert([{
+                        docRef: refNumber, docType: 'quote_exception', relatedRef: refNumber,
+                        signerName: this.currentUser, signerRole: 'budgetOwner',
+                        signatureData: sig, signedAt: now, pageContext: 'quote_exception'
+                    }]);
+                    await this._logAudit('concept_notes', refNumber, 'quote_exception_approved',
+                        `3-quote exception approved by ${this.currentUser}.`);
+                    const procs = Object.entries(this.data.roles).filter(([,r]) => r === 'procurement').map(([n]) => n);
+                    for (const p of procs) await this.createNotification(p,
+                        `Your 3-quote exception for ${refNumber} was approved. You can now raise the PO.`, 'success', refNumber);
+                    alert('Exception approved. Procurement can now raise the PO.');
+                } else {
+                    const why = prompt('Why is the exception being declined?');
+                    if (why === null) return;
+                    if (!why.trim()) { alert('A reason is required.'); return; }
+                    await supabaseClient.from('concept_notes').update({
+                        quoteExceptionStatus: 'declined',
+                        quoteExceptionApprovedBy: this.currentUser,
+                        quoteExceptionApprovedAt: now,
+                        quoteExceptionDeclineReason: why.trim()
+                    }).eq('refNumber', refNumber);
+                    await this._logAudit('concept_notes', refNumber, 'quote_exception_declined',
+                        `Declined by ${this.currentUser}. Reason: ${why.trim()}`);
+                    const procs = Object.entries(this.data.roles).filter(([,r]) => r === 'procurement').map(([n]) => n);
+                    for (const p of procs) await this.createNotification(p,
+                        `Your 3-quote exception for ${refNumber} was declined: ${why.trim()}`, 'error', refNumber);
+                    alert('Exception declined.');
+                }
+                this.clearCache();
+                await this.loadData();
+                this.showView('approvals');
             },
 
             // ── PO amendment ──────────────────────────────────────────────
