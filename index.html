@@ -3468,6 +3468,14 @@ if (role === 'procurement') {
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quantity Received <span style="color:var(--danger)">*</span></label><input type="number" id="vQty_${id}" min="0" step="1" value="${v.qty||1}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition <span style="color:var(--danger)">*</span></label><select id="vQuality_${id}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good"${v.quality==='Good'?' selected':''}>✅ Good</option><option value="Partial"${v.quality==='Partial'?' selected':''}>⚠️ Partial / Minor Issues</option><option value="Poor"${v.quality==='Poor'?' selected':''}>❌ Poor / Rejected</option></select></div>
                             <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_${id}" rows="2" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;background:#F3F4F6;">${(v.address||'')}</textarea></div>
+                            <div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;">
+                                <div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💳 Payment Account for this Vendor</div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                                    <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Name</label><input type="text" id="vAcctName_${id}" value="${(v.acctName||'').replace(/"/g,'&quot;')}" placeholder="As on the bank account" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                    <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Number</label><input type="text" id="vAcctNo_${id}" value="${(v.acctNo||'').replace(/"/g,'&quot;')}" maxlength="10" placeholder="10 digits" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                    <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Bank</label><select id="vBank_${id}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;"><option value="">Select bank</option>${['Access Bank','Fidelity Bank','First Bank','FCMB','GTBank','Jaiz Bank','Keystone Bank','Moniepoint MFB','Opay Services','Polaris Bank','Stanbic IBTC','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank'].map(b=>`<option value="${b}"${v.bank===b?' selected':''}>${b}</option>`).join('')}</select></div>
+                                </div>
+                            </div>
                         </div>
                     </div>`;
                 }).join('');
@@ -3542,12 +3550,17 @@ if (role === 'procurement') {
                             <textarea id="procNotes" rows="3" placeholder="Additional information for Finance...">${cn.procurementNotes||''}</textarea>
                         </div>
                         <div class="form-group full-width">
-                            <h3 style="margin:24px 0 16px;font-family:'Archivo',sans-serif;">Staff Bank Account Details</h3>
-                            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Required for Finance to process payment</p>
+                            <h3 style="margin:24px 0 8px;font-family:'Archivo',sans-serif;">Payment Schedule</h3>
+                            <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:14px 16px;margin-bottom:14px;">
+                                <p style="font-size:13px;color:#1B4D8E;font-weight:600;margin-bottom:4px;">💳 Vendors are paid directly</p>
+                                <p style="font-size:12px;color:#4338CA;font-style:italic;">Procurement purchases are never reimbursed to staff. Finance pays each vendor from the accounts entered above, under one authorisation.</p>
+                            </div>
+                            <div id="staffAcctBlock" style="display:none;">
                         </div>
-                        <div class="form-group"><label>Account Name <span class="required">*</span></label><input type="text" id="accountName" required value="${cn.accountName||''}" placeholder="Name as it appears on bank account"></div>
-                        <div class="form-group"><label>Account Number <span class="required">*</span></label><input type="text" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" value="${cn.accountNumber||''}" placeholder="10-digit account number"></div>
-                        <div class="form-group full-width"><label>Bank Name <span class="required">*</span></label><select id="bankName" required><option value="">Select Bank</option>${bankOptions}</select></div>
+                        <div class="form-group"><label>Account Name <span class="required">*</span></label><input type="text" id="accountName" value="${cn.accountName||''}" placeholder="Name as it appears on bank account"></div>
+                        <div class="form-group"><label>Account Number <span class="required">*</span></label><input type="text" id="accountNumber" pattern="[0-9]{10}" maxlength="10" value="${cn.accountNumber||''}" placeholder="10-digit account number"></div>
+                        <div class="form-group full-width"><label>Bank Name</label><select id="bankName"><option value="">Select Bank</option>${bankOptions}</select></div>
+                        </div>
                         <div class="form-group full-width">
     <h3 style="font-family:'Archivo',sans-serif;margin-bottom:8px;">Confirm Vendor / Supplier Receipt</h3>
     <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Vendors and pricing are fixed from the PO — update quantity received and condition only</p>
@@ -3648,10 +3661,8 @@ if (role === 'procurement') {
                 const accountNumber = document.getElementById('accountNumber').value;
                 const bankName      = document.getElementById('bankName').value;
 
-                if (!accountName || !accountNumber || !bankName) {
-                    alert('Please provide all bank account details'); return; }
-                if (!this.validateAccountNumber(accountNumber)) {
-                    alert('Account number must be exactly 10 digits'); return; }
+                // Procurement purchases always pay the vendor — never a staff reimbursement.
+                const payMode = 'vendors';
 
                 const vendors = this._collectVendors();
                 if (vendors.length === 0) { alert('No vendors found on this PO.'); return; }
@@ -3662,6 +3673,29 @@ if (role === 'procurement') {
                 // pricing itself was already fixed and approved at PO creation.
                 const actualCost = vendors.reduce((s,v) => s + (Number(v.amount||0) * (v.qty||0)), 0);
                 if (actualCost <= 0) { alert('Total received value must be greater than zero.'); return; }
+
+                // Payment schedule: one line per vendor, so Finance can settle each
+                // of them from a single authorisation rather than guessing whose
+                // account belongs on the payment.
+                let paymentSchedule = [];
+                {
+                    const bad = vendors.filter(v => (v.qty||0) > 0 && (!v.acctName || !v.acctNo || !v.bank));
+                    if (bad.length) {
+                        alert(`Payment account details are missing for:\n\n${bad.map(v => '  • ' + v.name).join('\n')}\n\nEnter each vendor's account name, number and bank, or switch to "Reimburse ${cn.staffName}".`);
+                        return;
+                    }
+                    const badNo = vendors.filter(v => (v.qty||0) > 0 && !/^[0-9]{10}$/.test(v.acctNo));
+                    if (badNo.length) {
+                        alert(`Account number must be exactly 10 digits for:\n\n${badNo.map(v => '  • ' + v.name).join('\n')}`);
+                        return;
+                    }
+                    paymentSchedule = vendors.filter(v => (v.qty||0) > 0).map(v => ({
+                        vendor: v.name, phone: v.phone || '', items: v.items || '',
+                        qty: v.qty || 0, unitPrice: Number(v.amount||0),
+                        amount: Number(v.amount||0) * (v.qty||0),
+                        accountName: v.acctName, accountNumber: v.acctNo, bankName: v.bank
+                    }));
+                }
 
                 // Flatten for backward-compat single-vendor fields
                 const vendorName      = vendors.map(v => v.name).join(' | ');
@@ -3728,8 +3762,12 @@ if (role === 'procurement') {
                         staffName: cn.staffName,
                         amount: actualCost,
                         paymentMethod: 'bank_transfer',
+                        payMode,
+                        paymentScheduleJson: paymentSchedule.length ? JSON.stringify(paymentSchedule) : null,
                         justification: `Receipt confirmed by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | Vendor: ${vendorName} | Items: ${vendorItems} | Estimated: ₦${cn.estimatedCost.toLocaleString()} | Received: ₦${actualCost.toLocaleString()}. ${notes}`,
-                        accountName, accountNumber, bankName,
+                        accountName:   payMode === 'vendors' ? `Payment schedule — ${paymentSchedule.length} vendor(s)` : accountName,
+                        accountNumber: payMode === 'vendors' ? '' : accountNumber,
+                        bankName:      payMode === 'vendors' ? 'See payment schedule' : bankName,
                         status: 'pending',
                         requestDate: now,
                         procurementComplete: now,
@@ -4066,6 +4104,9 @@ if (role === 'procurement') {
                     <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
                         <button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Pipeline Report (All Stages)</button>
                         <button class="btn btn-secondary" onclick="app.exportRetirementReport()">⬇ Download Retirement Report</button>
+                        ${['finance','finance_manager'].includes(this.getUserRole()) ? `
+                        <button class="btn btn-secondary" style="border-color:#0D47A1;color:#0D47A1;" onclick="app.exportPaymentSchedule('due')">💳 Payment Schedule — Awaiting Disbursement</button>
+                        <button class="btn btn-secondary" style="border-color:#1B5E20;color:#1B5E20;" onclick="app.exportPaymentSchedule('paid')">💳 Payment Schedule — Disbursed</button>` : ''}
                     </div>
                     <div class="table-container"><table><thead><tr>
                         <th>Project Code</th><th>Project Name</th><th>Total Budget</th>
@@ -4358,6 +4399,81 @@ if (role === 'procurement') {
              if (kind === 'year')    start = new Date(now.getFullYear(), 0, 1);
              f.value = iso(start); t.value = iso(now);
          },
+
+         // Bank payment schedule — every line Finance needs to pay, flattened
+         // from multi-vendor schedules so one authorisation can produce several
+         // transfers. Any finance officer can pull this.
+         async exportPaymentSchedule(which) {
+    const csvEscape = v => {
+        const s = (v === null || v === undefined) ? '' : String(v);
+        return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g,'""') + '"' : s;
+    };
+    const fmt = d => d ? new Date(d).toLocaleDateString('en-NG', { day:'2-digit', month:'short', year:'numeric' }) : '';
+
+    let pays = [];
+    try {
+        const { data, error } = await supabaseClient.from('payments').select('*').limit(5000);
+        if (error) throw new Error(error.message);
+        pays = data || [];
+    } catch(e) { alert('Could not load payments: ' + e.message); return; }
+
+    // "authorised" = cleared the full finance chain and marked paid
+    const mode = which || 'paid';
+    const scope = mode === 'due'
+        ? pays.filter(p => p.status === 'finance_approved')   // authorised, not yet disbursed
+        : pays.filter(p => p.status === 'paid');
+    if (!scope.length) {
+        alert(mode === 'due' ? 'No payments are currently awaiting disbursement.' : 'No authorised payments found.');
+        return;
+    }
+
+    const rows = [];
+    scope.forEach(p => {
+        let sched = [];
+        try { if (p.paymentScheduleJson) sched = JSON.parse(p.paymentScheduleJson); } catch(e) {}
+        if (sched.length) {
+            sched.forEach((s, i) => rows.push({
+                payRef: p.refNumber, line: `${i+1} of ${sched.length}`, cn: p.conceptNoteRef || '',
+                project: p.projectCode || '', beneficiary: s.vendor, detail: s.items || '',
+                amount: s.amount, acctName: s.accountName, acctNo: s.accountNumber, bank: s.bankName,
+                status: p.status, reviewed: p.reviewedBy || '', approved: p.financeApprovedBy || '',
+                authorised: p.processedBy || '', paidDate: fmt(p.paidDate)
+            }));
+        } else {
+            rows.push({
+                payRef: p.refNumber, line: '1 of 1', cn: p.conceptNoteRef || '',
+                project: p.projectCode || '', beneficiary: p.staffName, detail: p.justification ? String(p.justification).slice(0,80) : '',
+                amount: p.amount, acctName: p.accountName || '', acctNo: p.accountNumber || '', bank: p.bankName || '',
+                status: p.status, reviewed: p.reviewedBy || '', approved: p.financeApprovedBy || '',
+                authorised: p.processedBy || '', paidDate: fmt(p.paidDate)
+            });
+        }
+    });
+
+    const total = rows.reduce((s,r) => s + Number(r.amount||0), 0);
+    const headers = ['Payment Ref','Line','Concept Note','Project','Beneficiary','Description','Amount (NGN)',
+                     'Account Name','Account Number','Bank','Status','Reviewed By','Approved By','Authorised By','Paid Date'];
+    const csv = [
+        ['RAHAMA Girl Child & Women Empowerment Initiative'].map(csvEscape).join(','),
+        [mode === 'due' ? 'Payment Schedule — Authorised, Awaiting Disbursement' : 'Payment Schedule — Disbursed'].map(csvEscape).join(','),
+        ['Generated', new Date().toLocaleString('en-NG')].map(csvEscape).join(','),
+        ['Generated by', this.currentUser || ''].map(csvEscape).join(','),
+        ['Payment lines', rows.length].map(csvEscape).join(','),
+        ['Total value (NGN)', total].map(csvEscape).join(','),
+        '',
+        headers.map(csvEscape).join(',')
+    ];
+    rows.forEach(r => csv.push([r.payRef, r.line, r.cn, r.project, r.beneficiary, r.detail, r.amount,
+        r.acctName, r.acctNo, r.bank, r.status, r.reviewed, r.approved, r.authorised, r.paidDate].map(csvEscape).join(',')));
+
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rahama_payment_schedule_${mode}_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    alert(`Payment schedule downloaded.\n\n${rows.length} payment line(s)\nTotal: ₦${total.toLocaleString()}`);
+},
 
          // Concept-note-driven pipeline report.
          // Previously this started from payments, so an approved concept note that
@@ -5849,15 +5965,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const vendorTotal = Number(v.amount||0) * (v.qty||1);
 
                     // Sigs scoped to this vendor's PO ref (or base ref for single-vendor)
-                    // Vendor signs only their own PO; the organisation's signatories
-                    // (procurement, staff, budget owner, finance) sign once for the
-                    // whole procurement, so their signatures are matched across
-                    // the base ref and any vendor ref.
                     const vendorSigs  = allSigs.filter(s => s.docRef === vendorPoNum || (vendors.length === 1 && s.docRef === basePoNum));
-                    const procSig     = allSigs.find(s => s.pageContext === 'procurement_po');
-                    const staffSig    = allSigs.find(s => s.pageContext === 'staff_po');
-                    const boSig       = allSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
-                    const finSig      = allSigs.find(s => s.pageContext === 'finance_sign');
+                    const staffSig    = vendorSigs.find(s => s.pageContext === 'staff_po');
+                    const boSig       = vendorSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
+                    const finSig      = vendorSigs.find(s => s.pageContext === 'finance_sign');
                     const vendorSig   = vendorSigs.find(s =>
                         s.signerRole === 'vendor' &&
                         ['vendor_po_on_device','vendor_po_remote'].includes(s.pageContext));
@@ -5944,11 +6055,10 @@ ${vendors.length > 1 ? `
 </div>
 
 <div class="sig-grid">
-  ${_sigBox('1. Procurement / Raised By', procSig)}
-  ${_sigBox('2. Staff / Requester', staffSig)}
-  ${_sigBox('3. Budget Owner / Authorisation', boSig)}
-  ${_sigBox('4. Vendor — ' + v.name, vendorSig)}
-  ${_sigBox('5. Finance Confirmation', finSig)}
+  ${_sigBox('1. Staff / Requester', staffSig)}
+  ${_sigBox('2. Budget Owner / Authorisation', boSig)}
+  ${_sigBox('3. Vendor — ' + v.name, vendorSig)}
+  ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
 
 <div style="margin-top:40px;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:12px;">
@@ -6134,9 +6244,13 @@ ${vendors.length > 1 ? `
   ${allSigs.length > 0 ? ' · <strong style="color:#285B3C;">✓ Digitally signed</strong>' : ' · <em>Pending signatures</em>'}
 </div>
 </body></html>`;
-                const w = window.open('','_blank','width=1000,height=780');
-                if (w) { w.document.write(html); w.document.close(); }
-                if (gi < _grrDocs.length - 1) await new Promise(r => setTimeout(r, 500));
+                    const w = window.open('', '_blank', 'width=1000,height=780');
+                    if (w) { w.document.write(html); w.document.close(); }
+
+                    // Slight delay between windows so browsers don't suppress them
+                    if (gi < _grrDocs.length - 1) {
+                        await new Promise(r => setTimeout(r, 500));
+                    }
                 }
             },
 
@@ -7231,6 +7345,9 @@ _recalcVendorTotal() {
                         phone:     (document.getElementById('vPhone_'   + id)?.value || '').trim(),
                         items:     (document.getElementById('vItems_'   + id)?.value || '').trim(),
                         invoiceNo: (document.getElementById('vInvoice_' + id)?.value || '').trim(),
+                        acctName:  (document.getElementById('vAcctName_' + id)?.value || '').trim(),
+                        acctNo:    (document.getElementById('vAcctNo_'   + id)?.value || '').trim(),
+                        bank:      (document.getElementById('vBank_'     + id)?.value || '').trim(),
                         amount:    parseFloat(document.getElementById('vAmount_'  + id)?.value) || 0,
                         qty:       parseInt(document.getElementById('vQty_'     + id)?.value)   || 1,
                         quality:   (document.getElementById('vQuality_' + id)?.value || 'Good'),
