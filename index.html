@@ -1670,6 +1670,20 @@
             // ── Procurement action button renderer — routes to PO creation (Stage 1)
             // or Receipt/GRR confirmation (Stage 2) depending on what's been generated ──
             _renderProcurementActions(cn) {
+                // 3-quote exception state — procurement needs to see where their
+                // request stands, not just a Create PO button that will refuse.
+                if (cn.quoteExceptionStatus === 'pending') {
+                    return '<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 12px;max-width:210px;">'
+                         + '<div style="font-size:11px;font-weight:700;color:#E65100;">⏳ 3-Quote Exception — awaiting Budget Owner</div>'
+                         + '<div style="font-size:11px;color:#BF360C;margin-top:4px;">' + (cn.quoteExceptionReason || '').slice(0,90) + '</div></div>'
+                         + '<button class="action-btn" onclick="app.viewConceptNoteDetails(\'' + cn.refNumber + '\')" style="border-color:var(--primary);color:var(--primary);font-size:12px;margin-top:6px;">📄 View Request</button>';
+                }
+                if (cn.quoteExceptionStatus === 'declined') {
+                    return '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:10px 12px;max-width:210px;">'
+                         + '<div style="font-size:11px;font-weight:700;color:#B71C1C;">✗ Exception Declined</div>'
+                         + '<div style="font-size:11px;color:#C62828;margin-top:4px;">' + (cn.quoteExceptionDeclineReason || '').slice(0,90) + '</div></div>'
+                         + '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="font-size:12px;margin-top:6px;">📊 Obtain More Quotes</button>';
+                }
                 if (cn.status === 'variance_rejected') {
                     return '<button class="action-btn" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')" style="background:#FFF3E0;border-color:#E65100;color:#E65100;">⚠️ Re-source (Variance Rejected)</button><div style="font-size:11px;color:#BF360C;margin-top:4px;max-width:180px;">' + (cn.rejectionReason || '') + '</div>';
                 }
@@ -1680,6 +1694,12 @@
                     return '<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:6px;padding:6px 10px;margin-bottom:6px;max-width:200px;"><div style="font-size:11px;font-weight:700;color:#B71C1C;">⚠️ Finance Rejected</div><div style="font-size:11px;color:#C62828;margin-top:2px;">' + (cn.financeRejectionReason.length > 60 ? cn.financeRejectionReason.slice(0,60)+'…' : cn.financeRejectionReason) + '</div></div>' + fixBtn;
                 }
                 if (!cn.poNumber) {
+                    if (cn.quoteExceptionStatus === 'approved') {
+                        return '<div style="background:#F1F8F4;border:1px solid #A5D6A7;border-radius:8px;padding:8px 12px;max-width:210px;margin-bottom:6px;">'
+                             + '<div style="font-size:11px;font-weight:700;color:#1B5E20;">✓ 3-Quote Exception Approved</div>'
+                             + '<div style="font-size:11px;color:#2E7D32;">by ' + (cn.quoteExceptionApprovedBy || '') + '</div></div>'
+                             + '<button class="action-btn approve" onclick="app.showPOCreationForm(\'' + cn.refNumber + '\')">📝 Create &amp; Share PO</button>';
+                    }
                     // At or above ₦500,000 the quotation analysis is mandatory —
                     // procurement cannot enter a PO directly.
                     const mustAnalyse = Number(cn.estimatedCost || 0) >= 500000;
@@ -2366,6 +2386,10 @@ if (role === 'procurement') {
         || !!cn.financeRejectionReason; // finance-rejected always shows
 });
                 const allCNs = this.data.conceptNotes;
+                // 3-quote exceptions awaiting the Budget Owner
+                const exceptionQueue = role === 'budgetOwner'
+                    ? this.data.conceptNotes.filter(cn => cn.quoteExceptionStatus === 'pending')
+                    : [];
                 // POs awaiting Finance confirmation. Signature state is resolved
                 // asynchronously after render, so the list appears immediately.
                 const confirmedPOs = this.data.confirmedPOs || new Set();
@@ -2508,6 +2532,7 @@ if (role === 'procurement') {
                         </tr>`).join('')}
                         </tbody></table></div>
                     </div>` : ''}
+                    ${exceptionQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">⚖️ 3-Quote Exceptions Awaiting Your Approval (${exceptionQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Concept Note</th><th>Project</th><th>Activity</th><th>Amount</th><th>Requested By</th><th>Reason Given</th><th>Actions</th></tr></thead><tbody>${exceptionQueue.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td style="max-width:200px;">${cn.activityTitle}</td><td style="font-weight:600;">₦${Number(cn.estimatedCost||0).toLocaleString()}</td><td>${cn.quoteExceptionRequestedBy||'—'}</td><td style="max-width:280px;font-size:12px;">${cn.quoteExceptionReason||'—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:130px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Details</button><button class="action-btn approve" onclick="app.resolveQuoteException('${cn.refNumber}', true)" style="min-width:130px;font-size:12px;">✓ Approve</button><button class="action-btn reject" onclick="app.resolveQuoteException('${cn.refNumber}', false)" style="min-width:130px;font-size:12px;">✗ Decline</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${poQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛒 Purchase Orders — Finance Confirmation (${poQueue.length})</h3>${(poConfirmedCount > 0 || poLegacyCount > 0) ? `<p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">${[poConfirmedCount > 0 ? `${poConfirmedCount} already confirmed` : '', poLegacyCount > 0 ? `${poLegacyCount} legacy PO${poLegacyCount!==1?'s':''} raised under the old flow` : ''].filter(Boolean).join(' · ')} — not listed.</p>` : ''}<div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>PO Number</th><th>Concept Note</th><th>Project</th><th>Requester</th><th>Activity</th><th>Amount</th><th>Raised</th><th>Actions</th></tr></thead><tbody>${poQueue.map(cn => { let vs=[]; try { if (cn.vendorsJson) vs=JSON.parse(cn.vendorsJson); } catch(e){} const tot=vs.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0)||cn.estimatedCost||0; return `<tr id="poq_${cn.refNumber}"><td style="font-weight:700;color:var(--primary);">${cn.poNumber}</td><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td>${cn.staffName}</td><td style="max-width:220px;">${cn.activityTitle}</td><td style="font-weight:600;">₦${tot.toLocaleString()}</td><td style="font-size:12px;">${cn.poGeneratedAt ? new Date(cn.poGeneratedAt).toLocaleDateString('en-NG') : '—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:140px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Concept Note</button><button class="action-btn" onclick="app._previewPODraft('${cn.refNumber}')" style="min-width:140px;border-color:#059669;color:#059669;font-size:12px;">🛒 View PO</button><span id="poqact_${cn.refNumber}"><button class="action-btn approve" onclick="app._financeSignPO('${cn.refNumber}')" style="min-width:140px;font-size:12px;">✍️ Confirm PO</button></span></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${t.destination||'—'}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
@@ -2742,6 +2767,30 @@ if (role === 'procurement') {
                             ℹ️ Selection is fully automated — the vendor with the highest weighted composite score wins and cannot be manually overridden. Weights: Price 40% · Quality 30% · Delivery 15% · Warranty 10% · Financial Standing 5%.
                         </p>
                     </div>
+
+                    ${cn.quoteExceptionStatus === 'approved' ? `
+                    <div style="background:#F1F8F4;border:2px solid #A5D6A7;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+                        <div style="font-weight:700;color:#1B5E20;font-size:13px;">✓ 3-Quote Exception Approved by ${cn.quoteExceptionApprovedBy||'Budget Owner'}</div>
+                        <div style="font-size:12px;color:#2E7D32;margin-top:4px;">${cn.quoteExceptionReason||''}</div>
+                    </div>` : cn.quoteExceptionStatus === 'pending' ? `
+                    <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+                        <div style="font-weight:700;color:#E65100;font-size:13px;">⏳ 3-Quote Exception awaiting Budget Owner approval</div>
+                        <div style="font-size:12px;color:#BF360C;margin-top:4px;">${cn.quoteExceptionReason||''}</div>
+                    </div>` : `
+                    <div style="background:#FFF8E1;border:1px dashed #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+                        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                            <input type="checkbox" id="qaLimitedMarket" onchange="app._onLimitedMarketToggle(this.checked)" style="margin-top:3px;width:16px;height:16px;cursor:pointer;">
+                            <span>
+                                <span style="font-weight:700;color:#E65100;font-size:13px;">Fewer than 3 providers exist for this service</span>
+                                <span style="display:block;font-size:12px;color:#BF360C;margin-top:3px;">Tick this if a limited market or sole source means 3 competing quotes can't be obtained. The Budget Owner must approve before a PO can be raised.</span>
+                            </span>
+                        </label>
+                        <div id="qaLimitedMarketBox" style="display:none;margin-top:12px;">
+                            <label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">How many providers exist, and why aren't the others viable? <span style="color:var(--danger)">*</span></label>
+                            <textarea id="qaLimitedMarketReason" rows="3" placeholder="e.g. Only two radio stations broadcast in Zango and Kankia; both have quoted. No other station reaches these communities." style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+                            <button type="button" onclick="app.requestQuoteException('${refNumber}')" style="margin-top:10px;padding:10px 18px;background:#E65100;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Send to Budget Owner for Approval</button>
+                        </div>
+                    </div>`}
 
                     <form class="form-grid" id="qaForm" onsubmit="app.runQuotationAnalysis(event, '${refNumber}')">
                         <div class="form-group full-width">
@@ -3357,47 +3406,12 @@ if (role === 'procurement') {
                 const bigLines = vendors.filter(v => (Number(v.amount||0) * (v.qty||1)) >= QUOTE_THRESHOLD);
 
                 if (bigLines.length > 0 && vendorBlockCount < 3 && quotesOnRecord < 3 && !cn.quoteExceptionReason) {
-                    const choice = confirm(
+                    alert(
                         `These service(s) are individually at or above ₦500,000:\n\n` +
                         `${bigLines.map(v => `  • ${v.name} — ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}`).join('\n')}\n\n` +
-                        `Normally this needs at least 3 competing quotes.\n\n` +
-                        `Press OK if fewer than 3 providers exist for this service (limited market or sole source) ` +
-                        `and you want to record an exception.\n\n` +
-                        `Press Cancel to go back and add competing vendors or run the analysis.`);
-                    if (!choice) return;
-                    const why = prompt(
-                        `Why can't 3 quotes be obtained?\n\n` +
-                        `State how many providers exist and why the others aren't viable — e.g. ` +
-                        `"Only 2 radio stations broadcast in Zango and Kankia; both quoted."\n\n` +
-                        `This is sent to the Budget Owner for approval before the PO is raised.`);
-                    if (why === null) return;
-                    if (!why.trim() || why.trim().length < 25) {
-                        alert('Please give a fuller explanation — this bypasses a procurement control and the Budget Owner has to approve it.');
-                        return;
-                    }
-                    // The exception is a control bypass, so it isn't self-certified —
-                    // it goes to the Budget Owner before any PO exists.
-                    try {
-                        const now = new Date().toISOString();
-                        await supabaseClient.from('concept_notes').update({
-                            quoteExceptionReason: why.trim(),
-                            quoteExceptionRequestedBy: this.currentUser,
-                            quoteExceptionRequestedAt: now,
-                            quoteExceptionStatus: 'pending',
-                            vendorsJson: JSON.stringify(vendors)
-                        }).eq('refNumber', refNumber);
-                        await this._logAudit('concept_notes', refNumber, 'quote_exception_requested',
-                            `${this.currentUser} requested a 3-quote exception for ${bigLines.map(v=>v.name).join(', ')}. Reason: ${why.trim()}`);
-                        const bos = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
-                        for (const bo of bos) {
-                            await this.createNotification(bo,
-                                `Procurement has requested a 3-quote exception on ${refNumber} (${cn.activityTitle}) — limited market. Open the concept note to approve or decline.`,
-                                'warning', refNumber);
-                        }
-                        this.clearCache();
-                        alert('Exception request sent to the Budget Owner.\n\nThe PO can be raised once it is approved.');
-                        this.showView('approvals');
-                    } catch(e) { alert('Error saving exception request: ' + e.message); }
+                        `A single service of that value needs at least 3 competing quotes.\n\n` +
+                        `If fewer than 3 providers exist, open Quotation Analysis and tick ` +
+                        `"Fewer than 3 providers exist for this service" to request Budget Owner approval.`);
                     return;
                 }
                 if (bigLines.length > 0 && cn.quoteExceptionStatus === 'pending') {
@@ -4844,6 +4858,23 @@ if (role === 'procurement') {
                 };
 
                 // Travel & security clearance — part of the permanent audit record
+                const exceptionSection = (() => {
+                    if (!cn.quoteExceptionReason) return '';
+                    const st = cn.quoteExceptionStatus || 'pending';
+                    return `
+                <h2 style="font-size:14px;border-bottom:2px solid #E65100;padding-bottom:6px;margin-top:32px;color:#E65100;">THREE-QUOTE EXCEPTION — ${st.toUpperCase()}</h2>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px;">
+                    <div><div class="lbl">Requested By</div><div class="val">${cn.quoteExceptionRequestedBy||'—'}</div></div>
+                    <div><div class="lbl">Requested</div><div class="val">${cn.quoteExceptionRequestedAt?fmtD(cn.quoteExceptionRequestedAt):'—'}</div></div>
+                    <div><div class="lbl">Decided By</div><div class="val">${cn.quoteExceptionApprovedBy||'Pending'}${cn.quoteExceptionApprovedAt?' — '+fmtD(cn.quoteExceptionApprovedAt):''}</div></div>
+                </div>
+                <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:12px 16px;">
+                    <div class="lbl">Reason fewer than 3 quotes were obtained</div>
+                    <div style="font-size:13px;margin-top:4px;white-space:pre-wrap;line-height:1.6;">${cn.quoteExceptionReason}</div>
+                </div>
+                ${cn.quoteExceptionDeclineReason?`<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:12px 16px;margin-top:10px;"><div class="lbl" style="color:#B71C1C;">Declined</div><div style="font-size:13px;color:#C62828;">${cn.quoteExceptionDeclineReason}</div></div>`:''}`;
+                })();
+
                 const travelSection = (() => {
                     if (cn.travelRequired !== 'yes') return '';
                     let t = {}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e) {}
@@ -5058,7 +5089,8 @@ ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E
   <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${cn.rejectionReason||'—'}</div></div>
 </div>
 ${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
-${travelSection}
+${exceptionSection}
+                ${travelSection}
                 ${procSection}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Reviewed By</th><th>Approved By</th><th>Authorised / Paid By</th><th>Bank Reconciliation</th><th>Justification</th><th>Rejection Reason</th></tr></thead><tbody>${payRows}</tbody></table>`}
@@ -6523,6 +6555,48 @@ ${vendors.length > 1 ? `
                     pay = payDb && payDb[0];
                 }
                 await this.showSigningView(cn.poNumber, 'purchase_order', pay?.refNumber || cnRef, 'staff_po', cnRef);
+            },
+
+            _onLimitedMarketToggle(on) {
+                const box = document.getElementById('qaLimitedMarketBox');
+                if (box) box.style.display = on ? '' : 'none';
+            },
+
+            // Procurement declares a limited market up front, rather than
+            // discovering the option only after the three-quote rule blocks them.
+            async requestQuoteException(refNumber) {
+                const why = (document.getElementById('qaLimitedMarketReason')?.value || '').trim();
+                if (why.length < 25) {
+                    alert('Please explain how many providers exist and why the others aren\'t viable.\n\nThis bypasses a procurement control, so the Budget Owner needs enough to decide on.');
+                    return;
+                }
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                if (!confirm(`Send this to the Budget Owner for approval?\n\n"${why}"\n\nThe PO can't be raised until they approve it.`)) return;
+                try {
+                    const now = new Date().toISOString();
+                    const { error } = await supabaseClient.from('concept_notes').update({
+                        quoteExceptionReason: why,
+                        quoteExceptionRequestedBy: this.currentUser,
+                        quoteExceptionRequestedAt: now,
+                        quoteExceptionStatus: 'pending'
+                    }).eq('refNumber', refNumber);
+                    if (error) throw error;
+                    await this._logAudit('concept_notes', refNumber, 'quote_exception_requested',
+                        `${this.currentUser} declared a limited market for ${cn.activityTitle}. Reason: ${why}`);
+                    const bos = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
+                    for (const bo of bos) {
+                        await this.createNotification(bo,
+                            `Procurement has requested a 3-quote exception on ${refNumber} (${cn.activityTitle}) — limited market. Approve or decline it from your Approvals screen.`,
+                            'warning', refNumber);
+                    }
+                    const li = this.data.conceptNotes.findIndex(x => x.refNumber === refNumber);
+                    if (li !== -1) Object.assign(this.data.conceptNotes[li], { quoteExceptionStatus: 'pending', quoteExceptionReason: why, quoteExceptionRequestedBy: this.currentUser });
+                    this.clearCache();
+                    alert('Sent to the Budget Owner.\n\nYou can still enter the quotes you do have — the PO can be raised once the exception is approved.');
+                    await this.loadData();
+                    this.showView('approvals');
+                } catch(e) { alert('Error: ' + e.message); }
             },
 
             // Budget Owner decides on a 3-quote exception. Procurement can't
