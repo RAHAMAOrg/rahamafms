@@ -3310,8 +3310,14 @@ if (role === 'procurement') {
                 // Three-quote rule: require at least 3 vendor blocks for totals > 500,000
                 const QUOTE_THRESHOLD = 500000;
                 const vendorBlockCount = document.querySelectorAll('[id^="vendorBlock_"]').length;
-                if (total >= QUOTE_THRESHOLD && vendorBlockCount < 3) {
-                    alert(`This procurement (₦${total.toLocaleString()}) is at or above ₦500,000. You must provide at least 3 vendor quotes. Currently you have ${vendorBlockCount}. Please add more vendors.`);
+                // A completed quotation analysis already satisfies the 3-quote rule —
+                // it compared the quotes and selected the winner, so the PO carries
+                // only that vendor. Demanding 3 vendor blocks here blocked procurement
+                // from ever raising the PO the analysis had just chosen.
+                let quotesOnRecord = 0;
+                try { quotesOnRecord = (JSON.parse(cn.quotationAnalysisJson || '{}').vendors || []).length; } catch(e) {}
+                if (total >= QUOTE_THRESHOLD && vendorBlockCount < 3 && quotesOnRecord < 3) {
+                    alert(`This procurement (₦${total.toLocaleString()}) is at or above ₦500,000. You must provide at least 3 vendor quotes. Currently you have ${vendorBlockCount}. Either add more vendors, or run the quotation analysis first.`);
                     return;
                 }
 
@@ -4105,8 +4111,7 @@ if (role === 'procurement') {
                         <button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Pipeline Report (All Stages)</button>
                         <button class="btn btn-secondary" onclick="app.exportRetirementReport()">⬇ Download Retirement Report</button>
                         ${['finance','finance_manager'].includes(this.getUserRole()) ? `
-                        <button class="btn btn-secondary" style="border-color:#0D47A1;color:#0D47A1;" onclick="app.exportPaymentSchedule('due')">💳 Payment Schedule — Awaiting Disbursement</button>
-                        <button class="btn btn-secondary" style="border-color:#1B5E20;color:#1B5E20;" onclick="app.exportPaymentSchedule('paid')">💳 Payment Schedule — Disbursed</button>` : ''}
+                        <button class="btn btn-secondary" style="border-color:#0D47A1;color:#0D47A1;" onclick="app.exportPaymentSchedule()">💳 Payment Schedule (Authorised)</button>` : ''}
                     </div>
                     <div class="table-container"><table><thead><tr>
                         <th>Project Code</th><th>Project Name</th><th>Total Budget</th>
@@ -4403,7 +4408,7 @@ if (role === 'procurement') {
          // Bank payment schedule — every line Finance needs to pay, flattened
          // from multi-vendor schedules so one authorisation can produce several
          // transfers. Any finance officer can pull this.
-         async exportPaymentSchedule(which) {
+         async exportPaymentSchedule() {
     const csvEscape = v => {
         const s = (v === null || v === undefined) ? '' : String(v);
         return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g,'""') + '"' : s;
@@ -4417,13 +4422,14 @@ if (role === 'procurement') {
         pays = data || [];
     } catch(e) { alert('Could not load payments: ' + e.message); return; }
 
-    // "authorised" = cleared the full finance chain and marked paid
-    const mode = which || 'paid';
-    const scope = mode === 'due'
-        ? pays.filter(p => p.status === 'finance_approved')   // authorised, not yet disbursed
-        : pays.filter(p => p.status === 'paid');
+    // Only payments authorised by the designated authorizer. Status alone isn't
+    // enough — legacy payments were marked 'paid' by the old single-step flow
+    // without passing through the reviewer → approver → authorizer chain.
+    const authorizer = Object.entries(this.data.financeStages || {})
+        .find(([, s]) => s === 'authorizer')?.[0] || null;
+    const scope = pays.filter(p => p.status === 'paid' && p.processedBy === authorizer);
     if (!scope.length) {
-        alert(mode === 'due' ? 'No payments are currently awaiting disbursement.' : 'No authorised payments found.');
+        alert(`No payments authorised by ${authorizer || 'the authorizer'} were found.`);
         return;
     }
 
@@ -4455,7 +4461,8 @@ if (role === 'procurement') {
                      'Account Name','Account Number','Bank','Status','Reviewed By','Approved By','Authorised By','Paid Date'];
     const csv = [
         ['RAHAMA Girl Child & Women Empowerment Initiative'].map(csvEscape).join(','),
-        [mode === 'due' ? 'Payment Schedule — Authorised, Awaiting Disbursement' : 'Payment Schedule — Disbursed'].map(csvEscape).join(','),
+        ['Payment Schedule — Authorised Payments'].map(csvEscape).join(','),
+        ['Authorised by', authorizer || ''].map(csvEscape).join(','),
         ['Generated', new Date().toLocaleString('en-NG')].map(csvEscape).join(','),
         ['Generated by', this.currentUser || ''].map(csvEscape).join(','),
         ['Payment lines', rows.length].map(csvEscape).join(','),
@@ -4469,7 +4476,7 @@ if (role === 'procurement') {
     const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `rahama_payment_schedule_${mode}_${new Date().toISOString().slice(0,10)}.csv`;
+    a.href = url; a.download = `rahama_payment_schedule_authorised_${new Date().toISOString().slice(0,10)}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
     alert(`Payment schedule downloaded.\n\n${rows.length} payment line(s)\nTotal: ₦${total.toLocaleString()}`);
@@ -5083,7 +5090,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
                             <button class="btn btn-primary" onclick="app._submitVendorGRRSignature('${refNumber}')" style="flex:1;min-width:160px;">✓ Confirm &amp; Sign GRR</button>
                             <button class="btn btn-secondary" onclick="app._clearVendorCanvas()" style="min-width:100px;">Clear</button>
-                            <button class="btn btn-secondary" onclick="app._showRemoteVendorSign('${refNumber}')" style="min-width:160px;border-color:#059669;color:#059669;">📱 Remote Sign Link</button>
+                            <button class="btn btn-secondary" onclick="app._showRemoteVendorSign('${refNumber}', ${_gvi})" style="min-width:160px;border-color:#059669;color:#059669;">📱 Remote Sign Link</button>
                         </div>
                         <div id="vendorSignStatus" style="margin-top:16px;"></div>
                     </div>`;
@@ -5178,7 +5185,13 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             // ══════════════════════════════════════════════════════════════
             // REMOTE VENDOR SIGNING — Generate token + link + QR
             // ══════════════════════════════════════════════════════════════
-            async _showRemoteVendorSign(refNumber) {
+            async _showRemoteVendorSign(refNumber, vendorIndex) {
+                let _grrVendorsAll = [];
+                try { if (this.data.conceptNotes.find(x => x.refNumber === refNumber)?.vendorsJson) _grrVendorsAll = JSON.parse(this.data.conceptNotes.find(x => x.refNumber === refNumber).vendorsJson); } catch(e) {}
+                const _gvIdx = (vendorIndex !== undefined && _grrVendorsAll.length > 1) ? vendorIndex : null;
+                const _grrSingleJson = (_gvIdx !== null && _grrVendorsAll[_gvIdx])
+                    ? JSON.stringify([_grrVendorsAll[_gvIdx]])
+                    : (this.data.conceptNotes.find(x => x.refNumber === refNumber)?.vendorsJson || '');
                 let cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) {
                     const { data: cnFresh, error: cnErr } = await supabaseClient
@@ -5197,7 +5210,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     projectCode: cn.projectCode,
                     estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
                     description: cn.vendorItemsSupplied || cn.activityTitle || '',
-                    vendorsJson: cn.vendorsJson || '',
+                    // Send only this vendor's line — previously every vendor received
+                    // a link showing all the other vendors' GRRs, prices and accounts.
+                    vendorsJson: _grrSingleJson,
                     createdBy: this.currentUser,
                     expiresAt, used: false
                 };
