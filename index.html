@@ -3405,7 +3405,7 @@ if (role === 'procurement') {
                 const largestLine = vendors.reduce((mx,v) => Math.max(mx, Number(v.amount||0) * (v.qty||1)), 0);
                 const bigLines = vendors.filter(v => (Number(v.amount||0) * (v.qty||1)) >= QUOTE_THRESHOLD);
 
-                if (bigLines.length > 0 && vendorBlockCount < 3 && quotesOnRecord < 3 && !cn.quoteExceptionReason) {
+                if (bigLines.length > 0 && vendorBlockCount < 3 && quotesOnRecord < 3 && cn.quoteExceptionStatus !== 'approved') {
                     alert(
                         `These service(s) are individually at or above ₦500,000:\n\n` +
                         `${bigLines.map(v => `  • ${v.name} — ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}`).join('\n')}\n\n` +
@@ -3415,7 +3415,11 @@ if (role === 'procurement') {
                     return;
                 }
                 if (bigLines.length > 0 && cn.quoteExceptionStatus === 'pending') {
-                    alert('The 3-quote exception for this concept note is still awaiting Budget Owner approval.');
+                    alert('The 3-quote exception is still awaiting Budget Owner approval. The PO can be raised once it is approved.');
+                    return;
+                }
+                if (bigLines.length > 0 && cn.quoteExceptionStatus === 'declined') {
+                    alert(`The 3-quote exception was declined${cn.quoteExceptionDeclineReason ? ':\n\n' + cn.quoteExceptionDeclineReason : '.'}\n\nYou need at least 3 competing quotes for this service.`);
                     return;
                 }
 
