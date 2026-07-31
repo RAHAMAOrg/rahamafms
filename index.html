@@ -1702,7 +1702,8 @@
                     }
                     // At or above ₦500,000 the quotation analysis is mandatory —
                     // procurement cannot enter a PO directly.
-                    const mustAnalyse = Number(cn.estimatedCost || 0) >= 500000;
+                    const mustAnalyse = Number(cn.estimatedCost || 0) >= 500000
+                                        && cn.quoteExceptionStatus !== 'approved';
                     let out = '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>';
                     if (mustAnalyse) {
                         out += '<div style="font-size:11px;color:#B45309;max-width:190px;">⚠️ Above ₦500,000 — quotation analysis is required, with at least 3 quotes.</div>';
@@ -3259,7 +3260,8 @@ if (role === 'procurement') {
                 if (!cn) return;
                 // Backstop: direct PO entry is not permitted at or above ₦500,000
                 // unless a quotation analysis has already been recorded.
-                if (Number(cn.estimatedCost || 0) >= 500000 && !cn.quotationAnalysisJson) {
+                if (Number(cn.estimatedCost || 0) >= 500000 && !cn.quotationAnalysisJson
+                    && cn.quoteExceptionStatus !== 'approved') {
                     alert('This procurement is ₦' + Number(cn.estimatedCost).toLocaleString() + ', which is at or above the ₦500,000 threshold.\n\nA quotation analysis with at least 3 quotes is required before a PO can be raised.');
                     this.showQuotationAnalysis(refNumber);
                     return;
