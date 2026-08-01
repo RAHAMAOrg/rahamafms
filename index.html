@@ -257,8 +257,24 @@
         const STORAGE_BUCKET = 'fms-documents';
         const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+        // FMS and the Staff Portal (PMS) are two separate Supabase projects,
+        // so a PMS access token can't be used as a bearer token for FMS's
+        // own database calls. It's still used for one thing: proving, via
+        // PMS's own Supabase Auth server, that the handed-off session is a
+        // real signed token and not just an edited localStorage blob.
+        const PMS_AUTH_URL = "https://wdondphcmnhdslcypeya.supabase.co";
+        const PMS_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indkb25kcGhjbW5oZHNsY3lwZXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg5MDA3MDcsImV4cCI6MjA4NDQ3NjcwN30.wIisWHb3w4cSGZIB4f3q0Z6lboidH6SzL7oGToGdnsw";
+
         const supabaseClient = (typeof supabase !== 'undefined')
             ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+            : null;
+
+        // Separate client instance bound to PMS's project — auth.getUser()/
+        // refreshSession() calls on THIS client hit PMS's Supabase Auth
+        // server, not FMS's. supabaseClient above stays exactly as it was,
+        // untouched, for all of FMS's own data reads/writes.
+        const pmsAuthClient = (typeof supabase !== 'undefined')
+            ? supabase.createClient(PMS_AUTH_URL, PMS_ANON_KEY)
             : null;
         
         const app = {
@@ -340,14 +356,17 @@
                 }
                 const session = localStorage.getItem('pms_user');
                 if (session) {
-                    const user = JSON.parse(session);
-                    // A stored session expires after 12 hours, so a copied session
-                    // can't be reused indefinitely. Signing in again through the
-                    // staff portal issues a fresh one.
-                    const MAX_SESSION_MS = 12 * 60 * 60 * 1000;
-                    if (user.issuedAt && (Date.now() - user.issuedAt) > MAX_SESSION_MS) {
+                    let user = JSON.parse(session);
+                    // The name/role/email inside this object are no longer
+                    // trusted on their own — they're only accepted once the
+                    // accompanying access_token is confirmed, by PMS's own
+                    // Supabase Auth server, to be a real, unexpired token for
+                    // that same email. A hand-edited localStorage entry (or a
+                    // pre-migration session with no token at all) is rejected.
+                    user = await this._establishVerifiedSession(user);
+                    if (!user) {
                         localStorage.removeItem('pms_user');
-                        alert('Your session has expired. Please sign in again through the Staff Portal.');
+                        alert('Your session could not be verified. Please sign in again through the Staff Portal.');
                         window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
                         return;
                     }
@@ -413,6 +432,65 @@
                 };
                 ['mousemove','keydown','click','touchstart','scroll'].forEach(e => document.addEventListener(e, reset, { passive: true }));
                 reset();
+            },
+
+            // Confirms a handed-off session by checking its access_token
+            // against PMS's own Supabase Auth server, via the supabase-js
+            // SDK (pmsAuthClient, a client instance pointed at PMS's
+            // project). If the access token has expired, refreshes it once
+            // via the refresh_token before giving up.
+            //
+            // Critically: only the EMAIL that comes back from getUser() is
+            // trusted. name/role/id in the handed-off object are editable
+            // in localStorage by anyone, token or no token, so they are
+            // discarded here and re-fetched from PMS's users table keyed
+            // by the verified email. A valid token for a real employee can
+            // no longer be paired with a forged name to pose as someone
+            // else.
+            async _establishVerifiedSession(user) {
+                if (!user || !user.access_token || !pmsAuthClient) return null;
+
+                let accessToken = user.access_token;
+                let refreshToken = user.refresh_token;
+                let { data, error } = await pmsAuthClient.auth.getUser(accessToken);
+
+                if ((error || !data?.user) && refreshToken) {
+                    const { data: rdata, error: rerr } = await pmsAuthClient.auth.refreshSession({ refresh_token: refreshToken });
+                    if (rerr || !rdata?.session) return null;
+                    accessToken = rdata.session.access_token;
+                    refreshToken = rdata.session.refresh_token;
+                    ({ data, error } = await pmsAuthClient.auth.getUser(accessToken));
+                }
+
+                const verifiedEmail = data && data.user && data.user.email;
+                if (error || !verifiedEmail) return null;
+
+                const profile = await this._pmsProfileByEmail(verifiedEmail);
+                if (!profile || !profile.name) return null;
+
+                const verifiedUser = {
+                    email: verifiedEmail, name: profile.name,
+                    access_token: accessToken, refresh_token: refreshToken,
+                    issuedAt: Date.now()
+                };
+                localStorage.setItem('pms_user', JSON.stringify(verifiedUser));
+                return verifiedUser;
+            },
+
+            // The one piece of identity FMS still needs that Supabase Auth
+            // itself doesn't hold: the human name PMS's own users table has
+            // on file for this email. This is a DB read, not a browser
+            // read — the caller passes in an email that was just proven
+            // genuine by getUser() above, not anything from localStorage.
+            async _pmsProfileByEmail(email) {
+                try {
+                    const r = await fetch(`${PMS_AUTH_URL}/rest/v1/users?email=eq.${encodeURIComponent(email.toLowerCase())}&select=name,role`, {
+                        headers: { apikey: PMS_ANON_KEY, Authorization: `Bearer ${PMS_ANON_KEY}` }
+                    });
+                    if (!r.ok) return null;
+                    const rows = await r.json();
+                    return Array.isArray(rows) && rows.length ? rows[0] : null;
+                } catch (e) { return null; }
             },
 
             _isOnline() {
@@ -7659,7 +7737,21 @@ _recalcVendorTotal() {
             },
 
             logout() {
-                if (confirm('Are you sure you want to logout?')) { localStorage.removeItem('pms_user'); window.location.href = 'https://rahamaorg.github.io/appraisal-system/'; }
+                if (confirm('Are you sure you want to logout?')) {
+                    const session = localStorage.getItem('pms_user');
+                    if (session && pmsAuthClient) {
+                        try {
+                            const { access_token, refresh_token } = JSON.parse(session);
+                            if (access_token && refresh_token) {
+                                pmsAuthClient.auth.setSession({ access_token, refresh_token })
+                                    .then(() => pmsAuthClient.auth.signOut())
+                                    .catch(() => {});
+                            }
+                        } catch (e) {}
+                    }
+                    localStorage.removeItem('pms_user');
+                    window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
+                }
             }
         };
         
