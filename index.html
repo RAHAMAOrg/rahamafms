@@ -320,10 +320,37 @@
                 this._setupSessionTimeout();
                 const params = new URLSearchParams(window.location.search);
                 const urlSession = params.get('session');
-                if (urlSession) localStorage.setItem('pms_user', decodeURIComponent(urlSession));
+                if (urlSession) {
+                    // A session handed over in the URL is accepted once, then the
+                    // parameter is stripped from the address bar and from history.
+                    // Previously such a link could be copied from a screenshot or a
+                    // browser history and reused by anyone, with any name and role.
+                    try {
+                        const handed = JSON.parse(decodeURIComponent(urlSession));
+                        if (handed && handed.name && handed.email) {
+                            handed.issuedAt = Date.now();
+                            localStorage.setItem('pms_user', JSON.stringify(handed));
+                        }
+                    } catch(e) { console.warn('Invalid session handover'); }
+                    // Remove ?session= so the address bar no longer carries credentials
+                    try {
+                        const clean = window.location.origin + window.location.pathname + window.location.hash;
+                        window.history.replaceState({}, document.title, clean);
+                    } catch(e) {}
+                }
                 const session = localStorage.getItem('pms_user');
                 if (session) {
                     const user = JSON.parse(session);
+                    // A stored session expires after 12 hours, so a copied session
+                    // can't be reused indefinitely. Signing in again through the
+                    // staff portal issues a fresh one.
+                    const MAX_SESSION_MS = 12 * 60 * 60 * 1000;
+                    if (user.issuedAt && (Date.now() - user.issuedAt) > MAX_SESSION_MS) {
+                        localStorage.removeItem('pms_user');
+                        alert('Your session has expired. Please sign in again through the Staff Portal.');
+                        window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
+                        return;
+                    }
                     this.currentUser = user.name;
                     const el = document.getElementById('loggedInUser');
                     if (el) el.innerText = user.name;
