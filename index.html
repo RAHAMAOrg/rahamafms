@@ -371,6 +371,15 @@
                         return;
                     }
                     this.currentUser = user.name;
+                    // PMS verification above only proves who you are to PMS.
+                    // FMS is a separate Supabase project and needs its own
+                    // signed-in session before auth.uid() exists for any
+                    // RLS policy to check — this establishes that session,
+                    // prompting once for the password if one isn't already
+                    // live (e.g. a fresh browser / after the refresh token
+                    // has expired).
+                    const fmsUnlocked = await this._establishFmsSession(user.email);
+                    if (!fmsUnlocked) return;
                     const el = document.getElementById('loggedInUser');
                     if (el) el.innerText = user.name;
                     const role = this.getUserRole();
@@ -491,6 +500,59 @@
                     const rows = await r.json();
                     return Array.isArray(rows) && rows.length ? rows[0] : null;
                 } catch (e) { return null; }
+            },
+
+            // Signs `supabaseClient` (FMS's own project) into a real session
+            // for this verified email. Without this, every FMS query runs
+            // as the anonymous role no matter how thoroughly PMS verified
+            // the person — RLS policies scoped `to authenticated` see
+            // nothing until this resolves. Skips the prompt entirely if a
+            // live FMS session for this exact email already exists (e.g.
+            // page refresh) — the password is asked for once per session,
+            // not once per page load.
+            async _establishFmsSession(email) {
+                try {
+                    const { data: { session } } = await supabaseClient.auth.getSession();
+                    if (session && session.user && session.user.email &&
+                        session.user.email.toLowerCase() === email.toLowerCase()) {
+                        return true;
+                    }
+                } catch (e) {}
+
+                return new Promise((resolve) => {
+                    const content = document.getElementById('mainContent');
+                    const render = (errorMsg) => {
+                        content.innerHTML = `
+                            <div style="max-width:360px;margin:80px auto;padding:32px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);text-align:center;">
+                                <div style="font-size:32px;margin-bottom:12px;">🔒</div>
+                                <h2 style="font-family:'Archivo',sans-serif;margin-bottom:8px;">Confirm your password</h2>
+                                <p style="color:#616161;font-size:13px;margin-bottom:20px;">Signed in to the Staff Portal as <strong>${email}</strong>. Enter your password once to unlock FMS.</p>
+                                ${errorMsg ? `<p style="color:#D32F2F;font-size:13px;margin-bottom:12px;">${errorMsg}</p>` : ''}
+                                <input type="password" id="_fmsPw" placeholder="Password" style="width:100%;padding:10px;margin-bottom:12px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;" autofocus />
+                                <button id="_fmsPwSubmit" class="action-btn approve" style="width:100%;margin-bottom:8px;">Unlock FMS</button>
+                                <button id="_fmsPwCancel" style="width:100%;background:none;border:none;color:#616161;font-size:12px;cursor:pointer;">Not you? Return to Staff Portal</button>
+                            </div>`;
+                        const pwField = document.getElementById('_fmsPw');
+                        document.getElementById('_fmsPwSubmit').onclick = submit;
+                        pwField.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+                        document.getElementById('_fmsPwCancel').onclick = () => {
+                            localStorage.removeItem('pms_user');
+                            window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
+                        };
+                        pwField.focus();
+                    };
+                    const submit = async () => {
+                        const pwField = document.getElementById('_fmsPw');
+                        const pw = pwField.value;
+                        if (!pw) return;
+                        const btn = document.getElementById('_fmsPwSubmit');
+                        btn.disabled = true; btn.textContent = 'Checking…';
+                        const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pw });
+                        if (error) { render('Incorrect password. Try again.'); return; }
+                        resolve(true);
+                    };
+                    render(null);
+                });
             },
 
             _isOnline() {
@@ -7749,6 +7811,7 @@ _recalcVendorTotal() {
                             }
                         } catch (e) {}
                     }
+                    if (supabaseClient) { try { supabaseClient.auth.signOut(); } catch (e) {} }
                     localStorage.removeItem('pms_user');
                     window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
                 }
