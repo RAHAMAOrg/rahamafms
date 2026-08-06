@@ -1462,6 +1462,7 @@
                                                 <th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line / Description</th>
                                                 <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:150px;">Unit Amount (₦)</th>
                                                 <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:110px;">Qty / Days</th>
+                                                <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:110px;">Frequency</th>
                                                 <th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:150px;">Total (₦)</th>
                                                 <th style="padding:10px 12px;text-align:center;color:#374151;font-weight:700;border:1px solid #A7F3D0;width:36px;"></th>
                                             </tr>
@@ -1472,6 +1473,7 @@
                                                 <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="text" placeholder="e.g. Training facilitator fee" style="width:100%;border:none;background:transparent;font-size:13px;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_desc_1"></td>
                                                 <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="0" step="0.01" placeholder="0" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_amt_1"></td>
                                                 <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="1" step="1" value="1" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_qty_1"></td>
+                                                <td style="padding:6px 8px;border:1px solid #A7F3D0;"><input type="number" min="1" step="1" value="1" style="width:100%;border:none;background:transparent;font-size:13px;text-align:right;outline:none;font-family:inherit;" oninput="app.recalcCNBudgetRow(1)" id="cn_freq_1"></td>
                                                 <td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;" id="cn_total_1">0.00</td>
                                                 <td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:center;"><button type="button" onclick="app.removeCNBudgetRow(1)" style="background:none;border:none;color:#EF4444;cursor:pointer;font-size:16px;" title="Remove">✕</button></td>
                                             </tr>
@@ -1896,7 +1898,8 @@
             recalcCNBudgetRow(id) {
                 const amt = parseFloat(document.getElementById('cn_amt_' + id)?.value) || 0;
                 const qty = parseFloat(document.getElementById('cn_qty_' + id)?.value) || 1;
-                const total = amt * qty;
+                const freq = parseFloat(document.getElementById('cn_freq_' + id)?.value) || 1;
+                const total = amt * qty * freq;
                 const el = document.getElementById('cn_total_' + id);
                 if (el) el.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 app.updateCNBudgetTotal();
@@ -1945,7 +1948,8 @@
                     const desc = document.getElementById('cn_desc_' + m[1])?.value?.trim();
                     const amt  = parseFloat(document.getElementById('cn_amt_' + m[1])?.value) || 0;
                     const qty  = parseFloat(document.getElementById('cn_qty_' + m[1])?.value) || 1;
-                    if (desc) lines.push(`${m[1]}. ${desc}: ₦${amt.toLocaleString()} × ${qty} = ₦${(amt*qty).toLocaleString()}`);
+                    const freq = parseFloat(document.getElementById('cn_freq_' + m[1])?.value) || 1;
+                    if (desc) lines.push(`${m[1]}. ${desc}: ₦${amt.toLocaleString()} × ${qty} qty × ${freq} freq = ₦${(amt*qty*freq).toLocaleString()}`);
                 });
                 return lines.join('\n');
             },
@@ -3496,7 +3500,7 @@ if (role === 'procurement') {
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Name <span style="color:var(--danger)">*</span></label><input type="text" id="vName_1" value="${pf ? (pf.name||'').replace(/"/g,'&quot;') : ''}" placeholder="Vendor or company name" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Phone <span style="color:var(--danger)">*</span></label><input type="text" id="vPhone_1" value="${pf ? (pf.phone||'').replace(/"/g,'&quot;') : ''}" placeholder="e.g. 08012345678" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
-                                        <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods / Services to be Supplied <span style="color:var(--danger)">*</span></label><input type="text" id="vItems_1" value="${pf ? (pf.items||'').replace(/"/g,'&quot;') : ''}" placeholder="What is being ordered" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                        <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods / Services to be Supplied <span style="color:var(--danger)">*</span></label><textarea id="vItems_1" rows="3" placeholder="One item per line — e.g.&#10;20 plastic chairs&#10;4 tables&#10;1 projector" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${pf ? (pf.items||'') : ''}</textarea> style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Reference / Quote No. <span style="font-size:11px;font-weight:400;color:#6B7280;">(optional)</span></label><input type="text" id="vInvoice_1" placeholder="Vendor quote reference" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Unit Price (₦) <span style="color:var(--danger)">*</span></label><input type="number" id="vAmount_1" min="0" step="0.01" value="${pf ? Number(pf.amount||0) : ''}" placeholder="0" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._recalcVendorTotal()"></div>
                                         <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quantity Ordered <span style="color:var(--danger)">*</span></label><input type="number" id="vQty_1" min="1" step="1" value="${pf ? (pf.qty||1) : 1}" placeholder="e.g. 10" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._recalcVendorTotal()"></div>
@@ -5354,7 +5358,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 let _grrVendors = _gv ? [_gv] : [];
                 const itemRows = cn.requiresProcurement === 'yes'
                     ? (_grrVendors.length > 0
-                        ? _grrVendors.map((v, i) => { const qty = v.qty||1; const qualityBadge = v.quality==='Good'?'<span style="color:#047857;font-weight:700;">✅ Good</span>':v.quality==='Poor'?'<span style="color:#DC2626;font-weight:700;">❌ Poor</span>':'<span style="color:#D97706;font-weight:700;">⚠️ Partial</span>'; return `<tr><td>${i+1}</td><td>${v.items || cn.activityTitle}</td><td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:right">₦${(Number(v.amount||0)*qty).toLocaleString()}</td><td style="text-align:center">${qualityBadge}</td></tr>`; }).join('')
+                        ? _grrVendors.map((v, i) => { const qty = v.qty||1; const qualityBadge = v.quality==='Good'?'<span style="color:#047857;font-weight:700;">✅ Good</span>':v.quality==='Poor'?'<span style="color:#DC2626;font-weight:700;">❌ Poor</span>':'<span style="color:#D97706;font-weight:700;">⚠️ Partial</span>'; return `<tr><td>${i+1}</td><td>${String(v.items || cn.activityTitle).split('\n').filter(Boolean).map(x => x.trim()).join('<br>')}</td><td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:right">₦${(Number(v.amount||0)*qty).toLocaleString()}</td><td style="text-align:center">${qualityBadge}</td></tr>`; }).join('')
                         : `<tr><td>1</td><td>${cn.vendorItemsSupplied || cn.activityTitle}</td><td>${cn.grrVendorName || '—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center"><span style="color:#047857;font-weight:700;">✅ Good</span></td></tr>`)
                     : '<tr><td colspan="7" style="text-align:center;color:#999;">No procurement items</td></tr>';
                 const _grrTotal = _grrVendors.length > 0
