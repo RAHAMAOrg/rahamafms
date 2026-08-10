@@ -1977,14 +1977,18 @@
                     }
                 } catch (e) { console.warn('Fresh CN fetch failed, using cache:', e); }
 
-                const approvedNotes = this.data.conceptNotes.filter(cn => {
-                    if (cn.staffName !== this.currentUser) return false;
-                    if (cn.status !== 'approved') return false;
-                    const existingPayment = this.data.payments.find(p => p.conceptNoteRef === cn.refNumber);
-                    if (!existingPayment) return true;
-                    if (existingPayment.status !== 'paid') return true;
-                    return false;
-                });
+               const approvedNotes = this.data.conceptNotes.filter(cn => {
+    if (cn.staffName !== this.currentUser) return false;
+    if (cn.status !== 'approved') return false;
+    const paidSoFar = this.data.payments
+        .filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid')
+        .reduce((s,p) => s + Number(p.amount||0), 0);
+    const balance = cn.estimatedCost - paidSoFar;
+    if (balance <= 0) return false;               // fully spent — closed
+    const pendingPayment = this.data.payments.find(p => p.conceptNoteRef === cn.refNumber && ['pending','reviewed','finance_approved'].includes(p.status));
+    if (pendingPayment) return false;              // one tranche in flight at a time
+    return true;
+});
                 const bankOptions = ['Access Bank','Fidelity Bank','First Bank','FCMB','GTBank','Jaiz Bank','Keystone Bank','Moniepoint MFB','Opay Services','Polaris Bank','Stanbic IBTC','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank'].map(b => `<option value="${b}">${b}</option>`).join('');
                 content.innerHTML = `
                     <div class="header"><h2>Request Payment</h2><p>Submit a payment request for an approved concept note</p></div>
@@ -2024,7 +2028,7 @@
                 const contentDiv = document.getElementById('cnDetailsContent');
                 if (cn && detailsDiv && contentDiv) {
                     detailsDiv.style.display = 'block';
-                    contentDiv.innerHTML = `<strong>Activity:</strong> ${cn.activityTitle}<br><strong>Estimated Cost:</strong> ₦${cn.estimatedCost.toLocaleString()}<br><strong>Project:</strong> ${cn.projectCode}`;
+                    contentDiv.innerHTML = `...<strong>Balance Remaining:</strong> ₦${(cn.estimatedCost - paidSoFar).toLocaleString()}`;
                 }
             },
             
