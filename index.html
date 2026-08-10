@@ -776,7 +776,22 @@
                     return;
                 }
                 if (stage === 'authorizer') {
-                    if (payment.beneficiaryFileUrl) {
+                    if (payment.payMode === 'vendors' && payment.paymentScheduleJson) {
+                        // Procurement payments settle several vendors from one authorisation —
+                        // each vendor's account lives in paymentScheduleJson, not in the
+                        // single accountName/accountNumber/bankName fields on the payment
+                        // itself (those are just a placeholder label for this payment type).
+                        let schedule = [];
+                        try { schedule = JSON.parse(payment.paymentScheduleJson); } catch(e) {}
+                        const badLines = schedule.filter(s => !s.accountName || !s.accountNumber || !s.bankName);
+                        if (schedule.length === 0 || badLines.length > 0) {
+                            alert('Error: Payment account details are missing for one or more vendors on this payment schedule.' +
+                                (badLines.length ? '\n\n' + badLines.map(s => '  • ' + (s.vendor || 'Unknown vendor')).join('\n') : ''));
+                            return;
+                        }
+                        const lines = schedule.map(s => `${s.vendor} — ₦${Number(s.amount||0).toLocaleString()} (${s.accountName}, ${s.accountNumber}, ${s.bankName})`).join('\n');
+                        if (!confirm(`Authorize payment of ₦${payment.amount.toLocaleString()} across ${schedule.length} vendor(s)?\n\n${lines}\n\nConfirm payment?`)) return;
+                    } else if (payment.beneficiaryFileUrl) {
                         if (!confirm(`Authorize batch payment of ₦${payment.amount.toLocaleString()}?\n\nBeneficiary file attached.\n\nConfirm payment?`)) return;
                     } else {
                         if (!payment.accountName || !payment.accountNumber || !payment.bankName) { alert('Error: Account details not provided by staff member.'); return; }
