@@ -1993,7 +1993,7 @@
                 content.innerHTML = `
                     <div class="header"><h2>Request Payment</h2><p>Submit a payment request for an approved concept note</p></div>
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
-                        <div class="form-group full-width"><label>Select Approved Concept Note <span class="required">*</span></label><select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)"><option value="">Choose a concept note</option>${approvedNotes.map(cn => `<option value="${cn.id}">${cn.refNumber} - ${cn.activityTitle}</option>`).join('')}</select></div>
+                        <div class="form-group full-width"><label>Select Approved Concept Note <span class="required">*</span></label><select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)"><option value="">Choose a concept note</option>${approvedNotes.map(cn => { const paidSoFar = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid').reduce((s,p) => s + Number(p.amount||0), 0); const bal = cn.estimatedCost - paidSoFar; return `<option value="${cn.id}">${cn.refNumber} - ${cn.activityTitle} (Balance: ₦${bal.toLocaleString()})</option>`; }).join('')}</select></div>
                         <div id="conceptNoteDetails" style="display: none;" class="form-group full-width"><div class="threshold-info"><div id="cnDetailsContent"></div></div></div>
                         <div class="form-group"><label>Payment Amount (₦) <span class="required">*</span></label><input type="number" name="amount" id="amount" required min="0" step="0.01"></div>
                         <div class="form-group"><label>Payment Method <span class="required">*</span></label><select name="paymentMethod" required><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="cheque">Cheque</option></select></div>
@@ -3767,27 +3767,48 @@ if (role === 'procurement') {
                 }
                 const poTotal = vendors.reduce((s,v) => s + (Number(v.amount||0) * (v.qty||1)), 0);
 
+                // Prior partial deliveries against this PO — used to show what's left per vendor line
+                let receivedRounds = [];
+                try { if (cn.receivedJson) receivedRounds = JSON.parse(cn.receivedJson); } catch(e) {}
+                const _getReceivedQty = (vendorIndex) => receivedRounds.reduce((s,r) =>
+                    s + (r.lines||[]).filter(l => l.vendorIndex === vendorIndex).reduce((ss,l) => ss + (Number(l.qtyReceived)||0), 0), 0);
+                const roundsSoFar = receivedRounds.length;
+                const cumulativeReceivedValue = Number(cn.actualProcurementCost || 0);
+                const poBalance = poTotal - cumulativeReceivedValue;
+
                 const vendorBlocksHtml = vendors.map((v, i) => {
                     const id = i + 1;
-                    return `<div id="vendorBlock_${id}" style="background:#F0FDF4;border:1px solid #A7F3D0;border-radius:10px;padding:16px;margin-bottom:12px;">
-                        <div style="margin-bottom:10px;"><strong style="color:#047857;font-size:13px;">Vendor ${id} — locked from PO</strong></div>
+                    const orderedQty    = v.qty || 1;
+                    const receivedSoFar = _getReceivedQty(i);
+                    const remaining     = Math.max(0, orderedQty - receivedSoFar);
+                    const isComplete    = remaining <= 0;
+                    return `<div id="vendorBlock_${id}" style="background:${isComplete?'#F3F4F6':'#F0FDF4'};border:1px solid ${isComplete?'#D1D5DB':'#A7F3D0'};border-radius:10px;padding:16px;margin-bottom:12px;">
+                        <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+                            <strong style="color:${isComplete?'#6B7280':'#047857'};font-size:13px;">Vendor ${id} — locked from PO</strong>
+                            ${isComplete ? '<span style="background:#E5E7EB;color:#374151;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">✅ Fully Received</span>' : (roundsSoFar > 0 ? `<span style="background:#FFF8E1;color:#E65100;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">${receivedSoFar} of ${orderedQty} received so far</span>` : '')}
+                        </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Name</label><input type="text" id="vName_${id}" value="${(v.name||'').replace(/"/g,'&quot;')}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Phone</label><input type="text" id="vPhone_${id}" value="${(v.phone||'').replace(/"/g,'&quot;')}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
                             <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Goods / Services (per PO)</label><input type="text" id="vItems_${id}" value="${(v.items||'').replace(/"/g,'&quot;')}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Reference / Quote No.</label><input type="text" id="vInvoice_${id}" value="${(v.invoiceNo||'').replace(/"/g,'&quot;')}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Unit Price (₦) — locked from PO</label><input type="number" id="vAmount_${id}" value="${Number(v.amount||0)}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
-                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quantity Received <span style="color:var(--danger)">*</span></label><input type="number" id="vQty_${id}" min="0" step="1" value="${v.qty||1}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
-                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition <span style="color:var(--danger)">*</span></label><select id="vQuality_${id}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good"${v.quality==='Good'?' selected':''}>✅ Good</option><option value="Partial"${v.quality==='Partial'?' selected':''}>⚠️ Partial / Minor Issues</option><option value="Poor"${v.quality==='Poor'?' selected':''}>❌ Poor / Rejected</option></select></div>
+                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Ordered Qty</label><input type="number" value="${orderedQty}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
+                            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Received So Far</label><input type="number" value="${receivedSoFar}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
+                            <div>${isComplete
+                                ? `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Status</label><div style="padding:10px 12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;color:#047857;font-weight:700;font-size:13px;">✅ Complete — nothing more to receive</div>`
+                                : `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Receiving Now <span style="color:var(--danger)">*</span> <span style="font-weight:400;color:#6B7280;">(max ${remaining})</span></label><input type="number" id="vReceiving_${id}" min="0" max="${remaining}" step="1" value="${remaining}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._clampReceivingInput(this, ${remaining})">`}
+                            </div>
+                            ${isComplete ? '' : `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition of This Delivery <span style="color:var(--danger)">*</span></label><select id="vQuality_${id}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good"${v.quality==='Good'?' selected':''}>✅ Good</option><option value="Partial"${v.quality==='Partial'?' selected':''}>⚠️ Partial / Minor Issues</option><option value="Poor"${v.quality==='Poor'?' selected':''}>❌ Poor / Rejected</option></select></div>`}
                             <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_${id}" rows="2" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;background:#F3F4F6;">${(v.address||'')}</textarea></div>
-                            <div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;">
-                                <div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💳 Payment Account for this Vendor</div>
+                            ${isComplete ? '' : `<div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;">
+                                <div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💳 Payment Account for this Delivery</div>
                                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
                                     <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Name</label><input type="text" id="vAcctName_${id}" value="${(v.acctName||'').replace(/"/g,'&quot;')}" placeholder="As on the bank account" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                     <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Number</label><input type="text" id="vAcctNo_${id}" value="${(v.acctNo||'').replace(/"/g,'&quot;')}" maxlength="10" placeholder="10 digits" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                     <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Bank</label><select id="vBank_${id}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;"><option value="">Select bank</option>${['Access Bank','Fidelity Bank','First Bank','FCMB','GTBank','Jaiz Bank','Keystone Bank','Moniepoint MFB','Opay Services','Polaris Bank','Stanbic IBTC','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank'].map(b=>`<option value="${b}"${v.bank===b?' selected':''}>${b}</option>`).join('')}</select></div>
                                 </div>
-                            </div>
+                            </div>`}
                         </div>
                     </div>`;
                 }).join('');
@@ -3795,8 +3816,12 @@ if (role === 'procurement') {
                 content.innerHTML = `
                     <div class="header">
                         <h2>Confirm Receipt & Forward to Finance</h2>
-                        <p>PO ${cn.poNumber} — confirm what was actually received, then generate the GRR and send payment request to Finance</p>
+                        <p>PO ${cn.poNumber} — confirm what arrived in this delivery. If only part of the order has arrived, enter that amount and come back for the rest later.</p>
                     </div>
+                    ${roundsSoFar > 0 ? `<div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
+                        <div style="font-weight:700;color:#E65100;font-size:13px;">📦 ${roundsSoFar} delivery${roundsSoFar>1?'ies':''} received so far</div>
+                        <div style="font-size:13px;color:#BF360C;margin-top:4px;">Received: ₦${cumulativeReceivedValue.toLocaleString()} of ₦${poTotal.toLocaleString()} · Balance remaining: ₦${poBalance.toLocaleString()}</div>
+                    </div>` : ''}
 
                     ${cn.financeRejectionReason ? `
                     <div style="background:#FFEBEE;border:2px solid #FFCDD2;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
@@ -3849,8 +3874,8 @@ if (role === 'procurement') {
                                             <div style="font-size:12px;color:#6B7280;margin-top:2px;">Staff: ${cn.staffName} · PO: ${cn.poNumber}</div>
                                         </div>
                                         <div>
-                                            <div style="font-size:11px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:4px;">PO Agreed Total</div>
-                                            <div style="font-size:22px;font-weight:700;color:#047857;font-family:'Archivo',sans-serif;">₦${poTotal.toLocaleString()}</div>
+                                            <div style="font-size:11px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:4px;">PO Agreed Total${roundsSoFar > 0 ? ' · Balance Remaining' : ''}</div>
+                                            <div style="font-size:22px;font-weight:700;color:#047857;font-family:'Archivo',sans-serif;">₦${poTotal.toLocaleString()}${roundsSoFar > 0 ? ` <span style="font-size:14px;color:#E65100;">(₦${poBalance.toLocaleString()} left)</span>` : ''}</div>
                                         </div>
                                     </div>
                                     <p style="font-size:12px;color:#6B7280;margin-top:12px;font-style:italic;">Pricing was locked when the PO was generated. Only quantity received and condition can be updated below.</p>
@@ -3921,6 +3946,36 @@ if (role === 'procurement') {
                 area.innerHTML = `<p>✓ ${file.name}</p><span class="form-hint">${(file.size/1024).toFixed(1)} KB — ${label} ready</span>`;
             },
 
+            // Keeps a "Receiving Now" field from exceeding what's actually left to receive on that vendor line
+            _clampReceivingInput(el, max) {
+                const v = parseFloat(el.value) || 0;
+                if (v > max) el.value = max;
+                if (v < 0) el.value = 0;
+            },
+
+            // Reads the per-vendor "Receiving Now" quantities, quality, and payment
+            // account details for THIS delivery round (used by completeProcurementWithDocs).
+            // Distinct from _collectVendors(), which reads the PO-creation form.
+            _collectProcurementReceiving() {
+                const rows = [];
+                document.querySelectorAll('[id^="vendorBlock_"]').forEach(block => {
+                    const m = block.id.match(/vendorBlock_(\d+)/);
+                    if (!m) return;
+                    const id = m[1];
+                    const receivingEl = document.getElementById('vReceiving_' + id);
+                    const receivingNow = receivingEl ? (parseFloat(receivingEl.value) || 0) : 0;
+                    rows.push({
+                        id,
+                        receivingNow,
+                        quality:  document.getElementById('vQuality_'  + id)?.value || 'Good',
+                        acctName: (document.getElementById('vAcctName_' + id)?.value || '').trim(),
+                        acctNo:   (document.getElementById('vAcctNo_'   + id)?.value || '').trim(),
+                        bank:     (document.getElementById('vBank_'     + id)?.value || '').trim(),
+                    });
+                });
+                return rows;
+            },
+
             calcProcurementVariance(estimatedCost) {
                 const actual = parseFloat(document.getElementById('actualProcurementCost')?.value) || 0;
                 const variance = estimatedCost - actual;
@@ -3976,94 +4031,131 @@ if (role === 'procurement') {
                 // Procurement purchases always pay the vendor — never a staff reimbursement.
                 const payMode = 'vendors';
 
-                const vendors = this._collectVendors();
+                // The PO's locked vendor lines (name/phone/items/unit price/ordered qty) —
+                // never edited here, only referenced.
+                let vendors = [];
+                try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
                 if (vendors.length === 0) { alert('No vendors found on this PO.'); return; }
-                const missingQty = vendors.some(v => v.qty == null || v.qty < 0);
-                if (missingQty) { alert('Please confirm the quantity received for each vendor.'); return; }
 
-                // Actual cost is the PO's locked unit price × the quantity actually received —
-                // pricing itself was already fixed and approved at PO creation.
-                const actualCost = vendors.reduce((s,v) => s + (Number(v.amount||0) * (v.qty||0)), 0);
-                if (actualCost <= 0) { alert('Total received value must be greater than zero.'); return; }
+                // Everything received in previous rounds — used to compute what's left.
+                let receivedRounds = [];
+                try { if (cn.receivedJson) receivedRounds = JSON.parse(cn.receivedJson); } catch(e) {}
+                const getReceivedQty = (vi) => receivedRounds.reduce((s,r) =>
+                    s + (r.lines||[]).filter(l => l.vendorIndex === vi).reduce((ss,l) => ss + (Number(l.qtyReceived)||0), 0), 0);
 
-                // Payment schedule: one line per vendor, so Finance can settle each
-                // of them from a single authorisation rather than guessing whose
-                // account belongs on the payment.
-                let paymentSchedule = [];
-                {
-                    const bad = vendors.filter(v => (v.qty||0) > 0 && (!v.acctName || !v.acctNo || !v.bank));
-                    if (bad.length) {
-                        alert(`Payment account details are missing for:\n\n${bad.map(v => '  • ' + v.name).join('\n')}\n\nEnter each vendor's account name, number and bank, or switch to "Reimburse ${cn.staffName}".`);
-                        return;
-                    }
-                    const badNo = vendors.filter(v => (v.qty||0) > 0 && !/^[0-9]{10}$/.test(v.acctNo));
-                    if (badNo.length) {
-                        alert(`Account number must be exactly 10 digits for:\n\n${badNo.map(v => '  • ' + v.name).join('\n')}`);
-                        return;
-                    }
-                    paymentSchedule = vendors.filter(v => (v.qty||0) > 0).map(v => ({
-                        vendor: v.name, phone: v.phone || '', items: v.items || '',
-                        qty: v.qty || 0, unitPrice: Number(v.amount||0),
-                        amount: Number(v.amount||0) * (v.qty||0),
-                        accountName: v.acctName, accountNumber: v.acctNo, bankName: v.bank
-                    }));
+                // What's being received THIS round, per vendor line.
+                const receiving = this._collectProcurementReceiving();
+                const merged = vendors.map((v, i) => {
+                    const r = receiving[i] || {};
+                    const orderedQty    = v.qty || 1;
+                    const receivedSoFar = getReceivedQty(i);
+                    const remaining     = Math.max(0, orderedQty - receivedSoFar);
+                    const receivingNow  = Math.min(Math.max(0, Number(r.receivingNow || 0)), remaining);
+                    return { ...v, vendorIndex: i, orderedQty, receivedSoFar, remaining, receivingNow,
+                             quality: r.quality || 'Good', acctName: r.acctName, acctNo: r.acctNo, bank: r.bank };
+                });
+
+                const activeLines = merged.filter(v => v.receivingNow > 0);
+                if (activeLines.length === 0) { alert('Enter the quantity received in this delivery for at least one vendor.'); return; }
+
+                const badAcct = activeLines.filter(v => !v.acctName || !v.acctNo || !v.bank);
+                if (badAcct.length) {
+                    alert(`Payment account details are missing for:\n\n${badAcct.map(v => '  • ' + v.name).join('\n')}\n\nEnter each vendor's account name, number and bank.`);
+                    return;
+                }
+                const badNo = activeLines.filter(v => !/^[0-9]{10}$/.test(v.acctNo));
+                if (badNo.length) {
+                    alert(`Account number must be exactly 10 digits for:\n\n${badNo.map(v => '  • ' + v.name).join('\n')}`);
+                    return;
                 }
 
-                // Flatten for backward-compat single-vendor fields
-                const vendorName      = vendors.map(v => v.name).join(' | ');
-                const vendorPhone     = vendors.map(v => v.phone).join(' | ');
-                const vendorItems     = vendors.map(v => v.items).join(' | ');
-                const vendorInvoiceNo = vendors.map(v => v.invoiceNo).filter(Boolean).join(' | ') || '';
-                const vendorAddress   = vendors.map(v => v.address).filter(Boolean).join(' | ') || '';
+                // Value of THIS delivery only — not the whole PO.
+                const roundCost = activeLines.reduce((s,v) => s + (Number(v.amount||0) * v.receivingNow), 0);
+                if (roundCost <= 0) { alert('Total received value for this delivery must be greater than zero.'); return; }
+
+                const paymentSchedule = activeLines.map(v => ({
+                    vendor: v.name, phone: v.phone || '', items: v.items || '',
+                    qty: v.receivingNow, unitPrice: Number(v.amount||0),
+                    amount: Number(v.amount||0) * v.receivingNow,
+                    accountName: v.acctName, accountNumber: v.acctNo, bankName: v.bank
+                }));
+
+                const vendorNamesThisRound = activeLines.map(v => v.name).join(' | ');
+                const vendorItemsThisRound = activeLines.map(v => v.items).join(' | ');
                 const procReceiptFile = document.getElementById('procReceiptFile')?.files[0];
                 const procInvoice     = document.getElementById('procInvoiceFile')?.files[0];
-                if (!procInvoice) { alert('Please upload the vendor invoice/quotation.'); return; }
+                if (!procInvoice) { alert('Please upload the vendor invoice/quotation for this delivery.'); return; }
 
-                const variance = cn.estimatedCost - actualCost;
+                // Does this round finish every vendor line on the PO?
+                const isFullyReceived = merged.every(v => (v.receivedSoFar + v.receivingNow) >= (v.orderedQty - 0.001));
+                const roundNumber = receivedRounds.length + 1;
+                const cumulativeActualCost = Number(cn.actualProcurementCost || 0) + roundCost;
 
                 try {
                     submitBtn.disabled = true; submitBtn.textContent = 'Uploading documents...';
 
-                    let procInvoiceData = null;
-                    if (procInvoice) procInvoiceData = await this.uploadFile(procInvoice, 'procurement');
+                    let procInvoiceData = await this.uploadFile(procInvoice, 'procurement');
                     let procReceiptData = null;
                     if (procReceiptFile) procReceiptData = await this.uploadFile(procReceiptFile, 'procurement');
 
                     submitBtn.textContent = 'Processing...';
 
-                    // GRR only — PO was already generated at Stage 1
                     const projCode  = (cn.projectCode || 'GEN').replace(/[^A-Z0-9]/gi,'').toUpperCase();
                     const yearMonth = new Date().toISOString().slice(0,7).replace('-','');
                     const serial    = Date.now().toString().slice(-5);
-                    const grrNumber = cn.grrNumber || `GRR-${projCode}-${yearMonth}-${serial}`;
+                    const baseGrr   = cn.grrNumber || `GRR-${projCode}-${yearMonth}-${serial}`;
+                    // First delivery keeps the plain GRR number; subsequent partial
+                    // deliveries get their own -R2, -R3… so each tranche has its own
+                    // signable document, while the base number stays the PO's GRR.
+                    const grrNumber = roundNumber > 1 ? `${baseGrr}-R${roundNumber}` : baseGrr;
                     const now       = new Date().toISOString();
 
-                    const { error: cnError } = await supabaseClient.from('concept_notes').update({
-                        status: 'approved',
-                        approvedDate: now,
-                        approvedBy: this.currentUser,
-                        procurementComplete: now,
-                        retirementresponsibility: 'procurement',
-                        financeRejectionReason: null,
-                        financeRejectedAt: null,
-                        financeRejectedBy: null,
+                    const newRound = {
+                        round: roundNumber, date: now, receivedBy: this.currentUser, grrNumber,
+                        lines: activeLines.map(v => ({
+                            vendorIndex: v.vendorIndex, vendorName: v.name,
+                            qtyReceived: v.receivingNow, unitPrice: Number(v.amount||0),
+                            amount: Number(v.amount||0) * v.receivingNow, quality: v.quality
+                        })),
+                        invoiceUrl: procInvoiceData?.url || null, invoiceName: procInvoiceData?.fileName || null,
+                        receiptUrl: procReceiptData?.url || null, receiptName: procReceiptData?.fileName || null,
+                        notes
+                    };
+                    const updatedReceivedJson = JSON.stringify([...receivedRounds, newRound]);
+
+                    const cnUpdates = {
+                        receivedJson: updatedReceivedJson,
+                        actualProcurementCost: cumulativeActualCost,
+                        procurementVariance: cn.estimatedCost - cumulativeActualCost,
                         procurementNotes: notes,
-                        actualProcurementCost: actualCost,
-                        procurementVariance: variance,
                         accountName, accountNumber, bankName,
-                        grrNumber,
-                        grrGeneratedAt: now,
-                        grrVendorName: vendorName,
-                        grrVendorPhone: vendorPhone,
-                        vendorAddress: vendorAddress || null,
-                        vendorItemsSupplied: vendorItems,
-                        vendorInvoiceNo: vendorInvoiceNo || null,
+                        grrNumber: cn.grrNumber || baseGrr,
+                        grrGeneratedAt: cn.grrGeneratedAt || now,
+                        grrVendorName: vendors.map(v=>v.name).join(' | '),
+                        grrVendorPhone: vendors.map(v=>v.phone).join(' | '),
+                        vendorAddress: vendors.map(v=>v.address).filter(Boolean).join(' | ') || null,
+                        vendorItemsSupplied: vendors.map(v=>v.items).join(' | '),
+                        vendorInvoiceNo: vendors.map(v=>v.invoiceNo).filter(Boolean).join(' | ') || null,
                         procurementInvoiceUrl:  procInvoiceData?.url  || cn.procurementInvoiceUrl  || null,
                         procurementInvoiceName: procInvoiceData?.fileName || cn.procurementInvoiceName || null,
                         procurementReceiptUrl:  procReceiptData?.url  || cn.procurementReceiptUrl  || null,
                         procurementReceiptName: procReceiptData?.fileName || cn.procurementReceiptName || null,
-                        vendorsJson: JSON.stringify(vendors)
-                    }).eq('refNumber', refNumber);
+                        financeRejectionReason: null, financeRejectedAt: null, financeRejectedBy: null
+                    };
+                    if (isFullyReceived) {
+                        // Last tranche — close the CN out exactly as the old single-shot flow did.
+                        Object.assign(cnUpdates, {
+                            status: 'approved', approvedDate: now, approvedBy: this.currentUser,
+                            procurementComplete: now, currentApprover: null,
+                            retirementresponsibility: 'procurement'
+                        });
+                    } else {
+                        // Balance remains — keep the CN with Procurement so it reappears
+                        // in their queue instead of disappearing after a partial delivery.
+                        Object.assign(cnUpdates, { status: 'pending', currentApprover: 'procurement' });
+                    }
+
+                    const { error: cnError } = await supabaseClient.from('concept_notes').update(cnUpdates).eq('refNumber', refNumber);
                     if (cnError) throw cnError;
 
                     const payRecord = {
@@ -4072,17 +4164,17 @@ if (role === 'procurement') {
                         conceptNoteRef: cn.refNumber,
                         projectCode: cn.projectCode,
                         staffName: cn.staffName,
-                        amount: actualCost,
+                        amount: roundCost,
                         paymentMethod: 'bank_transfer',
                         payMode,
-                        paymentScheduleJson: paymentSchedule.length ? JSON.stringify(paymentSchedule) : null,
-                        justification: `Receipt confirmed by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | Vendor: ${vendorName} | Items: ${vendorItems} | Estimated: ₦${cn.estimatedCost.toLocaleString()} | Received: ₦${actualCost.toLocaleString()}. ${notes}`,
-                        accountName:   payMode === 'vendors' ? `Payment schedule — ${paymentSchedule.length} vendor(s)` : accountName,
-                        accountNumber: payMode === 'vendors' ? '' : accountNumber,
-                        bankName:      payMode === 'vendors' ? 'See payment schedule' : bankName,
+                        paymentScheduleJson: JSON.stringify(paymentSchedule),
+                        justification: `Tranche ${roundNumber} confirmed by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | Vendor(s): ${vendorNamesThisRound} | Items: ${vendorItemsThisRound} | This delivery: ₦${roundCost.toLocaleString()} | Cumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${cn.estimatedCost.toLocaleString()}. ${notes}`,
+                        accountName: `Payment schedule — ${paymentSchedule.length} vendor(s)`,
+                        accountNumber: '',
+                        bankName: 'See payment schedule',
                         status: 'pending',
                         requestDate: now,
-                        procurementComplete: now,
+                        procurementComplete: isFullyReceived ? now : null,
                         retirementresponsibility: 'procurement'
                     };
                     const { data: payData, error: payError } = await supabaseClient
@@ -4092,24 +4184,13 @@ if (role === 'procurement') {
                     const newPayRef = payData[0].refNumber;
                     this.data.payments.unshift(payData[0]);
                     const cnIdx = this.data.conceptNotes.findIndex(c => c.refNumber === refNumber);
-                    if (cnIdx !== -1) Object.assign(this.data.conceptNotes[cnIdx], {
-                        status: 'approved', approvedBy: this.currentUser,
-                        procurementComplete: now,
-                        retirementresponsibility: 'procurement',
-                        procurementNotes: notes,
-                        actualProcurementCost: actualCost,
-                        procurementVariance: variance,
-                        grrNumber,
-                        grrVendorName: vendorName,
-                        grrVendorPhone: vendorPhone,
-                        vendorsJson: JSON.stringify(vendors)
-                    });
+                    if (cnIdx !== -1) Object.assign(this.data.conceptNotes[cnIdx], cnUpdates);
                     this.clearCache();
 
-                    await this._logAudit('concept_notes', refNumber, 'procurement_complete',
-                        `Receipt confirmed by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | Vendor: ${vendorName} | Received value: ₦${actualCost.toLocaleString()}`);
+                    await this._logAudit('concept_notes', refNumber, isFullyReceived ? 'procurement_complete' : 'procurement_partial_receipt',
+                        `Tranche ${roundNumber} received by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | This delivery: ₦${roundCost.toLocaleString()} | Cumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${cn.estimatedCost.toLocaleString()}${isFullyReceived ? ' — PO fully received.' : ' — balance remains open, CN returned to Procurement queue.'}`);
 
-                    alert(`Receipt confirmed!\n\nGRR Number: ${grrNumber}\nVendor: ${vendorName}\n\nGRR signing chain initiated:\nProcurement → Staff → Vendor → Finance\n\nYou will now be taken to sign the GRR (Procurement step).`);
+                    alert(`${isFullyReceived ? 'Final delivery' : 'Delivery'} confirmed!\n\nGRR Number: ${grrNumber}\nThis tranche: ₦${roundCost.toLocaleString()}\nCumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${cn.estimatedCost.toLocaleString()}\n\n${isFullyReceived ? 'This PO is now fully received and closed.' : 'This concept note stays open — it will reappear in your Approvals queue for the next delivery.'}\n\nGRR signing chain initiated:\nProcurement → Staff → Vendor → Finance\n\nYou will now be taken to sign the GRR (Procurement step).`);
 
                     // Procurement signs GRR first (received by procurement)
                     await this.showSigningView(grrNumber, 'grr', newPayRef, 'procurement_received', refNumber);
