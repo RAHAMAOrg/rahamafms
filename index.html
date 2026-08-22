@@ -615,7 +615,23 @@
                     try {
                         const { data: dbRoles } = await supabaseClient.from('user_roles').select('*');
                         if (dbRoles && dbRoles.length > 0) {
-                            dbRoles.forEach(r => { this.data.roles[r.name] = r.role; });
+                            dbRoles.forEach(r => {
+                                this.data.roles[r.name] = r.role;
+                                // finance_stage and is_security_officer were being fetched
+                                // here but never applied — the app ran entirely on the
+                                // hardcoded financeStages/securityOfficers below regardless
+                                // of what these columns actually held in the database.
+                                if (r.finance_stage) {
+                                    this.data.financeStages[r.name] = r.finance_stage;
+                                } else {
+                                    delete this.data.financeStages[r.name];
+                                }
+                                if (r.is_security_officer) {
+                                    if (!this.data.securityOfficers.includes(r.name)) this.data.securityOfficers.push(r.name);
+                                } else {
+                                    this.data.securityOfficers = this.data.securityOfficers.filter(n => n !== r.name);
+                                }
+                            });
                         }
                     } catch(e) { /* use hardcoded roles */ }
 
@@ -7291,6 +7307,17 @@ ${vendors.length > 1 ? `
                 '<div class="header"><h2>👁 System Overview</h2>' +
                 '<p>Full visibility across all roles — as of ' + new Date().toLocaleString('en-NG') + '</p></div>' +
 
+                // Quick-jump nav — added so long lists don't force scrolling past
+                // hundreds of rows to reach Project Management or any other section.
+                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:24px;display:flex;gap:18px;flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:5;">' +
+                '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);">Jump to</span>' +
+                '<a href="#soStaffActivity" style="font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;">Staff Activity</a>' +
+                '<a href="#soConceptNotes" style="font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;">Concept Notes</a>' +
+                '<a href="#soPayments" style="font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;">Payments</a>' +
+                '<a href="#soRetirements" style="font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;">Retirements</a>' +
+                '<a href="#soProjects" style="font-size:13px;font-weight:700;color:#fff;background:var(--primary);padding:5px 12px;border-radius:6px;text-decoration:none;margin-left:auto;">🗂 Project Management</a>' +
+                '</div>' +
+
                 // Stats
                 '<div class="stats-grid" style="margin-bottom:32px;">' +
                 '<div class="stat-card"><div class="stat-label">Total Concept Notes</div><div class="stat-value">' + cns.length + '</div><div class="stat-sub">' + pendingCNs + ' awaiting action · ' + inProc + ' in procurement</div></div>' +
@@ -7300,7 +7327,7 @@ ${vendors.length > 1 ? `
                 '</div>' +
 
                 // Staff activity table
-                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
+                '<div id="soStaffActivity" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
                 '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:16px;">👥 Staff Activity Breakdown</h3>' +
                 '<div class="table-container"><table><thead><tr><th>Staff</th><th>Concept Notes</th><th>Pending</th><th>Total Received</th><th>Retirements</th></tr></thead><tbody>' +
                 Object.entries(staffActivity).sort((a,b) => b[1].cns - a[1].cns).map(function(e) {
@@ -7314,10 +7341,11 @@ ${vendors.length > 1 ? `
                 '</tbody></table></div></div>' +
 
                 // All concept notes
-                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
+                '<div id="soConceptNotes" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
                 '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:4px;">📄 All Concept Notes (' + cns.length + ')</h3>' +
-                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Every submission — click View for full details and signing actions</p>' +
-                '<div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Estimated</th><th>Actual</th><th>Status</th><th>Current Step</th><th>Submitted</th><th></th></tr></thead><tbody>' +
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Every submission — click View for full details and signing actions</p>' +
+                '<input type="text" placeholder="Filter by ref, staff, activity, project or status…" oninput="app._filterSOTable(this,\'soConceptNotesTbl\')" style="width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px;box-sizing:border-box;">' +
+                '<div class="table-container"><table id="soConceptNotesTbl"><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Estimated</th><th>Actual</th><th>Status</th><th>Current Step</th><th>Submitted</th><th></th></tr></thead><tbody>' +
                 cns.map(function(cn) {
                     var step = cn.currentApprover === "procurement" ? "Procurement" :
                         cn.currentApprover === "finance" ? "Finance" :
@@ -7325,7 +7353,8 @@ ${vendors.length > 1 ? `
                         cn.currentApprover === "ed" ? "ED" :
                         cn.status === "approved" ? (cn.procurementComplete ? "Payment/Retirement" : "Approved") :
                         cn.status === "rejected" ? "Rejected" : "—";
-                    return '<tr>' +
+                    var searchBlob = [cn.refNumber, cn.staffName, cn.activityTitle, cn.projectCode, cn.status].filter(Boolean).join(' ').toLowerCase();
+                    return '<tr data-search="' + escHtml(searchBlob) + '">' +
                         '<td style="font-weight:600;font-size:12px;">' + cn.refNumber + '</td>' +
                         '<td>' + cn.staffName + '</td>' +
                         '<td style="max-width:150px;font-size:12px;">' + (cn.activityTitle||"").substring(0,45) + (cn.activityTitle && cn.activityTitle.length > 45 ? "…" : "") + '</td>' +
@@ -7341,12 +7370,14 @@ ${vendors.length > 1 ? `
                 '</tbody></table></div></div>' +
 
                 // All payments
-                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
+                '<div id="soPayments" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:28px;">' +
                 '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:4px;">💳 All Payments (' + pays.length + ')</h3>' +
-                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Complete payment ledger across all staff</p>' +
-                '<div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Bank</th><th>Status</th><th>Requested</th><th>Processed</th></tr></thead><tbody>' +
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Complete payment ledger across all staff</p>' +
+                '<input type="text" placeholder="Filter by ref, staff, project or status…" oninput="app._filterSOTable(this,\'soPaymentsTbl\')" style="width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px;box-sizing:border-box;">' +
+                '<div class="table-container"><table id="soPaymentsTbl"><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Bank</th><th>Status</th><th>Requested</th><th>Processed</th></tr></thead><tbody>' +
                 pays.map(function(p) {
-                    return '<tr>' +
+                    var searchBlob = [p.refNumber, p.staffName, p.projectCode, p.status, p.bankName].filter(Boolean).join(' ').toLowerCase();
+                    return '<tr data-search="' + escHtml(searchBlob) + '">' +
                         '<td style="font-weight:600;font-size:12px;">' + p.refNumber + '</td>' +
                         '<td>' + p.staffName + '</td>' +
                         '<td style="font-weight:600;color:#059669;">' + money(p.amount) + '</td>' +
@@ -7360,12 +7391,14 @@ ${vendors.length > 1 ? `
                 '</tbody></table></div></div>' +
 
                 // All retirements
-                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;">' +
+                '<div id="soRetirements" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;">' +
                 '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin-bottom:4px;">🧾 All Retirements (' + rets.length + ')</h3>' +
-                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Full retirement history</p>' +
-                '<div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Status</th><th>Submitted</th><th>Reviewed</th></tr></thead><tbody>' +
+                '<p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">Full retirement history</p>' +
+                '<input type="text" placeholder="Filter by ref, staff or status…" oninput="app._filterSOTable(this,\'soRetirementsTbl\')" style="width:100%;padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px;box-sizing:border-box;">' +
+                '<div class="table-container"><table id="soRetirementsTbl"><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Status</th><th>Submitted</th><th>Reviewed</th></tr></thead><tbody>' +
                 rets.map(function(r) {
-                    return '<tr>' +
+                    var searchBlob = [r.refNumber, r.staffName, r.paymentRef, r.status].filter(Boolean).join(' ').toLowerCase();
+                    return '<tr data-search="' + escHtml(searchBlob) + '">' +
                         '<td style="font-weight:600;font-size:12px;">' + r.refNumber + '</td>' +
                         '<td>' + r.staffName + '</td>' +
                         '<td style="font-size:12px;">' + r.paymentRef + '</td>' +
@@ -7379,7 +7412,7 @@ ${vendors.length > 1 ? `
                 '</tbody></table></div></div>' +
 
                 // Project Management
-                '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:28px;">' +
+                '<div id="soProjects" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:28px;">' +
                 '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
                 '<h3 style="font-family:Archivo,sans-serif;font-size:16px;margin:0;">🗂 Project Management</h3>' +
                 '<button onclick="app._showAddProjectForm()" class="btn btn-primary" style="font-size:12px;padding:8px 16px;">+ Add Project</button>' +
@@ -7431,6 +7464,17 @@ ${vendors.length > 1 ? `
             _editProject(code) {
                 const p = this.data.projects.find(pr => pr.code === code);
                 if (p) this._showAddProjectForm(p);
+            },
+
+            // Shared row-filter for the long tables on System Overview — matches
+            // the same data-search + hide-row pattern already used on the Audit
+            // Trail screen, so behavior is consistent across the app.
+            _filterSOTable(inputEl, tableId) {
+                const q = (inputEl.value || '').toLowerCase();
+                document.querySelectorAll('#' + tableId + ' tbody tr').forEach(row => {
+                    const s = row.dataset.search || '';
+                    row.style.display = (!q || s.includes(q)) ? '' : 'none';
+                });
             },
 
             async _saveProject(existingCode) {
