@@ -276,7 +276,28 @@
         const pmsAuthClient = (typeof supabase !== 'undefined')
             ? supabase.createClient(PMS_AUTH_URL, PMS_ANON_KEY)
             : null;
-        
+
+        // Shared HTML-escaping helper. Free-text fields throughout this app
+        // (concept note titles/descriptions, vendor names, rejection reasons,
+        // travel/security notes, justifications, etc.) are typed by whichever
+        // staff member submitted them, then rendered via innerHTML for other
+        // people — approvers, finance, procurement — to read. Without escaping,
+        // anything HTML-like typed into one of those fields would execute in
+        // the browser of whoever views it next. This wraps a value so it always
+        // displays as plain text, never as markup.
+        // Named escHtml (not esc) — a few functions already declare their own
+        // local `esc` for narrower, attribute-only escaping; this avoids
+        // silently shadowing those.
+        const escHtml = (v) => {
+            if (v === null || v === undefined) return '';
+            return String(v)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
         const app = {
             currentUser: '',
             cache: { myConceptNotes: null, myPayments: null, myRetirements: null },
@@ -1113,7 +1134,7 @@
                         ${[['Staff creates Concept Note/ToR','Submitted to Budget Owner for review'],['Budget Owner Review','Approves if ≤₦1M, forwards to ED if >₦1M, routes to Procurement if items needed'],['Procurement (if needed)','Procures items, attaches GRR + evidence, pushes to Finance'],['Finance processes payment','Reviews documents, makes payment, shares confirmation'],['Staff submits retirement','Within 5 days of payment receipt']].map((s,i) => `<div class="workflow-step"><div class="workflow-number">${i+1}</div><div class="workflow-content"><strong>${s[0]}</strong><span>${s[1]}</span></div></div>`).join('')}
                     </div>
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">My Concept Notes</h3>
-                    ${myConceptNotes.length === 0 ? `<div class="empty-state" style="padding: 32px;"><p>No concept notes yet. Create one to get started!</p></div>` : `<div style="margin-bottom: 32px;">${myConceptNotes.slice(0, 5).map(cn => { const progress = this.getConceptNoteProgress(cn); return `<div class="tracking-card"><div class="tracking-header"><div><span class="tracking-ref">${cn.refNumber}</span><span style="color: var(--text-muted); font-size: 13px; margin-left: 12px;">${cn.activityTitle}</span></div><span class="tracking-amount">₦${cn.estimatedCost.toLocaleString()}</span></div><div style="display: flex; justify-content: space-between; align-items: center;"><div style="flex: 1; margin-right: 16px;"><div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;"><div style="height: 100%; background: ${cn.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'}; width: ${progress.percentComplete}%; transition: width 0.3s;"></div></div><div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${progress.currentStep}</div></div><span class="status-badge status-${cn.status}" style="margin-right: 12px;">${cn.status}</span><button onclick="app.showConceptNoteTracking('${cn.refNumber}')" style="padding: 6px 14px; background: none; border: 1px solid var(--primary); border-radius: 6px; color: var(--primary); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">📄 View Details</button></div></div>`; }).join('')}</div>`}
+                    ${myConceptNotes.length === 0 ? `<div class="empty-state" style="padding: 32px;"><p>No concept notes yet. Create one to get started!</p></div>` : `<div style="margin-bottom: 32px;">${myConceptNotes.slice(0, 5).map(cn => { const progress = this.getConceptNoteProgress(cn); return `<div class="tracking-card"><div class="tracking-header"><div><span class="tracking-ref">${cn.refNumber}</span><span style="color: var(--text-muted); font-size: 13px; margin-left: 12px;">${escHtml(cn.activityTitle)}</span></div><span class="tracking-amount">₦${cn.estimatedCost.toLocaleString()}</span></div><div style="display: flex; justify-content: space-between; align-items: center;"><div style="flex: 1; margin-right: 16px;"><div style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;"><div style="height: 100%; background: ${cn.status === 'rejected' ? 'var(--danger)' : 'var(--primary)'}; width: ${progress.percentComplete}%; transition: width 0.3s;"></div></div><div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${progress.currentStep}</div></div><span class="status-badge status-${cn.status}" style="margin-right: 12px;">${cn.status}</span><button onclick="app.showConceptNoteTracking('${cn.refNumber}')" style="padding: 6px 14px; background: none; border: 1px solid var(--primary); border-radius: 6px; color: var(--primary); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">📄 View Details</button></div></div>`; }).join('')}</div>`}
                     <h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Recent Activity</h3>
                     <div class="table-container"><table><thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Amount</th><th>Status</th></tr></thead><tbody>${this.getRecentActivity().map(item => `<tr><td>${new Date(item.date).toLocaleDateString()}</td><td>${item.type}</td><td>${item.ref}</td><td>${item.amount ? '₦' + item.amount.toLocaleString() : '-'}</td><td><span class="status-badge status-${item.status}">${item.status}</span></td></tr>`).join('') || '<tr><td colspan="5" style="text-align: center; padding: 32px; color: #999;">No recent activity</td></tr>'}</tbody></table></div>`;
 
@@ -1146,7 +1167,7 @@
                                 `<div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
                                     <div>
                                         <div style="font-weight:700;color:#E65100;font-size:13px;">✍️ Action Required: Sign Purchase Order</div>
-                                        <div style="font-size:12px;color:#BF360C;margin-top:3px;">${c.activityTitle} — PO: ${c.poNumber}</div>
+                                        <div style="font-size:12px;color:#BF360C;margin-top:3px;">${escHtml(c.activityTitle)} — PO: ${c.poNumber}</div>
                                     </div>
                                     <button onclick="app.viewConceptNoteDetails('${c.refNumber}')" style="padding:8px 16px;background:#E65100;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Open &amp; Sign PO →</button>
                                 </div>`).join('') : '') +
@@ -1154,7 +1175,7 @@
                                 `<div style="background:#E8F5E9;border:2px solid #A7F3D0;border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
                                     <div>
                                         <div style="font-weight:700;color:#047857;font-size:13px;">✅ Action Required: Verify GRR</div>
-                                        <div style="font-size:12px;color:#065F46;margin-top:3px;">${c.activityTitle} — GRR: ${c.grrNumber}</div>
+                                        <div style="font-size:12px;color:#065F46;margin-top:3px;">${escHtml(c.activityTitle)} — GRR: ${c.grrNumber}</div>
                                     </div>
                                     <button onclick="app.viewConceptNoteDetails('${c.refNumber}')" style="padding:8px 16px;background:#047857;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Open &amp; Verify GRR →</button>
                                 </div>`).join('') : '');
@@ -1243,7 +1264,7 @@
                                 return `<button onclick="app.showConceptNoteTracking('${cn.refNumber}')"
                                     style="width:100%;text-align:left;background:${bg};border:1px solid ${bd};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">
                                     <div style="font-size:11px;font-weight:700;color:${fg};">${lbl}</div>
-                                    <div style="font-size:13px;font-weight:600;margin-top:3px;">${t.destination||cn.activityTitle}</div>
+                                    <div style="font-size:13px;font-weight:600;margin-top:3px;">${escHtml(t.destination||cn.activityTitle)}</div>
                                     <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${t.departDate||'—'} → ${t.returnDate||'—'}</div>
                                     ${cleared ? `<div style="font-size:11px;color:${fg};margin-top:6px;font-weight:600;">Tap to read the security advice →</div>` : ''}
                                 </button>`;
@@ -1302,7 +1323,7 @@
                 if (cn.forwardedToED || (cn.status === 'pending' && cn.currentApprover === 'ed')) { activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate }); activeSteps.push({ ...steps[2], status: cn.currentApprover === 'ed' ? 'active' : 'completed' }); if (cn.currentApprover === 'ed') { progress.currentStep = 'Executive Director Review'; progress.message = 'Awaiting ED approval'; } }
                 if (cn.sentToProcurement || (cn.status === 'pending' && cn.currentApprover === 'procurement')) { if (!cn.forwardedToED) activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate }); activeSteps.push({ ...steps[3], status: cn.currentApprover === 'procurement' ? 'active' : 'completed' }); if (cn.currentApprover === 'procurement') { progress.currentStep = 'Procurement Processing'; progress.message = 'Items being procured'; } }
                 if (cn.status === 'approved') { if (!cn.sentToProcurement && !cn.forwardedToED) activeSteps.push({ ...steps[1], status: 'completed', date: cn.submittedDate }); activeSteps.push({ ...steps[4], status: 'completed' }); progress.currentStep = 'Approved'; progress.message = '✓ Concept note approved! Payment can be requested.'; }
-                if (cn.status === 'rejected') { const lastStep = activeSteps[activeSteps.length - 1]; lastStep.status = 'rejected'; progress.currentStep = 'Rejected'; progress.message = `❌ Rejected: ${cn.rejectionReason || 'See comments'}`; }
+                if (cn.status === 'rejected') { const lastStep = activeSteps[activeSteps.length - 1]; lastStep.status = 'rejected'; progress.currentStep = 'Rejected'; progress.message = `❌ Rejected: ${escHtml(cn.rejectionReason || 'See comments')}`; }
                 progress.steps = activeSteps;
                 progress.percentComplete = ((activeSteps.filter(s => s.status === 'completed').length) / activeSteps.length) * 100;
                 return progress;
@@ -1325,14 +1346,14 @@
                     <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${hd};margin-bottom:14px;display:block;">
                         🚗 Travel &amp; Security Clearance — ${cleared ? '✅ CLEARED' : denied ? '❌ DENIED' : '⏳ AWAITING CLEARANCE'}</label>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;">
-                        ${fld('Destination', t.destination)}
-                        ${fld('Type of Travel', t.travelType)}
+                        ${escHtml(fld('Destination', t.destination))}
+                        ${escHtml(fld('Type of Travel', t.travelType))}
                         ${fld('Travellers', t.travellers)}
                         ${fld('Departure', t.departDate)}
                         ${fld('Return', t.returnDate)}
-                        ${fld('Accommodation', t.accommodation)}
+                        ${escHtml(fld('Accommodation', t.accommodation))}
                     </div>
-                    <div style="margin-top:14px;">${fld('Route Proposed', t.route)}</div>
+                    <div style="margin-top:14px;">${escHtml(fld('Route Proposed', t.route))}</div>
                     ${cleared ? `
                     <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:14px;">
@@ -1343,16 +1364,16 @@
                         </div>
                         <div style="background:#fff;border:1px solid ${bd};border-radius:8px;padding:14px 16px;margin-bottom:12px;">
                             <div style="font-size:11px;font-weight:700;color:${hd};text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">✅ Approved Route — must be followed</div>
-                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${cn.securityApprovedRoute||'—'}</div>
+                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${escHtml(cn.securityApprovedRoute||'—')}</div>
                         </div>
                         <div style="background:#fff;border:1px solid ${bd};border-radius:8px;padding:14px 16px;">
                             <div style="font-size:11px;font-weight:700;color:${hd};text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">🛡️ Security Advice</div>
-                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.7;">${cn.securityAdvice||'—'}</div>
+                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.7;">${escHtml(cn.securityAdvice||'—')}</div>
                         </div>
                     </div>` : denied ? `
                     <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
                         <div style="font-size:11px;font-weight:700;color:#B71C1C;text-transform:uppercase;letter-spacing:.4px;">Reason for Denial</div>
-                        <div style="font-size:13px;color:#C62828;margin-top:4px;white-space:pre-wrap;">${cn.securityDenialReason||'—'}</div>
+                        <div style="font-size:13px;color:#C62828;margin-top:4px;white-space:pre-wrap;">${escHtml(cn.securityDenialReason||'—')}</div>
                         <div style="font-size:11px;color:#777;margin-top:8px;">By ${cn.securityClearedBy||'—'}</div>
                     </div>` : `
                     <p style="font-size:12px;color:#E65100;font-style:italic;margin-top:14px;">Security clearance has not been issued yet. Travel must not begin until it is.</p>`}
@@ -1368,7 +1389,7 @@
                 content.innerHTML = `
                     <div class="header"><h2>Track Concept Note</h2><p>Follow your concept note through the approval process</p></div>
                     <div class="progress-tracker">
-                        <div class="tracking-header"><div><h3 style="font-family: 'Archivo', sans-serif; margin-bottom: 8px;">${cn.activityTitle}</h3><p style="color: var(--text-muted); font-size: 14px;">${cn.refNumber} • ₦${cn.estimatedCost.toLocaleString()}</p></div><span class="status-badge status-${cn.status}">${cn.status}</span></div>
+                        <div class="tracking-header"><div><h3 style="font-family: 'Archivo', sans-serif; margin-bottom: 8px;">${escHtml(cn.activityTitle)}</h3><p style="color: var(--text-muted); font-size: 14px;">${cn.refNumber} • ₦${cn.estimatedCost.toLocaleString()}</p></div><span class="status-badge status-${cn.status}">${cn.status}</span></div>
                         <div class="progress-timeline"><div class="progress-line" style="width: ${progress.percentComplete}%"></div>${progress.steps.map((step, index) => `<div class="progress-step ${step.status || ''}"><div class="progress-icon">${step.status === 'completed' ? '✓' : step.status === 'rejected' ? '✗' : step.icon || (index + 1)}</div><div class="progress-label">${step.label}${step.date ? `<div class="progress-date">${new Date(step.date).toLocaleDateString()}</div>` : ''}</div></div>`).join('')}</div>
                         <div class="progress-note ${cn.status === 'rejected' ? 'danger' : cn.status === 'approved' ? '' : 'warning'}"><strong>${progress.currentStep}</strong><br><span style="font-size: 13px;">${progress.message}</span></div>
                         ${cn.status === 'approved' ? `<div style="margin-top: 16px;"><button class="btn btn-primary" onclick="app.showView('payment')">Request Payment →</button></div>` : ''}
@@ -1379,21 +1400,21 @@
                         ${this._travelPanel(cn)}
                         ${cn.quoteExceptionReason ? `<div class="form-group full-width" style="background:${cn.quoteExceptionStatus==='approved'?'#F1F8F4':cn.quoteExceptionStatus==='declined'?'#FFEBEE':'#FFF8E1'};border:2px solid ${cn.quoteExceptionStatus==='approved'?'#A5D6A7':cn.quoteExceptionStatus==='declined'?'#FFCDD2':'#FFD54F'};border-radius:10px;padding:18px;">
                             <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${cn.quoteExceptionStatus==='approved'?'#1B5E20':cn.quoteExceptionStatus==='declined'?'#B71C1C':'#E65100'};margin-bottom:10px;display:block;">⚖️ 3-Quote Exception — ${(cn.quoteExceptionStatus||'pending').toUpperCase()}</label>
-                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${cn.quoteExceptionReason}</div>
+                            <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${escHtml(cn.quoteExceptionReason)}</div>
                             <div style="font-size:11px;color:#6B7280;margin-top:8px;">Requested by ${cn.quoteExceptionRequestedBy||'—'}${cn.quoteExceptionApprovedBy?` · decided by ${cn.quoteExceptionApprovedBy}`:''}</div>
-                            ${cn.quoteExceptionDeclineReason?`<div style="font-size:12px;color:#C62828;margin-top:8px;">Declined: ${cn.quoteExceptionDeclineReason}</div>`:''}
+                            ${cn.quoteExceptionDeclineReason?`<div style="font-size:12px;color:#C62828;margin-top:8px;">Declined: ${escHtml(cn.quoteExceptionDeclineReason)}</div>`:''}
                             ${(this.getUserRole()==='budgetOwner' && cn.quoteExceptionStatus==='pending') ? `<div style="display:flex;gap:10px;margin-top:14px;">
                                 <button type="button" class="btn btn-primary" onclick="app.resolveQuoteException('${cn.refNumber}', true)">✓ Approve Exception</button>
                                 <button type="button" class="btn btn-secondary" style="border-color:var(--danger);color:var(--danger);" onclick="app.resolveQuoteException('${cn.refNumber}', false)">✗ Decline</button>
                             </div>` : ''}
                         </div>` : ''}
-                        <div class="form-group full-width"><label>Objective</label><textarea rows="3" readonly>${cn.objective}</textarea></div>
-                        <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${cn.description}</textarea></div>
+                        <div class="form-group full-width"><label>Objective</label><textarea rows="3" readonly>${escHtml(cn.objective)}</textarea></div>
+                        <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${escHtml(cn.description)}</textarea></div>
                         ${cn.budgetBreakdown ? '<div class="form-group full-width"><label>Budget Breakdown</label><div style="border:2px solid #A7F3D0;border-radius:10px;overflow:hidden;"><div style="background:#285B3C;color:white;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">📋 Budget Breakdown</div>' + (function(bb){var lines=bb.split('\n').filter(function(l){return l.trim();});var hasStructured=lines.some(function(l){return /^\d+\.\s*.+?:\s*₦[\d,]+\s*×\s*[\d.]+\s*=\s*₦[\d,]+/.test(l);});if(hasStructured){var rows=lines.map(function(line,i){var m=line.match(/^\d+\.\s*(.+?):\s*₦([\d,]+)\s*×\s*([\d.]+)\s*=\s*₦([\d,]+)/);if(!m)return '';return '<tr><td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">'+(i+1)+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;">'+m[1]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">₦'+m[2]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">'+m[3]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;">₦'+m[4]+'</td></tr>';}).join('');var total=0;lines.forEach(function(l){var m=l.match(/=\s*₦([\d,]+)/);if(m)total+=parseInt(m[1].replace(/,/g,''));});return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#D1FAE5;"><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">S/N</th><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Unit (₦)</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Qty</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Total (₦)</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:#D1FAE5;"><td colspan="4" style="padding:10px 12px;border:1px solid #A7F3D0;font-weight:700;color:#065F46;">Total Estimated Cost</td><td style="padding:10px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:700;color:#047857;font-size:15px;">₦'+total.toLocaleString()+'</td></tr></tfoot></table>';}return '<div style="padding:16px 20px;background:#F0FDF4;font-size:13px;color:#374151;white-space:pre-wrap;line-height:1.7;">'+bb+'</div>';})(cn.budgetBreakdown) + '</div></div>' : ''}
                         ${cn.budgetDocUrl ? `<div class="form-group full-width"><label>Budget Document</label><div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#E3F2FD;border:1px solid #90CAF9;border-radius:8px;"><span style="font-size:13px;font-weight:600;color:#1565C0;">📎 ${cn.budgetDocName||'Budget Document'}</span><button type="button" class="btn btn-secondary" onclick="app.downloadFile('${cn.budgetDocUrl}','${cn.budgetDocName||'budget'}')" style="font-size:12px;padding:6px 14px;border-color:#1565C0;color:#1565C0;">⬇ Download</button></div></div>` : ''}
-                        ${cn.procurementNotes ? `<div class="form-group full-width"><label>Procurement Notes</label><textarea rows="2" readonly>${cn.procurementNotes}</textarea></div>` : ''}
-                        ${cn.budgetOwnerNote ? `<div class="form-group full-width"><label style="color: var(--success);">Budget Owner Note</label><textarea rows="2" readonly style="border-color: var(--success);">${cn.budgetOwnerNote}</textarea></div>` : ''}
-                        ${cn.rejectionReason ? `<div class="form-group full-width"><label style="color: var(--danger);">Rejection Reason</label><textarea rows="2" readonly style="border-color: var(--danger);">${cn.rejectionReason}</textarea></div>` : ''}
+                        ${cn.procurementNotes ? `<div class="form-group full-width"><label>Procurement Notes</label><textarea rows="2" readonly>${escHtml(cn.procurementNotes)}</textarea></div>` : ''}
+                        ${cn.budgetOwnerNote ? `<div class="form-group full-width"><label style="color: var(--success);">Budget Owner Note</label><textarea rows="2" readonly style="border-color: var(--success);">${escHtml(cn.budgetOwnerNote)}</textarea></div>` : ''}
+                        ${cn.rejectionReason ? `<div class="form-group full-width"><label style="color: var(--danger);">Rejection Reason</label><textarea rows="2" readonly style="border-color: var(--danger);">${escHtml(cn.rejectionReason)}</textarea></div>` : ''}
                         <div class="btn-group full-width"><button class="btn btn-primary" onclick="app.showView('dashboard')">← Back to Dashboard</button></div>
                     </div>`;
             },
@@ -1552,19 +1573,19 @@
                     <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
                         <div style="font-weight:700;color:#E65100;font-size:14px;margin-bottom:14px;">🚗 Travel Request — ${cn.refNumber}</div>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;">
-                            ${row('Activity', cn.activityTitle)}
+                            ${escHtml(row('Activity', cn.activityTitle))}
                             ${row('Requested By', cn.staffName)}
                             ${row('Project', cn.projectCode)}
-                            ${row('Destination', t.destination)}
-                            ${row('Proposed Route', t.route)}
-                            ${row('Type of Travel', t.travelType)}
+                            ${escHtml(row('Destination', t.destination))}
+                            ${escHtml(row('Proposed Route', t.route))}
+                            ${escHtml(row('Type of Travel', t.travelType))}
                             ${row('Travellers', t.travellers)}
                             ${row('Departure', t.departDate)}
                             ${row('Return', t.returnDate)}
-                            ${row('Accommodation', t.accommodation)}
+                            ${escHtml(row('Accommodation', t.accommodation))}
                         </div>
-                        ${t.travellerNames ? `<div style="margin-top:14px;">${row('Names of Travellers', String(t.travellerNames).replace(/\n/g,', '))}</div>` : ''}
-                        ${t.purpose ? `<div style="margin-top:14px;">${row('Purpose', t.purpose)}</div>` : ''}
+                        ${t.travellerNames ? `<div style="margin-top:14px;">${escHtml(row('Names of Travellers', String(t.travellerNames).replace(/\n/g,', ')))}</div>` : ''}
+                        ${t.purpose ? `<div style="margin-top:14px;">${escHtml(row('Purpose', t.purpose))}</div>` : ''}
                     </div>
 
                     <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
@@ -1579,10 +1600,10 @@
                             ${row('Requires Procurement', cn.requiresProcurement === 'yes' ? 'Yes' : 'No')}
                             ${row('Submitted', cn.submittedDate ? new Date(cn.submittedDate).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}) : '—')}
                         </div>
-                        ${cn.objective ? `<div style="margin-top:16px;">${row('Objective', String(cn.objective).replace(/\n/g,'<br>'))}</div>` : ''}
-                        ${cn.description ? `<div style="margin-top:14px;">${row('Description', String(cn.description).replace(/\n/g,'<br>'))}</div>` : ''}
+                        ${cn.objective ? `<div style="margin-top:16px;">${escHtml(row('Objective', String(cn.objective).replace(/\n/g,'<br>')))}</div>` : ''}
+                        ${cn.description ? `<div style="margin-top:14px;">${escHtml(row('Description', String(cn.description).replace(/\n/g,'<br>')))}</div>` : ''}
                         ${cn.budgetBreakdown ? `<div style="margin-top:14px;"><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">Budget Breakdown</div><pre style="font-size:12px;white-space:pre-wrap;font-family:inherit;margin-top:4px;color:#374151;">${cn.budgetBreakdown}</pre></div>` : ''}
-                        ${cn.budgetOwnerNote ? `<div style="margin-top:14px;">${row('Budget Owner Note', cn.budgetOwnerNote)}</div>` : ''}
+                        ${cn.budgetOwnerNote ? `<div style="margin-top:14px;">${escHtml(row('Budget Owner Note', cn.budgetOwnerNote))}</div>` : ''}
                     </div>
 
                     <form class="form-grid" onsubmit="app.submitSecurityClearance(event,'${refNumber}')">
@@ -1597,7 +1618,7 @@
                         </div>
                         <div class="form-group full-width">
                             <label>Approved Route <span class="required">*</span></label>
-                            <textarea id="secRoute" rows="2" required placeholder="The route that must be followed — may differ from the route proposed">${t.route||''}</textarea>
+                            <textarea id="secRoute" rows="2" required placeholder="The route that must be followed — may differ from the route proposed">${escHtml(t.route||'')}</textarea>
                             <span class="form-hint">Staff are required to follow this route</span>
                         </div>
                         <div class="form-group full-width">
@@ -1651,7 +1672,7 @@
                     await this._logAudit('concept_notes', refNumber, 'security_cleared',
                         `Security clearance granted by ${this.currentUser}. Risk: ${risk}. Route: ${route}.`);
                     await this.createNotification(cn.staffName,
-                        `Security clearance granted for ${refNumber} (${cn.activityTitle}) — risk level ${risk}. Approved route: ${route}. Open the concept note to read the full security advice before you travel.`,
+                        `Security clearance granted for ${refNumber} (${escHtml(cn.activityTitle)}) — risk level ${risk}. Approved route: ${route}. Open the concept note to read the full security advice before you travel.`,
                         'success', refNumber);
                     this.clearCache();
                     alert(`Clearance granted (${risk} risk).\n\n${cn.requiresProcurement === 'yes' ? 'Sent to Procurement.' : 'Staff can now request payment.'}`);
@@ -1684,7 +1705,7 @@
                     await this._logAudit('concept_notes', refNumber, 'security_denied',
                         `Security clearance DENIED by ${this.currentUser}. Reason: ${reason.trim()}`);
                     if (cn) await this.createNotification(cn.staffName,
-                        `Security clearance was denied for ${refNumber} (${cn.activityTitle}). Reason: ${reason.trim()} — this concept note is closed; please submit a new one if the travel is still required.`,
+                        `Security clearance was denied for ${refNumber} (${escHtml(cn.activityTitle)}). Reason: ${reason.trim()} — this concept note is closed; please submit a new one if the travel is still required.`,
                         'error', refNumber);
                     this.clearCache();
                     alert('Clearance denied. The concept note is now closed.');
@@ -1714,7 +1735,7 @@
                 if (!el) return;
                 const t = app._travelDetails;
                 el.innerHTML = t
-                    ? `<strong>${t.destination}</strong> · ${t.travelType} · ${t.departDate||'—'} → ${t.returnDate||'—'} · ${t.travellers} traveller(s)`
+                    ? `<strong>${escHtml(t.destination)}</strong> · ${escHtml(t.travelType)} · ${t.departDate||'—'} → ${t.returnDate||'—'} · ${t.travellers} traveller(s)`
                     : 'Not yet provided';
             },
             _showTravelModal() {
@@ -1737,12 +1758,12 @@
                         <div style="padding:24px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                                 <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Destination <span style="color:var(--danger)">*</span></label>
-                                    <input type="text" id="tvDest" value="${esc(t.destination)}" placeholder="e.g. Zango LGA, Katsina State" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                    <input type="text" id="tvDest" value="${escHtml(esc(t.destination))}" placeholder="e.g. Zango LGA, Katsina State" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                 <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Proposed Route <span style="color:var(--danger)">*</span></label>
-                                    <input type="text" id="tvRoute" value="${esc(t.route)}" placeholder="e.g. Kano → Kazaure → Daura → Zango" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                    <input type="text" id="tvRoute" value="${escHtml(esc(t.route))}" placeholder="e.g. Kano → Kazaure → Daura → Zango" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                 <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Type of Travel <span style="color:var(--danger)">*</span></label>
                                     <select id="tvType" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
-                                        ${['Road - Project vehicle','Road - Hired vehicle','Road - Public transport','Air','Mixed'].map(o=>`<option value="${o}"${t.travelType===o?' selected':''}>${o}</option>`).join('')}
+                                        ${['Road - Project vehicle','Road - Hired vehicle','Road - Public transport','Air','Mixed'].map(o=>`<option value="${o}"${escHtml(t.travelType===o?' selected':'')}>${o}</option>`).join('')}
                                     </select></div>
                                 <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Number of Travellers <span style="color:var(--danger)">*</span></label>
                                     <input type="number" id="tvCount" min="1" value="${t.travellers||1}" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
@@ -1751,11 +1772,11 @@
                                 <div><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Return Date <span style="color:var(--danger)">*</span></label>
                                     <input type="date" id="tvReturn" value="${esc(t.returnDate)}" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                 <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Names of Travellers</label>
-                                    <textarea id="tvNames" rows="2" placeholder="One per line, or comma separated" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${t.travellerNames||''}</textarea></div>
+                                    <textarea id="tvNames" rows="2" placeholder="One per line, or comma separated" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${escHtml(t.travellerNames||'')}</textarea></div>
                                 <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Overnight Stay / Accommodation</label>
-                                    <input type="text" id="tvStay" value="${esc(t.accommodation)}" placeholder="e.g. Day trip — no overnight stay" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
+                                    <input type="text" id="tvStay" value="${escHtml(esc(t.accommodation))}" placeholder="e.g. Day trip — no overnight stay" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                 <div style="grid-column:1/-1;"><label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">Purpose of Travel</label>
-                                    <textarea id="tvPurpose" rows="2" placeholder="What will be done at the destination" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${t.purpose||''}</textarea></div>
+                                    <textarea id="tvPurpose" rows="2" placeholder="What will be done at the destination" style="width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;">${escHtml(t.purpose||'')}</textarea></div>
                             </div>
                             <div style="display:flex;gap:12px;margin-top:22px;">
                                 <button type="button" onclick="document.getElementById('travelModalOverlay').remove()" style="flex:1;padding:13px;background:#F3F4F6;border:none;border-radius:10px;font-weight:700;cursor:pointer;">Cancel</button>
@@ -1838,7 +1859,7 @@
                             await this.createNotification(bo, `New concept note ${data[0].refNumber} submitted by ${this.currentUser} for review.`, 'info', data[0].refNumber);
                         }
                     }
-                    await this._logAudit('concept_notes', data[0].refNumber, 'submitted', `Submitted by ${this.currentUser}. Activity: ${conceptNote.activityTitle}. Amount: ₦${Number(conceptNote.estimatedCost).toLocaleString()}. Project: ${conceptNote.projectCode}. Requires procurement: ${conceptNote.requiresProcurement}. Sent to: ${firstApprover}.`);
+                    await this._logAudit('concept_notes', data[0].refNumber, 'submitted', `Submitted by ${this.currentUser}. Activity: ${escHtml(conceptNote.activityTitle)}. Amount: ₦${Number(conceptNote.estimatedCost).toLocaleString()}. Project: ${conceptNote.projectCode}. Requires procurement: ${conceptNote.requiresProcurement}. Sent to: ${firstApprover}.`);
                     alert('Concept note submitted successfully!'); this.showView('dashboard');
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting concept note: ' + error.message); if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Concept Note'; } }
             },
@@ -2013,7 +2034,7 @@
                 content.innerHTML = `
                     <div class="header"><h2>Request Payment</h2><p>Submit a payment request for an approved concept note</p></div>
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
-                        <div class="form-group full-width"><label>Select Approved Concept Note <span class="required">*</span></label><select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)"><option value="">Choose a concept note</option>${approvedNotes.map(cn => { const paidSoFar = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid').reduce((s,p) => s + Number(p.amount||0), 0); const bal = cn.estimatedCost - paidSoFar; return `<option value="${cn.id}">${cn.refNumber} - ${cn.activityTitle} (Balance: ₦${bal.toLocaleString()})</option>`; }).join('')}</select></div>
+                        <div class="form-group full-width"><label>Select Approved Concept Note <span class="required">*</span></label><select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)"><option value="">Choose a concept note</option>${approvedNotes.map(cn => { const paidSoFar = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid').reduce((s,p) => s + Number(p.amount||0), 0); const bal = cn.estimatedCost - paidSoFar; return `<option value="${cn.id}">${cn.refNumber} - ${escHtml(cn.activityTitle)} (Balance: ₦${bal.toLocaleString()})</option>`; }).join('')}</select></div>
                         <div id="conceptNoteDetails" style="display: none;" class="form-group full-width"><div class="threshold-info"><div id="cnDetailsContent"></div></div></div>
                         <div class="form-group"><label>Payment Amount (₦) <span class="required">*</span></label><input type="number" name="amount" id="amount" required min="0" step="0.01"></div>
                         <div class="form-group"><label>Payment Method <span class="required">*</span></label><select name="paymentMethod" required><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="cheque">Cheque</option></select></div>
@@ -2051,7 +2072,7 @@
                         .filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid')
                         .reduce((s,p) => s + Number(p.amount||0), 0);
                     detailsDiv.style.display = 'block';
-                    contentDiv.innerHTML = `<strong>${cn.activityTitle}</strong> (${cn.refNumber})<br>
+                    contentDiv.innerHTML = `<strong>${escHtml(cn.activityTitle)}</strong> (${cn.refNumber})<br>
                         Estimated Cost: ₦${cn.estimatedCost.toLocaleString()} ·
                         Already Paid: ₦${paidSoFar.toLocaleString()} ·
                         <strong>Balance Remaining: ₦${(cn.estimatedCost - paidSoFar).toLocaleString()}</strong>`;
@@ -2260,7 +2281,7 @@
                         <div style="background: #ECFDF5; padding: 12px 20px; display: flex; gap: 32px; border-bottom: 1px solid #A7F3D0; flex-wrap: wrap;">
                             <div>
                                 <div style="font-size: 11px; font-weight: 700; color: #059669; text-transform: uppercase; margin-bottom: 2px;">Activity</div>
-                                <div style="font-size: 14px; font-weight: 700; color: #047857;">${cn ? cn.activityTitle : (payment.conceptNoteRef || '—')}</div>
+                                <div style="font-size: 14px; font-weight: 700; color: #047857;">${escHtml(cn ? cn.activityTitle : (payment.conceptNoteRef || '—'))}</div>
                                 <div style="font-size: 11px; color: #6B7280; margin-top: 2px;">ToR: ${payment.conceptNoteRef || '—'}</div>
                             </div>
                             <div>
@@ -2725,7 +2746,7 @@ if (role === 'procurement') {
                         ${pendingPOSignatures.map(cn => `<tr style="background:#FFFDE7;">
                             <td style="font-weight:600;">${cn.refNumber}</td>
                             <td>${cn.staffName}</td>
-                            <td style="max-width:160px;font-size:12px;">${cn.activityTitle}</td>
+                            <td style="max-width:160px;font-size:12px;">${escHtml(cn.activityTitle)}</td>
                             <td>${cn.projectCode}</td>
                             <td style="font-weight:600;color:#285B3C;">${cn.poNumber}</td>
                             <td style="font-weight:600;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td>
@@ -2736,13 +2757,13 @@ if (role === 'procurement') {
                         </tr>`).join('')}
                         </tbody></table></div>
                     </div>` : ''}
-                    ${exceptionQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">⚖️ 3-Quote Exceptions Awaiting Your Approval (${exceptionQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Concept Note</th><th>Project</th><th>Activity</th><th>Amount</th><th>Requested By</th><th>Reason Given</th><th>Actions</th></tr></thead><tbody>${exceptionQueue.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td style="max-width:200px;">${cn.activityTitle}</td><td style="font-weight:600;">₦${Number(cn.estimatedCost||0).toLocaleString()}</td><td>${cn.quoteExceptionRequestedBy||'—'}</td><td style="max-width:280px;font-size:12px;">${cn.quoteExceptionReason||'—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:130px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Details</button><button class="action-btn approve" onclick="app.resolveQuoteException('${cn.refNumber}', true)" style="min-width:130px;font-size:12px;">✓ Approve</button><button class="action-btn reject" onclick="app.resolveQuoteException('${cn.refNumber}', false)" style="min-width:130px;font-size:12px;">✗ Decline</button></td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${poQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛒 Purchase Orders — Finance Confirmation (${poQueue.length})</h3>${(poConfirmedCount > 0 || poLegacyCount > 0) ? `<p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">${[poConfirmedCount > 0 ? `${poConfirmedCount} already confirmed` : '', poLegacyCount > 0 ? `${poLegacyCount} legacy PO${poLegacyCount!==1?'s':''} raised under the old flow` : ''].filter(Boolean).join(' · ')} — not listed.</p>` : ''}<div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>PO Number</th><th>Concept Note</th><th>Project</th><th>Requester</th><th>Activity</th><th>Amount</th><th>Raised</th><th>Actions</th></tr></thead><tbody>${poQueue.map(cn => { let vs=[]; try { if (cn.vendorsJson) vs=JSON.parse(cn.vendorsJson); } catch(e){} const tot=vs.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0)||cn.estimatedCost||0; return `<tr id="poq_${cn.refNumber}"><td style="font-weight:700;color:var(--primary);">${cn.poNumber}</td><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td>${cn.staffName}</td><td style="max-width:220px;">${cn.activityTitle}</td><td style="font-weight:600;">₦${tot.toLocaleString()}</td><td style="font-size:12px;">${cn.poGeneratedAt ? new Date(cn.poGeneratedAt).toLocaleDateString('en-NG') : '—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:140px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Concept Note</button><button class="action-btn" onclick="app._previewPODraft('${cn.refNumber}')" style="min-width:140px;border-color:#059669;color:#059669;font-size:12px;">🛒 View PO</button><span id="poqact_${cn.refNumber}"><button class="action-btn approve" onclick="app._financeSignPO('${cn.refNumber}')" style="min-width:140px;font-size:12px;">✍️ Confirm PO</button></span></td></tr>`; }).join('')}</tbody></table></div>` : ''}
-                    ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${t.destination||'—'}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
-                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${exceptionQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">⚖️ 3-Quote Exceptions Awaiting Your Approval (${exceptionQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Concept Note</th><th>Project</th><th>Activity</th><th>Amount</th><th>Requested By</th><th>Reason Given</th><th>Actions</th></tr></thead><tbody>${exceptionQueue.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td style="max-width:200px;">${escHtml(cn.activityTitle)}</td><td style="font-weight:600;">₦${Number(cn.estimatedCost||0).toLocaleString()}</td><td>${cn.quoteExceptionRequestedBy||'—'}</td><td style="max-width:280px;font-size:12px;">${escHtml(cn.quoteExceptionReason||'—')}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:130px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Details</button><button class="action-btn approve" onclick="app.resolveQuoteException('${cn.refNumber}', true)" style="min-width:130px;font-size:12px;">✓ Approve</button><button class="action-btn reject" onclick="app.resolveQuoteException('${cn.refNumber}', false)" style="min-width:130px;font-size:12px;">✗ Decline</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${poQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛒 Purchase Orders — Finance Confirmation (${poQueue.length})</h3>${(poConfirmedCount > 0 || poLegacyCount > 0) ? `<p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">${[poConfirmedCount > 0 ? `${poConfirmedCount} already confirmed` : '', poLegacyCount > 0 ? `${poLegacyCount} legacy PO${poLegacyCount!==1?'s':''} raised under the old flow` : ''].filter(Boolean).join(' · ')} — not listed.</p>` : ''}<div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>PO Number</th><th>Concept Note</th><th>Project</th><th>Requester</th><th>Activity</th><th>Amount</th><th>Raised</th><th>Actions</th></tr></thead><tbody>${poQueue.map(cn => { let vs=[]; try { if (cn.vendorsJson) vs=JSON.parse(cn.vendorsJson); } catch(e){} const tot=vs.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0)||cn.estimatedCost||0; return `<tr id="poq_${cn.refNumber}"><td style="font-weight:700;color:var(--primary);">${cn.poNumber}</td><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td>${cn.staffName}</td><td style="max-width:220px;">${escHtml(cn.activityTitle)}</td><td style="font-weight:600;">₦${tot.toLocaleString()}</td><td style="font-size:12px;">${cn.poGeneratedAt ? new Date(cn.poGeneratedAt).toLocaleDateString('en-NG') : '—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:140px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Concept Note</button><button class="action-btn" onclick="app._previewPODraft('${cn.refNumber}')" style="min-width:140px;border-color:#059669;color:#059669;font-size:12px;">🛒 View PO</button><span id="poqact_${cn.refNumber}"><button class="action-btn approve" onclick="app._financeSignPO('${cn.refNumber}')" style="min-width:140px;font-size:12px;">✍️ Confirm PO</button></span></td></tr>`; }).join('')}</tbody></table></div>` : ''}
+                    ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${escHtml(t.destination||'—')}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
+                    ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${app._renderFinancePaymentActions(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Archivo', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br>${app._renderFinanceRetirementActions(r)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : cn.boPreApprovedAt && cn.budgetOwnerApprovedBy === this.currentUser ? { label: 'Pre-approved → ED', date: cn.boPreApprovedAt, cls: 'status-pending' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${cn.activityTitle}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
+                    ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : cn.boPreApprovedAt && cn.budgetOwnerApprovedBy === this.currentUser ? { label: 'Pre-approved → ED', date: cn.boPreApprovedAt, cls: 'status-pending' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
                     ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
                     ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Archivo', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected.</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Retirement Ref</th><th>Payment Ref</th><th>Staff</th><th>Amount Spent</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyRetirements.map(r => { const linkedCN = app.data.conceptNotes.find(c => app.data.payments.find(p => p.refNumber===r.paymentRef && p.conceptNoteRef===c.refNumber)); const cnRef = linkedCN?.refNumber; return `<tr><td>${r.refNumber}</td><td>${r.paymentRef}</td><td>${r.staffName}</td><td>₦${Number(r.actualSpent||0).toLocaleString()}</td><td><span class="status-badge ${r.status==='approved'?'status-approved':'status-rejected'}">${r.status==='approved'?'Approved':'Rejected'}</span></td><td>${r.status==='approved'?(r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'-'):(r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
 
@@ -2842,10 +2863,10 @@ if (role === 'procurement') {
                     if (error) throw error;
                     Object.assign(cn, updates); this.clearCache();
                     await this._logAudit('concept_notes', refNumber, action, (() => {
-                        if (action === 'forward_to_ed') return `Forwarded to ED by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}.`;
+                        if (action === 'forward_to_ed') return `Forwarded to ED by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${escHtml(cn.activityTitle)}.`;
                         if (action === 'approve_needs_ed') return `Pre-approved by BO ${this.currentUser} (₦${cn.estimatedCost.toLocaleString()} — above limit). Sent to ED for counter-signature.`;
                         if (updates.sentToProcurement) return `Approved by ${this.currentUser} → sent to Procurement. Amount: ₦${cn.estimatedCost.toLocaleString()}. PO: ${updates.poNumber||'N/A'}.`;
-                        if (updates.status === 'approved') return `Approved by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${cn.activityTitle}. Project: ${cn.projectCode}.`;
+                        if (updates.status === 'approved') return `Approved by ${this.currentUser}. Amount: ₦${cn.estimatedCost.toLocaleString()}. Activity: ${escHtml(cn.activityTitle)}. Project: ${cn.projectCode}.`;
                         return `Action: ${action} by ${this.currentUser}.`;
                     })());
 
@@ -2879,7 +2900,7 @@ if (role === 'procurement') {
                     if (updates.status === 'security_review') {
                         for (const so of (this.data.securityOfficers || [])) {
                             await this.createNotification(so,
-                                `Travel clearance required: ${refNumber} (${cn.activityTitle}) by ${cn.staffName}. Review the travel details and issue security clearance.`,
+                                `Travel clearance required: ${refNumber} (${escHtml(cn.activityTitle)}) by ${cn.staffName}. Review the travel details and issue security clearance.`,
                                 'info', refNumber);
                         }
                     }
@@ -2959,7 +2980,7 @@ if (role === 'procurement') {
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
                             <div>
                                 <div style="font-size:11px;font-weight:700;color:#1B4D8E;text-transform:uppercase;margin-bottom:4px;">Concept Note</div>
-                                <div style="font-size:13px;color:#374151;">${cn.refNumber} — ${cn.activityTitle}</div>
+                                <div style="font-size:13px;color:#374151;">${cn.refNumber} — ${escHtml(cn.activityTitle)}</div>
                                 <div style="font-size:12px;color:#6B7280;margin-top:2px;">Project: ${cn.projectCode} · Staff: ${cn.staffName}</div>
                             </div>
                             <div>
@@ -2975,11 +2996,11 @@ if (role === 'procurement') {
                     ${cn.quoteExceptionStatus === 'approved' ? `
                     <div style="background:#F1F8F4;border:2px solid #A5D6A7;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
                         <div style="font-weight:700;color:#1B5E20;font-size:13px;">✓ 3-Quote Exception Approved by ${cn.quoteExceptionApprovedBy||'Budget Owner'}</div>
-                        <div style="font-size:12px;color:#2E7D32;margin-top:4px;">${cn.quoteExceptionReason||''}</div>
+                        <div style="font-size:12px;color:#2E7D32;margin-top:4px;">${escHtml(cn.quoteExceptionReason||'')}</div>
                     </div>` : cn.quoteExceptionStatus === 'pending' ? `
                     <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
                         <div style="font-weight:700;color:#E65100;font-size:13px;">⏳ 3-Quote Exception awaiting Budget Owner approval</div>
-                        <div style="font-size:12px;color:#BF360C;margin-top:4px;">${cn.quoteExceptionReason||''}</div>
+                        <div style="font-size:12px;color:#BF360C;margin-top:4px;">${escHtml(cn.quoteExceptionReason||'')}</div>
                     </div>` : `
                     <div style="background:#FFF8E1;border:1px dashed #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
                         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
@@ -3173,7 +3194,7 @@ if (role === 'procurement') {
                 const money = n => '₦' + Number(n).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
                 const vs = r.vendors;
 
-                const headRow = vs.map(v => `<th style="color:#fff;padding:10px 12px;text-align:right;${v===r.winner?'background:#047857;':''}">${v.name}${v===r.winner?' ★':''}</th>`).join('');
+                const headRow = vs.map(v => `<th style="color:#fff;padding:10px 12px;text-align:right;${v===r.winner?'background:#047857;':''}">${escHtml(v.name)}${v===r.winner?' ★':''}</th>`).join('');
                 const row = (label, cells, bold) => `<tr><td style="padding:9px 12px;border-bottom:1px solid #E5E7EB;font-weight:${bold?'700':'500'};">${label}</td>${cells.map((c,i) => `<td style="padding:9px 12px;border-bottom:1px solid #E5E7EB;text-align:right;font-weight:${bold?'700':'400'};${vs[i]===r.winner?'background:#ECFDF5;':''}">${c}</td>`).join('')}</tr>`;
 
                 content.innerHTML = `
@@ -3280,7 +3301,7 @@ if (role === 'procurement') {
                 const money = n => '₦' + Number(n||0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
                 const fmtD  = d => d ? new Date(d).toLocaleDateString('en-NG', { day:'numeric', month:'long', year:'numeric' }) : '—';
 
-                const headRow = vs.map(v => `<th style="text-align:right;${v===r.winner?'background:#047857;':''}">${v.name}${v===r.winner?' ★':''}</th>`).join('');
+                const headRow = vs.map(v => `<th style="text-align:right;${v===r.winner?'background:#047857;':''}">${escHtml(v.name)}${v===r.winner?' ★':''}</th>`).join('');
                 const row = (label, cells, bold) => `<tr><td style="font-weight:${bold?'700':'500'};">${label}</td>${cells.map((c,i) => `<td style="text-align:right;font-weight:${bold?'700':'400'};${vs[i]===r.winner?'background:#ECFDF5;':''}">${c}</td>`).join('')}</tr>`;
 
                 const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
@@ -3315,7 +3336,7 @@ if (role === 'procurement') {
 </div>
 
 <div class="grid4">
-  <div><div class="label">Activity</div><div class="value">${cnRec.activityTitle || '—'}</div></div>
+  <div><div class="label">Activity</div><div class="value">${escHtml(cnRec.activityTitle || '—')}</div></div>
   <div><div class="label">Project Code</div><div class="value">${cnRec.projectCode || '—'}</div></div>
   <div><div class="label">Item Procured</div><div class="value">${r.itemDesc}</div></div>
   <div><div class="label">Quantity</div><div class="value">${r.itemQty}${r.itemUnit ? ' ' + r.itemUnit : ''}</div></div>
@@ -3370,8 +3391,8 @@ if (role === 'procurement') {
 <h2>VENDOR CONTACT DETAILS</h2>
 <table><thead><tr><th>Vendor</th><th>Phone</th><th>Address / Contact</th><th style="text-align:right;">Total Quoted</th><th style="text-align:right;">Score</th></tr></thead><tbody>
   ${vs.map(v => `<tr${v===r.winner?' style="background:#ECFDF5;"':''}>
-    <td style="font-weight:${v===r.winner?'700':'400'};">${v.name}${v===r.winner?' ★':''}</td>
-    <td>${v.phone||'—'}</td><td>${v.address||'—'}</td>
+    <td style="font-weight:${v===r.winner?'700':'400'};">${escHtml(v.name)}${v===r.winner?' ★':''}</td>
+    <td>${escHtml(v.phone||'—')}</td><td>${escHtml(v.address||'—')}</td>
     <td style="text-align:right;">${money(v.totalQuoted)}</td>
     <td style="text-align:right;font-weight:700;">${v.compositeScore.toFixed(1)}</td>
   </tr>`).join('')}
@@ -3492,7 +3513,7 @@ if (role === 'procurement') {
                     ${cn.status === 'variance_rejected' && cn.rejectionReason ? `
                     <div style="background:#FFEBEE;border:2px solid #FFCDD2;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
                         <div style="font-weight:700;color:#B71C1C;font-size:14px;margin-bottom:8px;">&#x274C; Variance Rejected by Budget Owner &#x2014; Action Required</div>
-                        <p style="color:#C62828;font-size:13px;">${cn.rejectionReason}</p>
+                        <p style="color:#C62828;font-size:13px;">${escHtml(cn.rejectionReason)}</p>
                         <p style="font-size:12px;color:#B71C1C;margin-top:8px;font-style:italic;">Please re-source at or within the original estimated budget and resubmit.</p>
                     </div>` : ''}
 
@@ -3500,7 +3521,7 @@ if (role === 'procurement') {
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
                             <div>
                                 <div style="font-size:11px;font-weight:700;color:#1B4D8E;text-transform:uppercase;margin-bottom:4px;">Concept Note</div>
-                                <div style="font-size:13px;color:#374151;">${cn.refNumber} — ${cn.activityTitle}</div>
+                                <div style="font-size:13px;color:#374151;">${cn.refNumber} — ${escHtml(cn.activityTitle)}</div>
                                 <div style="font-size:12px;color:#6B7280;margin-top:2px;">Staff: ${cn.staffName}</div>
                             </div>
                             <div>
@@ -3613,7 +3634,7 @@ if (role === 'procurement') {
                 if (bigLines.length > 0 && vendorBlockCount < 3 && quotesOnRecord < 3 && cn.quoteExceptionStatus !== 'approved') {
                     alert(
                         `These service(s) are individually at or above ₦500,000:\n\n` +
-                        `${bigLines.map(v => `  • ${v.name} — ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}`).join('\n')}\n\n` +
+                        `${bigLines.map(v => `  • ${escHtml(v.name)} — ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}`).join('\n')}\n\n` +
                         `A single service of that value needs at least 3 competing quotes.\n\n` +
                         `If fewer than 3 providers exist, open Quotation Analysis and tick ` +
                         `"Fewer than 3 providers exist for this service" to request Budget Owner approval.`);
@@ -3738,10 +3759,10 @@ if (role === 'procurement') {
                             `No quotation analysis required — ${vendors.length} vendors supplying different services, largest single line ₦${largestLine.toLocaleString()} (below the ₦500,000 threshold). Declared by ${this.currentUser}: ${app._multiServiceReason}`);
                     }
                     await this._logAudit('concept_notes', refNumber, 'po_created',
-                        `PO ${poNumber} created by ${this.currentUser}. Vendors: ${vendors.map(v=>v.name).join(', ')}. Total: ₦${total.toLocaleString()}.`);
+                        `PO ${poNumber} created by ${this.currentUser}. Vendors: ${escHtml(vendors.map(v=>v.name).join(', '))}. Total: ₦${total.toLocaleString()}.`);
 
                     await this.createNotification(cn.staffName,
-                        `PO ${poNumber} has been generated for ${refNumber} (${cn.activityTitle}) and is ready for your signature.`,
+                        `PO ${poNumber} has been generated for ${refNumber} (${escHtml(cn.activityTitle)}) and is ready for your signature.`,
                         'info', refNumber);
                     // Finance confirms the PO as a budget commitment — under the
                     // PO-first flow there is no payment yet to prompt them, so
@@ -3752,7 +3773,7 @@ if (role === 'procurement') {
                             .map(([n]) => n);
                         for (const f of financeUsers) {
                             await this.createNotification(f,
-                                `PO ${poNumber} raised for ${refNumber} (${cn.activityTitle}) — ₦${total.toLocaleString()}. Open the concept note to confirm it as a budget commitment.`,
+                                `PO ${poNumber} raised for ${refNumber} (${escHtml(cn.activityTitle)}) — ₦${total.toLocaleString()}. Open the concept note to confirm it as a budget commitment.`,
                                 'info', refNumber);
                         }
                     }
@@ -3826,7 +3847,7 @@ if (role === 'procurement') {
                                 : `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Receiving Now <span style="color:var(--danger)">*</span> <span style="font-weight:400;color:#6B7280;">(max ${remaining})</span></label><input type="number" id="vReceiving_${id}" min="0" max="${remaining}" step="1" value="${remaining}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._clampReceivingInput(this, ${remaining})">`}
                             </div>
                             ${isComplete ? '' : `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition of This Delivery <span style="color:var(--danger)">*</span></label><select id="vQuality_${id}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good"${v.quality==='Good'?' selected':''}>✅ Good</option><option value="Partial"${v.quality==='Partial'?' selected':''}>⚠️ Partial / Minor Issues</option><option value="Poor"${v.quality==='Poor'?' selected':''}>❌ Poor / Rejected</option></select></div>`}
-                            <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_${id}" rows="2" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;background:#F3F4F6;">${(v.address||'')}</textarea></div>
+                            <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_${id}" rows="2" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;background:#F3F4F6;">${escHtml((v.address||''))}</textarea></div>
                             ${isComplete ? '' : `<div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;">
                                 <div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💳 Payment Account for this Delivery</div>
                                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
@@ -3852,7 +3873,7 @@ if (role === 'procurement') {
                     ${cn.financeRejectionReason ? `
                     <div style="background:#FFEBEE;border:2px solid #FFCDD2;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
                         <div style="font-weight:700;color:#B71C1C;font-size:14px;margin-bottom:8px;">&#x274C; Finance Rejection &#x2014; Action Required</div>
-                        <p style="color:#C62828;font-size:13px;margin-bottom:6px;"><strong>Reason:</strong> ${cn.financeRejectionReason}</p>
+                        <p style="color:#C62828;font-size:13px;margin-bottom:6px;"><strong>Reason:</strong> ${escHtml(cn.financeRejectionReason)}</p>
                         <p style="font-size:12px;color:#C62828;">Rejected by <strong>${cn.financeRejectedBy}</strong> on ${cn.financeRejectedAt ? new Date(cn.financeRejectedAt).toLocaleDateString('en-NG', {day:'numeric',month:'long',year:'numeric'}) : '&#x2014;'}</p>
                         <p style="font-size:12px;color:#B71C1C;margin-top:8px;font-style:italic;">Please address the above, update the details below, and resubmit to Finance.</p>
                     </div>` : ''}
@@ -3896,7 +3917,7 @@ if (role === 'procurement') {
                                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
                                         <div>
                                             <div style="font-size:11px;font-weight:700;color:#059669;text-transform:uppercase;margin-bottom:4px;">Concept Note</div>
-                                            <div style="font-size:13px;color:#374151;">${cn.refNumber} — ${cn.activityTitle}</div>
+                                            <div style="font-size:13px;color:#374151;">${cn.refNumber} — ${escHtml(cn.activityTitle)}</div>
                                             <div style="font-size:12px;color:#6B7280;margin-top:2px;">Staff: ${cn.staffName} · PO: ${cn.poNumber}</div>
                                         </div>
                                         <div>
@@ -3910,7 +3931,7 @@ if (role === 'procurement') {
                         </div>
                         <div class="form-group full-width">
                             <label>Procurement Notes</label>
-                            <textarea id="procNotes" rows="3" placeholder="Additional information for Finance...">${cn.procurementNotes||''}</textarea>
+                            <textarea id="procNotes" rows="3" placeholder="Additional information for Finance...">${escHtml(cn.procurementNotes||'')}</textarea>
                         </div>
                         <div class="form-group full-width">
                             <h3 style="margin:24px 0 8px;font-family:'Archivo',sans-serif;">Payment Schedule</h3>
@@ -4251,13 +4272,13 @@ if (role === 'procurement') {
                         <div class="form-group"><label>Submitted Date</label><input type="text" value="${new Date(cn.submittedDate).toLocaleString()}" readonly></div>
                         <div class="form-group"><label>Project Code</label><input type="text" value="${cn.projectCode}" readonly></div>
                         <div class="form-group"><label>Estimated Cost</label><input type="text" value="₦${cn.estimatedCost.toLocaleString()}" readonly></div>
-                        <div class="form-group full-width"><label>Activity Title</label><input type="text" value="${cn.activityTitle}" readonly></div>
-                        <div class="form-group full-width"><label>Objective</label><textarea rows="3" readonly>${cn.objective}</textarea></div>
-                        <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${cn.description}</textarea></div>
+                        <div class="form-group full-width"><label>Activity Title</label><input type="text" value="${escHtml(cn.activityTitle)}" readonly></div>
+                        <div class="form-group full-width"><label>Objective</label><textarea rows="3" readonly>${escHtml(cn.objective)}</textarea></div>
+                        <div class="form-group full-width"><label>Description</label><textarea rows="4" readonly>${escHtml(cn.description)}</textarea></div>
                         ${cn.budgetBreakdown ? '<div class="form-group full-width"><label>Budget Breakdown</label><div style="border:2px solid #A7F3D0;border-radius:10px;overflow:hidden;"><div style="background:#285B3C;color:white;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">📋 Budget Breakdown</div>' + (function(bb){var lines=bb.split('\n').filter(function(l){return l.trim();});var hasStructured=lines.some(function(l){return /^\d+\.\s*.+?:\s*₦[\d,]+\s*×\s*[\d.]+\s*=\s*₦[\d,]+/.test(l);});if(hasStructured){var rows=lines.map(function(line,i){var m=line.match(/^\d+\.\s*(.+?):\s*₦([\d,]+)\s*×\s*([\d.]+)\s*=\s*₦([\d,]+)/);if(!m)return '';return '<tr><td style="padding:8px 12px;border:1px solid #A7F3D0;color:#6B7280;font-weight:600;">'+(i+1)+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;">'+m[1]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">₦'+m[2]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;">'+m[3]+'</td><td style="padding:8px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:600;">₦'+m[4]+'</td></tr>';}).join('');var total=0;lines.forEach(function(l){var m=l.match(/=\s*₦([\d,]+)/);if(m)total+=parseInt(m[1].replace(/,/g,''));});return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#D1FAE5;"><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">S/N</th><th style="padding:10px 12px;text-align:left;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Budget Line</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Unit (₦)</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Qty</th><th style="padding:10px 12px;text-align:right;color:#374151;font-weight:700;border:1px solid #A7F3D0;">Total (₦)</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr style="background:#D1FAE5;"><td colspan="4" style="padding:10px 12px;border:1px solid #A7F3D0;font-weight:700;color:#065F46;">Total Estimated Cost</td><td style="padding:10px 12px;border:1px solid #A7F3D0;text-align:right;font-weight:700;color:#047857;font-size:15px;">₦'+total.toLocaleString()+'</td></tr></tfoot></table>';}return '<div style="padding:16px 20px;background:#F0FDF4;font-size:13px;color:#374151;white-space:pre-wrap;line-height:1.7;">'+bb+'</div>';})(cn.budgetBreakdown) + '</div></div>' : ''}
                         <div class="form-group"><label>Requires Procurement?</label><input type="text" value="${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}" readonly></div>
                         ${this._travelPanel(cn)}
-                        ${cn.procurementNotes ? `<div class="form-group full-width"><label>Procurement Notes</label><textarea rows="2" readonly>${cn.procurementNotes}</textarea></div>` : ''}
+                        ${cn.procurementNotes ? `<div class="form-group full-width"><label>Procurement Notes</label><textarea rows="2" readonly>${escHtml(cn.procurementNotes)}</textarea></div>` : ''}
                         ${cn.requiresProcurement === 'yes' ? `
                         <div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;">
                             <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">📁 Procurement Documents</label>
@@ -5159,9 +5180,9 @@ if (role === 'procurement') {
                 </div>
                 <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:12px 16px;">
                     <div class="lbl">Reason fewer than 3 quotes were obtained</div>
-                    <div style="font-size:13px;margin-top:4px;white-space:pre-wrap;line-height:1.6;">${cn.quoteExceptionReason}</div>
+                    <div style="font-size:13px;margin-top:4px;white-space:pre-wrap;line-height:1.6;">${escHtml(cn.quoteExceptionReason)}</div>
                 </div>
-                ${cn.quoteExceptionDeclineReason?`<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:12px 16px;margin-top:10px;"><div class="lbl" style="color:#B71C1C;">Declined</div><div style="font-size:13px;color:#C62828;">${cn.quoteExceptionDeclineReason}</div></div>`:''}`;
+                ${cn.quoteExceptionDeclineReason?`<div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:12px 16px;margin-top:10px;"><div class="lbl" style="color:#B71C1C;">Declined</div><div style="font-size:13px;color:#C62828;">${escHtml(cn.quoteExceptionDeclineReason)}</div></div>`:''}`;
                 })();
 
                 const travelSection = (() => {
@@ -5177,15 +5198,15 @@ if (role === 'procurement') {
                     return `
                 <h2 style="font-size:14px;border-bottom:2px solid #E65100;padding-bottom:6px;margin-top:32px;color:#E65100;">TRAVEL &amp; SECURITY CLEARANCE ${badge}</h2>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;">
-                    <div><div class="lbl">Destination</div><div class="val">${t.destination||'—'}</div></div>
-                    <div><div class="lbl">Type of Travel</div><div class="val">${t.travelType||'—'}</div></div>
+                    <div><div class="lbl">Destination</div><div class="val">${escHtml(t.destination||'—')}</div></div>
+                    <div><div class="lbl">Type of Travel</div><div class="val">${escHtml(t.travelType||'—')}</div></div>
                     <div><div class="lbl">Travellers</div><div class="val">${t.travellers||'—'}</div></div>
                     <div><div class="lbl">Departure</div><div class="val">${t.departDate||'—'}</div></div>
                     <div><div class="lbl">Return</div><div class="val">${t.returnDate||'—'}</div></div>
-                    <div><div class="lbl">Accommodation</div><div class="val">${t.accommodation||'—'}</div></div>
-                    <div style="grid-column:1/-1;"><div class="lbl">Route Proposed by Staff</div><div class="val">${t.route||'—'}</div></div>
-                    ${t.travellerNames ? `<div style="grid-column:1/-1;"><div class="lbl">Names of Travellers</div><div class="val">${String(t.travellerNames).replace(/\n/g,', ')}</div></div>` : ''}
-                    ${t.purpose ? `<div style="grid-column:1/-1;"><div class="lbl">Purpose</div><div class="val">${t.purpose}</div></div>` : ''}
+                    <div><div class="lbl">Accommodation</div><div class="val">${escHtml(t.accommodation||'—')}</div></div>
+                    <div style="grid-column:1/-1;"><div class="lbl">Route Proposed by Staff</div><div class="val">${escHtml(t.route||'—')}</div></div>
+                    ${t.travellerNames ? `<div style="grid-column:1/-1;"><div class="lbl">Names of Travellers</div><div class="val">${escHtml(String(t.travellerNames).replace(/\n/g,', '))}</div></div>` : ''}
+                    ${t.purpose ? `<div style="grid-column:1/-1;"><div class="lbl">Purpose</div><div class="val">${escHtml(t.purpose)}</div></div>` : ''}
                 </div>
                 ${st === 'cleared' ? `
                 <div style="background:#F1F8F4;border:1px solid #A5D6A7;border-radius:8px;padding:14px 18px;margin-top:10px;">
@@ -5194,12 +5215,12 @@ if (role === 'procurement') {
                         <div><div class="lbl">Cleared By</div><div class="val">${cn.securityClearedBy||'—'}</div></div>
                         <div><div class="lbl">Date Cleared</div><div class="val">${cn.securityClearedAt ? fmtD(cn.securityClearedAt) : '—'}</div></div>
                     </div>
-                    <div style="margin-top:12px;"><div class="lbl">Approved Route (must be followed)</div><div style="font-weight:600;font-size:13px;margin-top:3px;white-space:pre-wrap;">${cn.securityApprovedRoute||'—'}</div></div>
-                    <div style="margin-top:12px;"><div class="lbl">Security Advice</div><div style="font-size:13px;margin-top:3px;white-space:pre-wrap;line-height:1.6;">${cn.securityAdvice||'—'}</div></div>
+                    <div style="margin-top:12px;"><div class="lbl">Approved Route (must be followed)</div><div style="font-weight:600;font-size:13px;margin-top:3px;white-space:pre-wrap;">${escHtml(cn.securityApprovedRoute||'—')}</div></div>
+                    <div style="margin-top:12px;"><div class="lbl">Security Advice</div><div style="font-size:13px;margin-top:3px;white-space:pre-wrap;line-height:1.6;">${escHtml(cn.securityAdvice||'—')}</div></div>
                 </div>` : st === 'denied' ? `
                 <div style="background:#FFEBEE;border:1px solid #FFCDD2;border-radius:8px;padding:14px 18px;margin-top:10px;">
                     <div class="lbl" style="color:#B71C1C;">Clearance Denied</div>
-                    <div style="font-size:13px;margin-top:4px;color:#C62828;">${cn.securityDenialReason||'—'}</div>
+                    <div style="font-size:13px;margin-top:4px;color:#C62828;">${escHtml(cn.securityDenialReason||'—')}</div>
                     <div style="font-size:11px;color:#777;margin-top:6px;">By ${cn.securityClearedBy||'—'}${cn.securityClearedAt ? ' on ' + fmtD(cn.securityClearedAt) : ''}</div>
                 </div>` : `
                 <p style="color:#E65100;font-size:12px;font-style:italic;">Security clearance not yet issued.</p>`}`;
@@ -5221,8 +5242,8 @@ if (role === 'procurement') {
                 </div>
                 <table><thead><tr><th>Vendor</th><th>Phone</th><th>Unit Price</th><th>Total Quoted</th><th>Quality /10</th><th>Delivery</th><th>Warranty</th><th>Score /100</th><th>Outcome</th></tr></thead><tbody>
                 ${qa.vendors.map(v => `<tr${v.selected?' style="background:#ECFDF5;"':''}>
-                    <td style="font-weight:${v.selected?'700':'400'};">${v.name||'—'}</td>
-                    <td>${v.phone||'—'}</td>
+                    <td style="font-weight:${v.selected?'700':'400'};">${escHtml(v.name||'—')}</td>
+                    <td>${escHtml(v.phone||'—')}</td>
                     <td>${money(v.price)}</td>
                     <td style="font-weight:600;">${money(v.totalQuoted)}</td>
                     <td>${v.qualityScore10 != null ? Number(v.qualityScore10).toFixed(1) : '—'}</td>
@@ -5242,9 +5263,9 @@ if (role === 'procurement') {
                     <div><div class="lbl">PO Number</div><div class="val">${cn.poNumber||'PENDING'}</div></div>
                     <div><div class="lbl">Estimated Budget</div><div class="val">${money(cn.estimatedCost)}</div></div>
                     <div><div class="lbl">Actual Cost</div><div class="val" style="color:#C62626;font-weight:700;">${money(cn.actualProcurementCost)}</div></div>
-                    <div><div class="lbl">Vendor</div><div class="val">${cn.grrVendorName||'—'}</div></div>
-                    <div><div class="lbl">Vendor Phone</div><div class="val">${cn.grrVendorPhone||'—'}</div></div>
-                    <div><div class="lbl">Invoice No.</div><div class="val">${cn.vendorInvoiceNo||'—'}</div></div>
+                    <div><div class="lbl">Vendor</div><div class="val">${escHtml(cn.grrVendorName||'—')}</div></div>
+                    <div><div class="lbl">Vendor Phone</div><div class="val">${escHtml(cn.grrVendorPhone||'—')}</div></div>
+                    <div><div class="lbl">Invoice No.</div><div class="val">${escHtml(cn.vendorInvoiceNo||'—')}</div></div>
                 </div>
                 ${cn.procurementInvoiceUrl ? `<div style="margin-bottom:6px;"><span style="background:#E3F2FD;color:#0D47A1;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">🧾 Invoice: <a href="${cn.procurementInvoiceUrl}" target="_blank">${cn.procurementInvoiceName||'Download'}</a></span></div>` : ''}
                 ${cn.procurementReceiptUrl ? `<div style="margin-bottom:12px;"><span style="background:#E8F5E9;color:#1B5E20;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">📎 Receipt: <a href="${cn.procurementReceiptUrl}" target="_blank">${cn.procurementReceiptName||'Download'}</a></span></div>` : ''}
@@ -5257,8 +5278,8 @@ if (role === 'procurement') {
                 <h2 style="font-size:14px;border-bottom:2px solid #285B3C;padding-bottom:6px;margin-top:8px;color:#285B3C;">GRR — Goods/Services Receiving Report</h2>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
                     <div><div class="lbl">GRR Number</div><div class="val">${cn.grrNumber||'PENDING'}</div></div>
-                    <div><div class="lbl">Items Supplied</div><div class="val">${cn.vendorItemsSupplied||'—'}</div></div>
-                    <div><div class="lbl">Vendor Address</div><div class="val">${cn.vendorAddress||'—'}</div></div>
+                    <div><div class="lbl">Items Supplied</div><div class="val">${escHtml(cn.vendorItemsSupplied||'—')}</div></div>
+                    <div><div class="lbl">Vendor Address</div><div class="val">${escHtml(cn.vendorAddress||'—')}</div></div>
                 </div>
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">GRR Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -5282,8 +5303,8 @@ if (role === 'procurement') {
                     <td>${p.financeApprovedBy||'—'}${p.financeApprovedAt?'<br><span style="font-size:10px;color:#777;">'+fmtD(p.financeApprovedAt)+'</span>':''}</td>
                     <td style="font-weight:600;">${p.processedBy||'—'}${p.paidDate?'<br><span style="font-size:10px;color:#777;">'+fmtD(p.paidDate)+'</span>':''}</td>
                     <td>${p.bankReconciled ? '<span style="color:#1B5E20;font-weight:600;">✓ Reconciled</span>' + (p.reconciledBy?'<br><span style="font-size:10px;color:#777;">'+p.reconciledBy+'</span>':'') : '<span style="color:#999;">Pending</span>'}</td>
-                    <td style="max-width:220px;white-space:pre-wrap;font-size:11px;">${p.justification||'—'}</td>
-                    <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${p.rejectionReason||'—'}${p.rejectedBy?'<br><span style="font-size:10px;color:#777;">by '+p.rejectedBy+(p.rejectedDate?' — '+fmtD(p.rejectedDate):'')+'</span>':''}</td>
+                    <td style="max-width:220px;white-space:pre-wrap;font-size:11px;">${escHtml(p.justification||'—')}</td>
+                    <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${escHtml(p.rejectionReason||'—')}${p.rejectedBy?'<br><span style="font-size:10px;color:#777;">by '+p.rejectedBy+(p.rejectedDate?' — '+fmtD(p.rejectedDate):'')+'</span>':''}</td>
                 </tr>`).join('');
 
                 const retRows = retirements.map(r => {
@@ -5298,13 +5319,13 @@ if (role === 'procurement') {
                     <td style="font-weight:600;">${money(r.actualSpent)}</td>
                     <td>${money(r.amountReturned)}</td>
                     <td style="font-weight:700;color:${varianceR==null?'#111':varianceR>0?'#1B5E20':varianceR<0?'#B71C1C':'#777'};">${varianceR==null?'—':(varianceR>=0?'+':'-')+money(Math.abs(varianceR)).replace('₦','₦')}</td>
-                    <td style="max-width:260px;white-space:pre-wrap;font-size:11px;line-height:1.5;">${r.expenditureDetails||'—'}</td>
+                    <td style="max-width:260px;white-space:pre-wrap;font-size:11px;line-height:1.5;">${escHtml(r.expenditureDetails||'—')}</td>
                     <td><span style="background:${r.status==='approved'?'#E8F5E9':r.status==='rejected'?'#FFEBEE':'#FFF3E0'};color:${r.status==='approved'?'#1B5E20':r.status==='rejected'?'#B71C1C':'#E65100'};padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">${r.status.toUpperCase()}</span></td>
                     <td>${fmtD(r.submittedDate)}</td>
                     <td>${r.reviewedBy||'—'}${r.reviewedAt?'<br><span style="font-size:10px;color:#777;">'+fmtD(r.reviewedAt)+'</span>':''}</td>
                     <td>${r.financeApprovedBy||'—'}${r.financeApproved?'<br><span style="font-size:10px;color:#777;">'+fmtD(r.financeApproved)+'</span>':''}</td>
                     <td style="font-weight:600;">${r.approvedBy||r.rejectedBy||'—'}${(r.approvedDate||r.rejectedDate)?'<br><span style="font-size:10px;color:#777;">'+fmtD(r.approvedDate||r.rejectedDate)+'</span>':''}</td>
-                    <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${r.rejectionReason||'—'}</td>
+                    <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${escHtml(r.rejectionReason||'—')}</td>
                     <td>${r.receiptFileUrl?`<a href="${r.receiptFileUrl}" target="_blank">📎 Receipt</a>`:'—'}</td>
                     <td>${r.invoiceFileUrl?`<a href="${r.invoiceFileUrl}" target="_blank">🧾 Invoice</a>`:'—'}</td>
                 </tr>`; }).join('');
@@ -5361,10 +5382,10 @@ tr:nth-child(even) td{background:#f9f9f9;}
 </div>
 ${cn.staffSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Staff Signature</div><img src="${cn.staffSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.staffName}</div></div>`:''}
 <h2>ACTIVITY DETAILS</h2>
-<div style="margin-bottom:10px;"><div class="lbl">Activity Title</div><div class="val" style="font-size:15px;">${cn.activityTitle}</div></div>
+<div style="margin-bottom:10px;"><div class="lbl">Activity Title</div><div class="val" style="font-size:15px;">${escHtml(cn.activityTitle)}</div></div>
 <div class="grid2">
-  <div><div class="lbl">Objective</div><div style="margin-top:4px;line-height:1.6;">${cn.objective||'—'}</div></div>
-  <div><div class="lbl">Description</div><div style="margin-top:4px;line-height:1.6;">${cn.description||'—'}</div></div>
+  <div><div class="lbl">Objective</div><div style="margin-top:4px;line-height:1.6;">${escHtml(cn.objective||'—')}</div></div>
+  <div><div class="lbl">Description</div><div style="margin-top:4px;line-height:1.6;">${escHtml(cn.description||'—')}</div></div>
 </div>
 ${cn.budgetBreakdown ? `<div style="margin:10px 0 16px;"><div class="lbl">Budget Breakdown</div><pre style="margin-top:6px;font-family:inherit;font-size:12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:6px;padding:12px 14px;white-space:pre-wrap;color:#374151;">${cn.budgetBreakdown}</pre></div>` : ''}
 ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E3F2FD;color:#0D47A1;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">📎 Budget Doc: <a href="${cn.budgetDocUrl}" target="_blank">${cn.budgetDocName||'Download'}</a></span></div>` : ''}
@@ -5372,10 +5393,10 @@ ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E
 <div class="grid3">
   <div><div class="lbl">Approved By</div><div class="val">${cn.approvedBy||'—'}</div></div>
   <div><div class="lbl">Approved Date</div><div class="val">${fmtD(cn.approvedDate)}</div></div>
-  <div><div class="lbl">Budget Owner Note</div><div class="val">${cn.budgetOwnerNote||'—'}</div></div>
+  <div><div class="lbl">Budget Owner Note</div><div class="val">${escHtml(cn.budgetOwnerNote||'—')}</div></div>
   <div><div class="lbl">Forwarded to ED</div><div class="val">${fmtD(cn.forwardedToED)}</div></div>
   <div><div class="lbl">Sent to Procurement</div><div class="val">${fmtD(cn.sentToProcurement)}</div></div>
-  <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${cn.rejectionReason||'—'}</div></div>
+  <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${escHtml(cn.rejectionReason||'—')}</div></div>
 </div>
 ${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
 ${exceptionSection}
@@ -5438,9 +5459,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                         style="background:#ECFDF5;border:2px solid #A7F3D0;border-radius:10px;padding:16px 20px;text-align:left;cursor:pointer;"
                                         onmouseover="this.style.borderColor='#285B3C';this.style.background='#D1FAE5'"
                                         onmouseout="this.style.borderColor='#A7F3D0';this.style.background='#ECFDF5'">
-                                        <div style="font-weight:700;color:#285B3C;font-size:14px;">${v.name}</div>
-                                        <div style="font-size:12px;color:#555;margin-top:4px;">${v.items||cn.activityTitle} · ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()} · GRR: ${gN}</div>
-                                        <div style="font-size:11px;color:#7B7B7B;margin-top:2px;">${v.phone||''}</div>
+                                        <div style="font-weight:700;color:#285B3C;font-size:14px;">${escHtml(v.name)}</div>
+                                        <div style="font-size:12px;color:#555;margin-top:4px;">${escHtml(v.items||cn.activityTitle)} · ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()} · GRR: ${gN}</div>
+                                        <div style="font-size:11px;color:#7B7B7B;margin-top:2px;">${escHtml(v.phone||'')}</div>
                                     </button>`;
                                 }).join('')}
                             </div>
@@ -5468,8 +5489,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 let _grrVendors = _gv ? [_gv] : [];
                 const itemRows = cn.requiresProcurement === 'yes'
                     ? (_grrVendors.length > 0
-                        ? _grrVendors.map((v, i) => { const qty = v.qty||1; const qualityBadge = v.quality==='Good'?'<span style="color:#047857;font-weight:700;">✅ Good</span>':v.quality==='Poor'?'<span style="color:#DC2626;font-weight:700;">❌ Poor</span>':'<span style="color:#D97706;font-weight:700;">⚠️ Partial</span>'; return `<tr><td>${i+1}</td><td>${String(v.items || cn.activityTitle).split('\n').filter(Boolean).map(x => x.trim()).join('<br>')}</td><td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:right">₦${(Number(v.amount||0)*qty).toLocaleString()}</td><td style="text-align:center">${qualityBadge}</td></tr>`; }).join('')
-                        : `<tr><td>1</td><td>${cn.vendorItemsSupplied || cn.activityTitle}</td><td>${cn.grrVendorName || '—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center"><span style="color:#047857;font-weight:700;">✅ Good</span></td></tr>`)
+                        ? _grrVendors.map((v, i) => { const qty = v.qty||1; const qualityBadge = v.quality==='Good'?'<span style="color:#047857;font-weight:700;">✅ Good</span>':v.quality==='Poor'?'<span style="color:#DC2626;font-weight:700;">❌ Poor</span>':'<span style="color:#D97706;font-weight:700;">⚠️ Partial</span>'; return `<tr><td>${i+1}</td><td>${escHtml(String(v.items || cn.activityTitle).split('\n').filter(Boolean).map(x => x.trim()).join('<br>'))}</td><td>${escHtml(v.name)}<br><span style="font-size:11px;color:#777;">${escHtml(v.phone||'')}</span></td><td style="text-align:right">₦${Number(v.amount||0).toLocaleString()}</td><td style="text-align:center">${qty}</td><td style="text-align:right">₦${(Number(v.amount||0)*qty).toLocaleString()}</td><td style="text-align:center">${qualityBadge}</td></tr>`; }).join('')
+                        : `<tr><td>1</td><td>${escHtml(cn.vendorItemsSupplied || cn.activityTitle)}</td><td>${escHtml(cn.grrVendorName || '—')}<br><span style="font-size:11px;color:#777;">${escHtml(cn.grrVendorPhone||'')}</span></td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center">1</td><td style="text-align:right">₦${Number(cn.actualProcurementCost || cn.estimatedCost).toLocaleString()}</td><td style="text-align:center"><span style="color:#047857;font-weight:700;">✅ Good</span></td></tr>`)
                     : '<tr><td colspan="7" style="text-align:center;color:#999;">No procurement items</td></tr>';
                 const _grrTotal = _grrVendors.length > 0
     ? _grrVendors.reduce((s, v) => s + (Number(v.amount || 0) * (v.qty || 1)), 0)
@@ -5487,7 +5508,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     <div class="vendor-sign-body">
                         <div style="background:#f5f5f5;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${cn.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${escHtml(cn.activityTitle)}</div></div>
                                 <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${cn.projectCode}</div></div>
                                 <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">GRR Number</div><div style="font-weight:600;margin-top:3px;">${grrNum}</div></div>
                                 <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Date</div><div style="font-weight:600;margin-top:3px;">${new Date().toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'})}</div></div>
@@ -5733,9 +5754,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                         style="background:#EEF2FF;border:2px solid #C7D2FE;border-radius:10px;padding:16px 20px;text-align:left;cursor:pointer;transition:all .2s;"
                                         onmouseover="this.style.borderColor='#1B4D8E';this.style.background='#E0E7FF'"
                                         onmouseout="this.style.borderColor='#C7D2FE';this.style.background='#EEF2FF'">
-                                        <div style="font-weight:700;color:#1B4D8E;font-size:14px;">${v.name}</div>
-                                        <div style="font-size:12px;color:#555;margin-top:4px;">${v.items||cn.activityTitle} · ₦${Number(v.amount||0).toLocaleString()} · PO: ${vpNum}</div>
-                                        <div style="font-size:11px;color:#7B7B7B;margin-top:2px;">${v.phone||''}</div>
+                                        <div style="font-weight:700;color:#1B4D8E;font-size:14px;">${escHtml(v.name)}</div>
+                                        <div style="font-size:12px;color:#555;margin-top:4px;">${escHtml(v.items||cn.activityTitle)} · ₦${Number(v.amount||0).toLocaleString()} · PO: ${vpNum}</div>
+                                        <div style="font-size:11px;color:#7B7B7B;margin-top:2px;">${escHtml(v.phone||'')}</div>
                                     </button>`;
                                 }).join('')}
                                 <div style="margin-top:12px;padding-top:12px;border-top:1px solid #E5E7EB;">
@@ -5743,7 +5764,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                     ${_poVendors.map((v,i) => `
                                         <button onclick="app._showRemoteVendorSignPO('${refNumber}',${i})"
                                             style="padding:8px 14px;background:none;border:1px solid #1B4D8E;border-radius:8px;color:#1B4D8E;font-size:12px;font-weight:600;cursor:pointer;margin-right:8px;margin-bottom:8px;">
-                                            📱 Remote link — ${v.name}
+                                            📱 Remote link — ${escHtml(v.name)}
                                         </button>`).join('')}
                                 </div>
                             </div>
@@ -5790,7 +5811,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         </div>` : ''}
                         <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${cn.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${escHtml(cn.activityTitle)}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${cn.projectCode}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${vendorPoNum}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">${_poVendors.length > 1 ? 'This Vendor Amount' : 'Total Value (Actual)'}</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
@@ -5801,9 +5822,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                             <thead style="background:#1B4D8E;"><tr><th>Description</th><th>Vendor</th><th>Invoice No.</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Amount (₦)</th></tr></thead>
                             <tbody>
                                 <tr>
-                                    <td>${v ? (v.items || cn.activityTitle) : (cn.vendorItemsSupplied||cn.activityTitle)}</td>
-                                    <td>${v ? v.name : (cn.grrVendorName||'—')}<br><span style="font-size:11px;color:#777;">${v ? (v.phone||'') : (cn.grrVendorPhone||'')}</span></td>
-                                    <td>${v ? (v.invoiceNo||'—') : (cn.vendorInvoiceNo||'—')}</td>
+                                    <td>${escHtml(v ? (v.items || cn.activityTitle) : (cn.vendorItemsSupplied||cn.activityTitle))}</td>
+                                    <td>${escHtml(v ? v.name : (cn.grrVendorName||'—'))}<br><span style="font-size:11px;color:#777;">${escHtml(v ? (v.phone||'') : (cn.grrVendorPhone||''))}</span></td>
+                                    <td>${escHtml(v ? (v.invoiceNo||'—') : (cn.vendorInvoiceNo||'—'))}</td>
                                     <td style="text-align:center;">${v ? (v.qty||1) : 1}</td>
                                     <td style="text-align:right;font-weight:600;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
                                 </tr>
@@ -5998,7 +6019,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     <div style="max-width:640px;margin:0 auto;padding:24px;">
                         <div style="background:#f5f5f5;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${tokenRow.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${escHtml(tokenRow.activityTitle)}</div></div>
                                 <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${tokenRow.projectCode}</div></div>
                                 <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">GRR Ref</div><div style="font-weight:600;margin-top:3px;">${tokenRow.grrNumber}</div></div>
                                 <div><div style="font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.4px;">Value</div><div style="font-weight:600;margin-top:3px;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</div></div>
@@ -6010,9 +6031,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                 let _rv = [];
                                 try { if (tokenRow.vendorsJson) _rv = JSON.parse(tokenRow.vendorsJson); } catch(e){}
                                 if (_rv.length > 0) {
-                                    return _rv.map((v,i) => `<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">${i+1}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.items||tokenRow.activityTitle}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}</td></tr>`).join('');
+                                    return _rv.map((v,i) => `<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">${i+1}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${escHtml(v.items||tokenRow.activityTitle)}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${escHtml(v.name)}<br><span style="font-size:11px;color:#777;">${escHtml(v.phone||'')}</span></td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}</td></tr>`).join('');
                                 }
-                                return `<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">1</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${tokenRow.description || tokenRow.activityTitle}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">—</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr>`;
+                                return `<tr><td style="padding:9px 12px;border-bottom:1px solid #eee;">1</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">${escHtml(tokenRow.description || tokenRow.activityTitle)}</td><td style="padding:9px 12px;border-bottom:1px solid #eee;">—</td><td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;">₦${Number(tokenRow.estimatedCost||0).toLocaleString()}</td></tr>`;
                             })()}</tbody>
                             <tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;padding:10px 12px;">Total</td><td style="text-align:right;font-weight:700;padding:10px 12px;">₦${(()=>{ let _rv=[]; try{if(tokenRow.vendorsJson)_rv=JSON.parse(tokenRow.vendorsJson);}catch(e){} return _rv.length>0 ? _rv.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0).toLocaleString (undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : Number(tokenRow.estimatedCost||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); })()}</td></tr></tfoot>
                         </table>
@@ -6148,14 +6169,14 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
 
                 const itemRowsHtml = v
                     ? `<tr>
-                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.items||tokenRow.activityTitle}</td>
-                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
-                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${v.invoiceNo||'—'}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${escHtml(v.items||tokenRow.activityTitle)}</td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${escHtml(v.name)}<br><span style="font-size:11px;color:#777;">${escHtml(v.phone||'')}</span></td>
+                        <td style="padding:9px 12px;border-bottom:1px solid #eee;">${escHtml(v.invoiceNo||'—')}</td>
                         <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:center;">${v.qty||1}</td>
                         <td style="padding:9px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
                       </tr>`
                     : `<tr>
-                        <td style="padding:9px 12px;">${tokenRow.activityTitle}</td>
+                        <td style="padding:9px 12px;">${escHtml(tokenRow.activityTitle)}</td>
                         <td style="padding:9px 12px;">—</td><td style="padding:9px 12px;">—</td>
                         <td style="padding:9px 12px;text-align:center;">1</td>
                         <td style="padding:9px 12px;text-align:right;font-weight:600;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
@@ -6172,7 +6193,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     <div style="max-width:640px;margin:0 auto;padding:24px;">
                         <div style="background:#f0f4ff;border-radius:10px;padding:16px 20px;margin-bottom:20px;font-size:13px;">
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${tokenRow.activityTitle}</div></div>
+                                <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Activity</div><div style="font-weight:600;margin-top:3px;">${escHtml(tokenRow.activityTitle)}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Project</div><div style="font-weight:600;margin-top:3px;">${tokenRow.projectCode}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">PO Number</div><div style="font-weight:600;margin-top:3px;color:#1B4D8E;">${vendorPoNum}</div></div>
                                 <div><div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.4px;">Your Amount</div><div style="font-weight:700;margin-top:3px;color:#1B4D8E;font-size:16px;">₦${vendorAmount.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
@@ -6434,7 +6455,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
 
 ${vendors.length > 1 ? `
 <div style="background:#E8EEF8;border:1px solid #C7D2FE;border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:#1B4D8E;font-weight:600;">
-  📄 PO ${vi+1} of ${vendors.length} — Vendor: <strong>${v.name}</strong>
+  📄 PO ${vi+1} of ${vendors.length} — Vendor: <strong>${escHtml(v.name)}</strong>
   &nbsp;|&nbsp; Grand Total across all vendors: <strong>₦${grandTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>
 </div>` : ''}
 
@@ -6457,7 +6478,7 @@ ${vendors.length > 1 ? `
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;padding:16px;background:#f5f8ff;border:1px solid #C7D2FE;border-radius:8px;">
-  <div><div class="label">Activity / Description</div><div class="value">${cn.activityTitle}</div></div>
+  <div><div class="label">Activity / Description</div><div class="value">${escHtml(cn.activityTitle)}</div></div>
   <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
   <div><div class="label">Concept Note Ref</div><div class="value">${cn.refNumber}</div></div>
   <div><div class="label">Staff / Requester</div><div class="value">${cn.staffName}</div></div>
@@ -6466,9 +6487,9 @@ ${vendors.length > 1 ? `
 <div style="padding:14px 16px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;margin-bottom:16px;font-size:13px;">
   <strong>Vendor / Supplier Details</strong><br>
   <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-    <div><div class="label">Name</div><div class="value">${v.name}</div></div>
-    <div><div class="label">Phone</div><div class="value">${v.phone||'—'}</div></div>
-    ${v.address ? `<div style="grid-column:1/-1"><div class="label">Address / Contact</div><div class="value" style="font-weight:400;">${v.address}</div></div>` : ''}
+    <div><div class="label">Name</div><div class="value">${escHtml(v.name)}</div></div>
+    <div><div class="label">Phone</div><div class="value">${escHtml(v.phone||'—')}</div></div>
+    ${v.address ? `<div style="grid-column:1/-1"><div class="label">Address / Contact</div><div class="value" style="font-weight:400;">${escHtml(v.address)}</div></div>` : ''}
   </div>
 </div>
 
@@ -6482,8 +6503,8 @@ ${vendors.length > 1 ? `
   </tr></thead>
   <tbody>
     <tr>
-      <td>${v.items || cn.activityTitle}</td>
-      <td>${v.invoiceNo||'—'}</td>
+      <td>${escHtml(v.items || cn.activityTitle)}</td>
+      <td>${escHtml(v.invoiceNo||'—')}</td>
       <td style="text-align:center;">${v.qty||1}</td>
       <td style="text-align:right;">₦${Number(v.amount||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td style="text-align:right;">₦${vendorTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
@@ -6503,13 +6524,13 @@ ${vendors.length > 1 ? `
 
 <div style="margin-top:14px;padding:12px 16px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;font-size:12px;color:#1B4D8E;">
   By signing below, all parties confirm this Purchase Order is accurate and authorised.
-  ${vendors.length > 1 ? `<strong>${v.name}</strong> is signing for their portion only (₦${vendorTotal.toLocaleString()}).` : ''}
+  ${vendors.length > 1 ? `<strong>${escHtml(v.name)}</strong> is signing for their portion only (₦${vendorTotal.toLocaleString()}).` : ''}
 </div>
 
 <div class="sig-grid">
   ${_sigBox('1. Staff / Requester', staffSig)}
   ${_sigBox('2. Budget Owner / Authorisation', boSig)}
-  ${_sigBox('3. Vendor — ' + v.name, vendorSig)}
+  ${escHtml(_sigBox('3. Vendor — ' + v.name, vendorSig))}
   ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
 
@@ -6599,17 +6620,17 @@ ${vendors.length > 1 ? `
 
                 const itemRows = vendors.length > 0
                     ? vendors.map(v => { const qty=v.qty||1; const qBadge=v.quality==='Poor'?'❌ Poor':v.quality==='Partial'?'⚠️ Partial':'✅ Good'; return `<tr>
-                        <td>${v.items||cn.activityTitle}</td>
-                        <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
-                        <td>${v.invoiceNo||'—'}</td>
+                        <td>${escHtml(v.items||cn.activityTitle)}</td>
+                        <td>${escHtml(v.name)}<br><span style="font-size:11px;color:#777;">${escHtml(v.phone||'')}</span></td>
+                        <td>${escHtml(v.invoiceNo||'—')}</td>
                         <td style="text-align:center;">${qty}</td><td style="text-align:center;">${qty}</td>
                         <td style="text-align:right;">₦${(Number(v.amount||0)*qty).toLocaleString()}</td>
                         <td style="text-align:center;">${qBadge}</td>
                       </tr>`; }).join('')
                     : `<tr>
-                        <td>${cn.vendorItemsSupplied||cn.activityTitle}</td>
-                        <td>${cn.grrVendorName||'—'}<br><span style="font-size:11px;color:#777;">${cn.grrVendorPhone||''}</span></td>
-                        <td>${cn.vendorInvoiceNo||'—'}</td>
+                        <td>${escHtml(cn.vendorItemsSupplied||cn.activityTitle)}</td>
+                        <td>${escHtml(cn.grrVendorName||'—')}<br><span style="font-size:11px;color:#777;">${escHtml(cn.grrVendorPhone||'')}</span></td>
+                        <td>${escHtml(cn.vendorInvoiceNo||'—')}</td>
                         <td style="text-align:center;">1</td><td style="text-align:center;">1</td>
                         <td style="text-align:right;">₦${Number(cn.actualProcurementCost||cn.estimatedCost).toLocaleString()}</td>
                         <td style="text-align:center;">✅ Good</td>
@@ -6627,9 +6648,9 @@ ${vendors.length > 1 ? `
                 const vRows     = _gv2
                     ? (() => { const v=_gv2, qty=v.qty||1, qBadge=v.quality==='Poor'?'❌ Poor':v.quality==='Partial'?'⚠️ Partial':'✅ Good';
                         return `<tr>
-                        <td>${v.items||cn.activityTitle}</td>
-                        <td>${v.name}<br><span style="font-size:11px;color:#777;">${v.phone||''}</span></td>
-                        <td>${v.invoiceNo||'—'}</td>
+                        <td>${escHtml(v.items||cn.activityTitle)}</td>
+                        <td>${escHtml(v.name)}<br><span style="font-size:11px;color:#777;">${escHtml(v.phone||'')}</span></td>
+                        <td>${escHtml(v.invoiceNo||'—')}</td>
                         <td style="text-align:center;">${qty}</td><td style="text-align:center;">${qty}</td>
                         <td style="text-align:right;">₦${(Number(v.amount||0)*qty).toLocaleString()}</td>
                         <td style="text-align:center;">${qBadge}</td>
@@ -6674,7 +6695,7 @@ ${vendors.length > 1 ? `
   </div>
 </div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;padding:16px;background:#f9f9f9;border:1px solid #ddd;border-radius:6px;">
-  <div><div class="label">Concept Note / Activity</div><div class="value">${cn.activityTitle}</div></div>
+  <div><div class="label">Concept Note / Activity</div><div class="value">${escHtml(cn.activityTitle)}</div></div>
   <div><div class="label">Project Code</div><div class="value">${cn.projectCode}</div></div>
   <div><div class="label">CN Ref</div><div class="value">${refNumber}</div></div>
   <div><div class="label">Staff / Requester</div><div class="value">${cn.staffName}</div></div>
@@ -6879,11 +6900,11 @@ ${vendors.length > 1 ? `
                     }).eq('refNumber', refNumber);
                     if (error) throw error;
                     await this._logAudit('concept_notes', refNumber, 'quote_exception_requested',
-                        `${this.currentUser} declared a limited market for ${cn.activityTitle}. Reason: ${why}`);
+                        `${this.currentUser} declared a limited market for ${escHtml(cn.activityTitle)}. Reason: ${why}`);
                     const bos = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
                     for (const bo of bos) {
                         await this.createNotification(bo,
-                            `Procurement has requested a 3-quote exception on ${refNumber} (${cn.activityTitle}) — limited market. Approve or decline it from your Approvals screen.`,
+                            `Procurement has requested a 3-quote exception on ${refNumber} (${escHtml(cn.activityTitle)}) — limited market. Approve or decline it from your Approvals screen.`,
                             'warning', refNumber);
                     }
                     const li = this.data.conceptNotes.findIndex(x => x.refNumber === refNumber);
@@ -7169,7 +7190,7 @@ ${vendors.length > 1 ? `
                         }).eq('refNumber', refNumber);
 
                         await this.createNotification(cn.staffName,
-                            `Your concept note ${refNumber} (${cn.activityTitle}) had its cost variance approved by the Budget Owner. PO ${poNumber} has been generated and is ready for your signature.`,
+                            `Your concept note ${refNumber} (${escHtml(cn.activityTitle)}) had its cost variance approved by the Budget Owner. PO ${poNumber} has been generated and is ready for your signature.`,
                             'info', refNumber);
                         const procUsers = Object.entries(this.data.roles).filter(([,r]) => r === 'procurement').map(([n]) => n);
                         for (const p of procUsers) {
@@ -7640,7 +7661,7 @@ ${vendors.length > 1 ? `
                             data-date="${p.requestDate?.slice(0,10)||''}" data-status="${p.status||''}" data-project="${p.projectCode||''}"
                             style="border-bottom:1px solid var(--border);${rowBg}font-size:12px;">
                             <td style="padding:10px 12px;font-weight:700;color:var(--primary);">${p.refNumber}</td>
-                            <td style="padding:10px 12px;">${p.conceptNoteRef||'—'}<br><span style="font-size:10px;color:var(--text-muted);">${cn?.activityTitle?.slice(0,28)||''}</span></td>
+                            <td style="padding:10px 12px;">${p.conceptNoteRef||'—'}<br><span style="font-size:10px;color:var(--text-muted);">${escHtml(cn?.activityTitle?.slice(0,28)||'')}</span></td>
                             <td style="padding:10px 12px;">${p.staffName}</td>
                             <td style="padding:10px 12px;">${p.projectCode||'—'}</td>
                             <td style="padding:10px 12px;text-align:right;font-weight:700;">₦${Number(p.amount||0).toLocaleString()}</td>
@@ -7723,7 +7744,7 @@ ${vendors.length > 1 ? `
                             <td style="padding:10px 12px;text-align:right;">₦${Number(r.amountReturned||0).toLocaleString()}</td>
                             <td style="padding:10px 12px;text-align:right;font-weight:700;color:${varColour};">${variance===0?'—':(variance>0?'+':'')}₦${Math.abs(variance).toLocaleString()}</td>
                             <td style="padding:10px 12px;"><span class="status-badge ${r.status==='approved'?'status-approved':r.status==='pending'?'status-pending':'status-rejected'}" style="font-size:10px;">${r.status}</span></td>
-                            <td style="padding:10px 12px;font-size:11px;color:var(--text-muted);">${r.approvedBy||r.rejectedBy||'—'}<br>${r.approvedDate?new Date(r.approvedDate).toLocaleDateString('en-NG'):r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString('en-NG'):''}${r.rejectionReason?`<br><span style="color:#e53935;">${r.rejectionReason.slice(0,40)}</span>`:''}</td>
+                            <td style="padding:10px 12px;font-size:11px;color:var(--text-muted);">${r.approvedBy||r.rejectedBy||'—'}<br>${r.approvedDate?new Date(r.approvedDate).toLocaleDateString('en-NG'):r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString('en-NG'):''}${r.rejectionReason?`<br><span style="color:#e53935;">${escHtml(r.rejectionReason.slice(0,40))}</span>`:''}</td>
                             <td style="padding:10px 12px;">
                                 ${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="font-size:10px;padding:3px 8px;white-space:nowrap;border-color:var(--primary);color:var(--primary);display:block;margin-bottom:4px;">📄 View CN</button>`:''}
                                 ${cnRef?`<button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="font-size:10px;padding:3px 8px;white-space:nowrap;border-color:#7B1FA2;color:#7B1FA2;display:block;">⬇ Dossier</button>`:'—'}
@@ -7794,7 +7815,7 @@ ${vendors.length > 1 ? `
                         const pay = allPay.find(p=>p.refNumber===r.paymentRef);
                         const advance = pay?.amount||0;
                         const variance = (r.actualSpent||0)-advance;
-                        return [r.refNumber,r.paymentRef||'',pay?.conceptNoteRef||'',r.staffName,advance,r.actualSpent||0,r.amountReturned||0,variance,r.status,r.approvedDate||'',r.approvedBy||'',`"${r.rejectionReason||''}"`];
+                        return [r.refNumber,r.paymentRef||'',pay?.conceptNoteRef||'',r.staffName,advance,r.actualSpent||0,r.amountReturned||0,variance,r.status,r.approvedDate||'',r.approvedBy||'',`"${escHtml(r.rejectionReason||'')}"`];
                     })].map(r=>r.join(',')).join('\n');
                     const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = 'retirements_ledger.csv'; a.click(); return;
                 }
