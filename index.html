@@ -739,7 +739,8 @@
             _financeStageLabel(s) { return { reviewer: 'Review', approver: 'Approve', authorizer: 'Authorize & Pay' }[s] || s; },
             _financeStatusAfterStage(s) { return { reviewer: 'reviewed', approver: 'finance_approved', authorizer: 'paid' }[s]; },
             _financeStageForCurrentStatus(status) { return { pending: 'reviewer', reviewed: 'approver', finance_approved: 'authorizer' }[status] || null; },
-            _financeOfficerForStage(stage) { return Object.entries(this.data.financeStages).find(([, s]) => s === stage)?.[0] || null; },
+            _financeOfficersForStage(stage) { return Object.entries(this.data.financeStages).filter(([, s]) => s === stage).map(([n]) => n); },
+            _financeOfficerForStage(stage) { return this._financeOfficersForStage(stage).join(' or ') || null; },
             _canActOnFinanceStage(stage) { return this.getFinanceStage(this.currentUser) === stage; },
             _financeStatusLabel(status) {
                 return { pending: 'Awaiting Review', reviewed: 'Awaiting Approval', finance_approved: 'Awaiting Authorization', paid: 'Paid', approved: 'Approved', rejected: 'Rejected' }[status] || status;
@@ -839,9 +840,11 @@
                         await this.createNotification(payment.staffName, `Your payment of ₦${payment.amount.toLocaleString()} (${refNumber}) has been processed!`, 'success', refNumber);
                         alert(`Payment of ₦${payment.amount.toLocaleString()} authorized and processed successfully!`);
                     } else {
-                        const nextOfficer = this._financeOfficerForStage(stage === 'reviewer' ? 'approver' : 'authorizer');
-                        if (nextOfficer) await this.createNotification(nextOfficer, `Payment ${refNumber} (₦${payment.amount.toLocaleString()}) has been ${stage === 'reviewer' ? 'reviewed' : 'approved'} and is awaiting your ${stage === 'reviewer' ? 'approval' : 'authorization'}.`, 'info', refNumber);
-                        alert(`Payment ${this._financeStageLabel(stage).toLowerCase()}d. ${nextOfficer ? nextOfficer + ' has been notified.' : ''}`);
+                        const nextOfficers = this._financeOfficersForStage(stage === 'reviewer' ? 'approver' : 'authorizer');
+                        for (const off of nextOfficers) {
+                            await this.createNotification(off, `Payment ${refNumber} (₦${payment.amount.toLocaleString()}) has been ${stage === 'reviewer' ? 'reviewed' : 'approved'} and is awaiting your ${stage === 'reviewer' ? 'approval' : 'authorization'}.`, 'info', refNumber);
+                        }
+                        alert(`Payment ${this._financeStageLabel(stage).toLowerCase()}d. ${nextOfficers.length ? nextOfficers.join(' and ') + ' have been notified.' : ''}`);
                     }
                     await this.loadData(); this.showView('approvals');
                 } catch (error) { console.error('Finance stage error:', error); alert('Error processing: ' + error.message); }
@@ -896,9 +899,11 @@
                         await this.createNotification(retirement.staffName, `Your retirement ${refNumber} has been approved by Finance.`, 'success', retirement.paymentRef || refNumber);
                         alert('Retirement authorized and approved successfully!');
                     } else {
-                        const nextOfficer = this._financeOfficerForStage(stage === 'reviewer' ? 'approver' : 'authorizer');
-                        if (nextOfficer) await this.createNotification(nextOfficer, `Retirement ${refNumber} has been ${stage === 'reviewer' ? 'reviewed' : 'approved'} and is awaiting your ${stage === 'reviewer' ? 'approval' : 'authorization'}.`, 'info', retirement.paymentRef || refNumber);
-                        alert(`Retirement ${this._financeStageLabel(stage).toLowerCase()}d. ${nextOfficer ? nextOfficer + ' has been notified.' : ''}`);
+                        const nextOfficers = this._financeOfficersForStage(stage === 'reviewer' ? 'approver' : 'authorizer');
+                        for (const off of nextOfficers) {
+                            await this.createNotification(off, `Retirement ${refNumber} has been ${stage === 'reviewer' ? 'reviewed' : 'approved'} and is awaiting your ${stage === 'reviewer' ? 'approval' : 'authorization'}.`, 'info', retirement.paymentRef || refNumber);
+                        }
+                        alert(`Retirement ${this._financeStageLabel(stage).toLowerCase()}d. ${nextOfficers.length ? nextOfficers.join(' and ') + ' have been notified.' : ''}`);
                     }
                     await this.loadData(); this.showView('approvals');
                 } catch (error) { console.error('Finance stage error:', error); alert('Error processing: ' + error.message); }
@@ -2042,8 +2047,14 @@
                 const detailsDiv = document.getElementById('conceptNoteDetails');
                 const contentDiv = document.getElementById('cnDetailsContent');
                 if (cn && detailsDiv && contentDiv) {
+                    const paidSoFar = this.data.payments
+                        .filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid')
+                        .reduce((s,p) => s + Number(p.amount||0), 0);
                     detailsDiv.style.display = 'block';
-                    contentDiv.innerHTML = `...<strong>Balance Remaining:</strong> ₦${(cn.estimatedCost - paidSoFar).toLocaleString()}`;
+                    contentDiv.innerHTML = `<strong>${cn.activityTitle}</strong> (${cn.refNumber})<br>
+                        Estimated Cost: ₦${cn.estimatedCost.toLocaleString()} ·
+                        Already Paid: ₦${paidSoFar.toLocaleString()} ·
+                        <strong>Balance Remaining: ₦${(cn.estimatedCost - paidSoFar).toLocaleString()}</strong>`;
                 }
             },
             
@@ -4824,14 +4835,13 @@ if (role === 'procurement') {
         pays = data || [];
     } catch(e) { alert('Could not load payments: ' + e.message); return; }
 
-    // Only payments authorised by the designated authorizer. Status alone isn't
+    // Only payments authorised by a designated authorizer. Status alone isn't
     // enough — legacy payments were marked 'paid' by the old single-step flow
     // without passing through the reviewer → approver → authorizer chain.
-    const authorizer = Object.entries(this.data.financeStages || {})
-        .find(([, s]) => s === 'authorizer')?.[0] || null;
-    const scope = pays.filter(p => p.status === 'paid' && p.processedBy === authorizer);
+    const authorizers = this._financeOfficersForStage('authorizer');
+    const scope = pays.filter(p => p.status === 'paid' && authorizers.includes(p.processedBy));
     if (!scope.length) {
-        alert(`No payments authorised by ${authorizer || 'the authorizer'} were found.`);
+        alert(`No payments authorised by ${authorizers.join(' or ') || 'the authorizer'} were found.`);
         return;
     }
 
@@ -4864,7 +4874,7 @@ if (role === 'procurement') {
     const csv = [
         ['RAHAMA Girl Child & Women Empowerment Initiative'].map(csvEscape).join(','),
         ['Payment Schedule — Authorised Payments'].map(csvEscape).join(','),
-        ['Authorised by', authorizer || ''].map(csvEscape).join(','),
+        ['Authorised by', authorizers.join(' or ') || ''].map(csvEscape).join(','),
         ['Generated', new Date().toLocaleString('en-NG')].map(csvEscape).join(','),
         ['Generated by', this.currentUser || ''].map(csvEscape).join(','),
         ['Payment lines', rows.length].map(csvEscape).join(','),
@@ -5508,7 +5518,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         <div style="font-size:11px;color:#777;margin-top:6px;text-align:center;">Draw signature above — use finger on touchscreen or mouse on desktop</div>
 
                         <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
-                            <button class="btn btn-primary" onclick="app._submitVendorGRRSignature('${refNumber}')" style="flex:1;min-width:160px;">✓ Confirm &amp; Sign GRR</button>
+                            <button class="btn btn-primary" onclick="app._submitVendorGRRSignature('${refNumber}', ${_gvi})" style="flex:1;min-width:160px;">✓ Confirm &amp; Sign GRR</button>
                             <button class="btn btn-secondary" onclick="app._clearVendorCanvas()" style="min-width:100px;">Clear</button>
                             <button class="btn btn-secondary" onclick="app._showRemoteVendorSign('${refNumber}', ${_gvi})" style="min-width:160px;border-color:#059669;color:#059669;">📱 Remote Sign Link</button>
                         </div>
@@ -5553,9 +5563,16 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 c._hasMark = false;
             },
 
-            async _submitVendorGRRSignature(refNumber) {
+            async _submitVendorGRRSignature(refNumber, vendorIndex) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
+                // Recomputed here rather than reused from vendorSignGRR() — that
+                // function's local variables don't survive between calls, they
+                // only exist while it's running. This mirrors the same pattern
+                // already used correctly in _submitVendorPOSignature.
+                let _pickVendors = [];
+                try { if (cn.vendorsJson) _pickVendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const _gvi = vendorIndex !== undefined ? vendorIndex : 0;
                 const vendorName = document.getElementById('vendorNameInput')?.value?.trim();
                 const vendorPhone = document.getElementById('vendorPhoneInput')?.value?.trim();
                 const fc = document.getElementById('vendorSigCanvas');
