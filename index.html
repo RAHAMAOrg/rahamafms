@@ -1357,19 +1357,19 @@
                 const bg = cleared ? '#F1F8F4' : denied ? '#FFEBEE' : '#FFF8E1';
                 const bd = cleared ? '#A5D6A7' : denied ? '#FFCDD2' : '#FFD54F';
                 const hd = cleared ? '#1B5E20' : denied ? '#B71C1C' : '#E65100';
-                const fld = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;">${v||'—'}</div></div>`;
+                const fld = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;white-space:pre-wrap;">${escHtml(v)||'—'}</div></div>`;
                 return `<div class="form-group full-width" style="background:${bg};border:2px solid ${bd};border-radius:10px;padding:20px;">
                     <label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${hd};margin-bottom:14px;display:block;">
                         🚗 Travel &amp; Security Clearance — ${cleared ? '✅ CLEARED' : denied ? '❌ DENIED' : '⏳ AWAITING CLEARANCE'}</label>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;">
-                        ${escHtml(fld('Destination', t.destination))}
-                        ${escHtml(fld('Type of Travel', t.travelType))}
+                        ${fld('Destination', t.destination)}
+                        ${fld('Type of Travel', t.travelType)}
                         ${fld('Travellers', t.travellers)}
                         ${fld('Departure', t.departDate)}
                         ${fld('Return', t.returnDate)}
-                        ${escHtml(fld('Accommodation', t.accommodation))}
+                        ${fld('Accommodation', t.accommodation)}
                     </div>
-                    <div style="margin-top:14px;">${escHtml(fld('Route Proposed', t.route))}</div>
+                    <div style="margin-top:14px;">${fld('Route Proposed', t.route)}</div>
                     ${cleared ? `
                     <div style="border-top:1px solid ${bd};margin-top:18px;padding-top:16px;">
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:14px;">
@@ -1581,7 +1581,7 @@
                 let t = {};
                 try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e) {}
                 const content = document.getElementById('mainContent');
-                const row = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;">${v||'—'}</div></div>`;
+                const row = (l,v) => `<div><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">${l}</div><div style="font-weight:600;font-size:13px;margin-top:2px;white-space:pre-wrap;">${escHtml(v)||'—'}</div></div>`;
                 content.innerHTML = `
                     <div class="header"><h2>🛡️ Security Clearance</h2>
                         <p>Review the travel request and issue clearance before procurement or payment proceeds</p></div>
@@ -1589,19 +1589,19 @@
                     <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
                         <div style="font-weight:700;color:#E65100;font-size:14px;margin-bottom:14px;">🚗 Travel Request — ${cn.refNumber}</div>
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;">
-                            ${escHtml(row('Activity', cn.activityTitle))}
+                            ${row('Activity', cn.activityTitle)}
                             ${row('Requested By', cn.staffName)}
                             ${row('Project', cn.projectCode)}
-                            ${escHtml(row('Destination', t.destination))}
-                            ${escHtml(row('Proposed Route', t.route))}
-                            ${escHtml(row('Type of Travel', t.travelType))}
+                            ${row('Destination', t.destination)}
+                            ${row('Proposed Route', t.route)}
+                            ${row('Type of Travel', t.travelType)}
                             ${row('Travellers', t.travellers)}
                             ${row('Departure', t.departDate)}
                             ${row('Return', t.returnDate)}
-                            ${escHtml(row('Accommodation', t.accommodation))}
+                            ${row('Accommodation', t.accommodation)}
                         </div>
-                        ${t.travellerNames ? `<div style="margin-top:14px;">${escHtml(row('Names of Travellers', String(t.travellerNames).replace(/\n/g,', ')))}</div>` : ''}
-                        ${t.purpose ? `<div style="margin-top:14px;">${escHtml(row('Purpose', t.purpose))}</div>` : ''}
+                        ${t.travellerNames ? `<div style="margin-top:14px;">${row('Names of Travellers', String(t.travellerNames).replace(/\n/g,', '))}</div>` : ''}
+                        ${t.purpose ? `<div style="margin-top:14px;">${row('Purpose', t.purpose)}</div>` : ''}
                     </div>
 
                     <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
@@ -1616,10 +1616,10 @@
                             ${row('Requires Procurement', cn.requiresProcurement === 'yes' ? 'Yes' : 'No')}
                             ${row('Submitted', cn.submittedDate ? new Date(cn.submittedDate).toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'}) : '—')}
                         </div>
-                        ${cn.objective ? `<div style="margin-top:16px;">${escHtml(row('Objective', String(cn.objective).replace(/\n/g,'<br>')))}</div>` : ''}
-                        ${cn.description ? `<div style="margin-top:14px;">${escHtml(row('Description', String(cn.description).replace(/\n/g,'<br>')))}</div>` : ''}
-                        ${cn.budgetBreakdown ? `<div style="margin-top:14px;"><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">Budget Breakdown</div><pre style="font-size:12px;white-space:pre-wrap;font-family:inherit;margin-top:4px;color:#374151;">${cn.budgetBreakdown}</pre></div>` : ''}
-                        ${cn.budgetOwnerNote ? `<div style="margin-top:14px;">${escHtml(row('Budget Owner Note', cn.budgetOwnerNote))}</div>` : ''}
+                        ${cn.objective ? `<div style="margin-top:16px;white-space:pre-wrap;">${row('Objective', cn.objective)}</div>` : ''}
+                        ${cn.description ? `<div style="margin-top:14px;">${row('Description', cn.description)}</div>` : ''}
+                        ${cn.budgetBreakdown ? `<div style="margin-top:14px;"><div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.4px;">Budget Breakdown</div><pre style="font-size:12px;white-space:pre-wrap;font-family:inherit;margin-top:4px;color:#374151;">${escHtml(cn.budgetBreakdown)}</pre></div>` : ''}
+                        ${cn.budgetOwnerNote ? `<div style="margin-top:14px;">${row('Budget Owner Note', cn.budgetOwnerNote)}</div>` : ''}
                     </div>
 
                     <form class="form-grid" onsubmit="app.submitSecurityClearance(event,'${refNumber}')">
@@ -6412,21 +6412,21 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
 
                 const _sigBox = (label, sig) => {
                     if (!sig) return `<div>
-                        <div class="label">${label}</div>
+                        <div class="label">${escHtml(label)}</div>
                         <div style="height:60px;border-bottom:2px dashed #bbb;margin-top:8px;width:200px;"></div>
                         <span style="font-size:11px;color:#aaa;">Awaiting signature</span>
                     </div>`;
                     if (sig.signatureData) return `<div>
-                        <div class="label">${label}</div>
+                        <div class="label">${escHtml(label)}</div>
                         <img src="${sig.signatureData}" style="height:60px;display:block;margin-top:8px;border-bottom:2px solid #285B3C;max-width:220px;">
-                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
+                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${escHtml(sig.signerName)||''}</span>
                         <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) : ''}</span>
                     </div>`;
                     // name-only (e.g. remote sign fallback)
                     return `<div>
-                        <div class="label">${label}</div>
+                        <div class="label">${escHtml(label)}</div>
                         <div style="height:60px;border-bottom:2px solid #285B3C;margin-top:8px;display:flex;align-items:flex-end;padding-bottom:4px;">
-                            <span style="font-size:13px;font-style:italic;color:#285B3C;">✓ ${sig.signerName||'Signed'}</span>
+                            <span style="font-size:13px;font-style:italic;color:#285B3C;">✓ ${escHtml(sig.signerName)||'Signed'}</span>
                         </div>
                         <span style="font-size:10px;color:#777;display:block;margin-top:3px;">${sig.signedAt ? new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}) : ''}</span>
                     </div>`;
@@ -6546,7 +6546,7 @@ ${vendors.length > 1 ? `
 <div class="sig-grid">
   ${_sigBox('1. Staff / Requester', staffSig)}
   ${_sigBox('2. Budget Owner / Authorisation', boSig)}
-  ${escHtml(_sigBox('3. Vendor — ' + v.name, vendorSig))}
+  ${_sigBox('3. Vendor — ' + v.name, vendorSig)}
   ${_sigBox('4. Finance Confirmation', finSig)}
 </div>
 
@@ -6613,19 +6613,19 @@ ${vendors.length > 1 ? `
 
                 const _sigBox = (label, sig) => {
                     if (!sig) return `<div>
-                        <div class="label">${label}</div>
+                        <div class="label">${escHtml(label)}</div>
                         <div style="height:64px;border-bottom:2px dashed #ccc;margin-top:8px;"></div>
                         <span style="font-size:11px;color:#aaa;">Awaiting signature</span>
                     </div>`;
                     if (sig.signatureData) return `<div>
-                        <div class="label">${label}</div>
+                        <div class="label">${escHtml(label)}</div>
                         <img src="${sig.signatureData}" style="height:64px;display:block;margin-top:8px;border-bottom:2px solid #285B3C;max-width:100%;">
-                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${sig.signerName||''}</span>
+                        <span style="font-size:11px;color:#285B3C;font-weight:600;">${escHtml(sig.signerName)||''}</span>
                         <span style="font-size:10px;color:#777;display:block;">${sig.signedAt ? new Date(sig.signedAt).toLocaleString('en-NG') : ''}</span>
                     </div>`;
                     // Vendor signed remotely (no canvas sig image, but name+timestamp)
                     return `<div>
-                        <div class="label">${label}</div>
+                        <div class="label">${escHtml(label)}</div>
                         <div style="height:64px;border-bottom:2px solid #285B3C;margin-top:8px;display:flex;align-items:flex-end;padding-bottom:4px;">
                             <span style="font-size:13px;font-style:italic;color:#285B3C;">✓ Signed remotely</span>
                         </div>
