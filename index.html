@@ -3833,9 +3833,18 @@ if (role === 'procurement') {
                 // Prior partial deliveries against this PO — used to show what's left per vendor line
                 let receivedRounds = [];
                 try { if (cn.receivedJson) receivedRounds = JSON.parse(cn.receivedJson); } catch(e) {}
-                const _getReceivedQty = (vendorIndex) => receivedRounds.reduce((s,r) =>
+                // If Finance rejected the round that just closed this PO out, that round's
+                // "receiving" has to become editable again — otherwise every line reads as
+                // fully received (remaining=0), no input renders, and the CN can never be
+                // resubmitted. Treat the rejected round as "in progress" by excluding it
+                // from the received-so-far totals, and prefill each field with what was
+                // submitted last time so Procurement can correct and resend.
+                const isFinanceResubmission = !!cn.financeRejectionReason && receivedRounds.length > 0;
+                const lastRound   = isFinanceResubmission ? receivedRounds[receivedRounds.length - 1] : null;
+                const priorRounds = isFinanceResubmission ? receivedRounds.slice(0, -1) : receivedRounds;
+                const _getReceivedQty = (vendorIndex) => priorRounds.reduce((s,r) =>
                     s + (r.lines||[]).filter(l => l.vendorIndex === vendorIndex).reduce((ss,l) => ss + (Number(l.qtyReceived)||0), 0), 0);
-                const roundsSoFar = receivedRounds.length;
+                const roundsSoFar = priorRounds.length;
                 const cumulativeReceivedValue = Number(cn.actualProcurementCost || 0);
                 const poBalance = poTotal - cumulativeReceivedValue;
 
@@ -3845,6 +3854,9 @@ if (role === 'procurement') {
                     const receivedSoFar = _getReceivedQty(i);
                     const remaining     = Math.max(0, orderedQty - receivedSoFar);
                     const isComplete    = remaining <= 0;
+                    const lastLine      = isFinanceResubmission ? (lastRound.lines||[]).find(l => l.vendorIndex === i) : null;
+                    const receivingDefault = lastLine ? Math.min(Number(lastLine.qtyReceived)||0, remaining) : remaining;
+                    if (lastLine) v.quality = lastLine.quality || v.quality;
                     return `<div id="vendorBlock_${id}" style="background:${isComplete?'#F3F4F6':'#F0FDF4'};border:1px solid ${isComplete?'#D1D5DB':'#A7F3D0'};border-radius:10px;padding:16px;margin-bottom:12px;">
                         <div style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
                             <strong style="color:${isComplete?'#6B7280':'#047857'};font-size:13px;">Vendor ${id} — locked from PO</strong>
@@ -3860,7 +3872,7 @@ if (role === 'procurement') {
                             <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Received So Far</label><input type="number" value="${receivedSoFar}" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#F3F4F6;"></div>
                             <div>${isComplete
                                 ? `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Status</label><div style="padding:10px 12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;color:#047857;font-weight:700;font-size:13px;">✅ Complete — nothing more to receive</div>`
-                                : `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Receiving Now <span style="color:var(--danger)">*</span> <span style="font-weight:400;color:#6B7280;">(max ${remaining})</span></label><input type="number" id="vReceiving_${id}" min="0" max="${remaining}" step="1" value="${remaining}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._clampReceivingInput(this, ${remaining})">`}
+                                : `<label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Receiving Now <span style="color:var(--danger)">*</span> <span style="font-weight:400;color:#6B7280;">(max ${remaining})</span></label><input type="number" id="vReceiving_${id}" min="0" max="${remaining}" step="1" value="${receivingDefault}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;" oninput="app._clampReceivingInput(this, ${remaining})">`}
                             </div>
                             ${isComplete ? '' : `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition of This Delivery <span style="color:var(--danger)">*</span></label><select id="vQuality_${id}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good"${v.quality==='Good'?' selected':''}>✅ Good</option><option value="Partial"${v.quality==='Partial'?' selected':''}>⚠️ Partial / Minor Issues</option><option value="Poor"${v.quality==='Poor'?' selected':''}>❌ Poor / Rejected</option></select></div>`}
                             <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_${id}" rows="2" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;background:#F3F4F6;">${escHtml((v.address||''))}</textarea></div>
@@ -4103,7 +4115,13 @@ if (role === 'procurement') {
                 // Everything received in previous rounds — used to compute what's left.
                 let receivedRounds = [];
                 try { if (cn.receivedJson) receivedRounds = JSON.parse(cn.receivedJson); } catch(e) {}
-                const getReceivedQty = (vi) => receivedRounds.reduce((s,r) =>
+                // Mirror the render logic: a Finance-rejected round that already closed
+                // the PO out must be treated as still-open, and corrected in place —
+                // not appended after — so we don't leave a duplicate round on file.
+                const isFinanceResubmission = !!cn.financeRejectionReason && receivedRounds.length > 0;
+                const lastRound   = isFinanceResubmission ? receivedRounds[receivedRounds.length - 1] : null;
+                const priorRounds = isFinanceResubmission ? receivedRounds.slice(0, -1) : receivedRounds;
+                const getReceivedQty = (vi) => priorRounds.reduce((s,r) =>
                     s + (r.lines||[]).filter(l => l.vendorIndex === vi).reduce((ss,l) => ss + (Number(l.qtyReceived)||0), 0), 0);
 
                 // What's being received THIS round, per vendor line.
@@ -4151,8 +4169,14 @@ if (role === 'procurement') {
 
                 // Does this round finish every vendor line on the PO?
                 const isFullyReceived = merged.every(v => (v.receivedSoFar + v.receivingNow) >= (v.orderedQty - 0.001));
-                const roundNumber = receivedRounds.length + 1;
-                const cumulativeActualCost = Number(cn.actualProcurementCost || 0) + roundCost;
+                // Resubmitting after a Finance rejection corrects the same round rather
+                // than adding a new one — reuse its number so we don't leave a phantom
+                // tranche on file, and back its cost out of the running total first so
+                // it isn't counted twice.
+                const roundNumber = isFinanceResubmission ? lastRound.round : (priorRounds.length + 1);
+                const lastRoundCost = isFinanceResubmission
+                    ? (lastRound.lines||[]).reduce((s,l) => s + (Number(l.amount)||0), 0) : 0;
+                const cumulativeActualCost = Number(cn.actualProcurementCost || 0) - lastRoundCost + roundCost;
 
                 try {
                     submitBtn.disabled = true; submitBtn.textContent = 'Uploading documents...';
@@ -4170,8 +4194,19 @@ if (role === 'procurement') {
                     // First delivery keeps the plain GRR number; subsequent partial
                     // deliveries get their own -R2, -R3… so each tranche has its own
                     // signable document, while the base number stays the PO's GRR.
-                    const grrNumber = roundNumber > 1 ? `${baseGrr}-R${roundNumber}` : baseGrr;
+                    // On a Finance-rejected resubmission we reuse that same tranche's
+                    // GRR number rather than minting a new one.
+                    const grrNumber = isFinanceResubmission ? lastRound.grrNumber
+                        : (roundNumber > 1 ? `${baseGrr}-R${roundNumber}` : baseGrr);
                     const now       = new Date().toISOString();
+
+                    if (isFinanceResubmission) {
+                        // Clear out the signatures from the rejected cycle so the
+                        // Procurement → Staff → Vendor → Finance chain can restart
+                        // clean on the corrected GRR.
+                        await supabaseClient.from('document_signatures')
+                            .delete().eq('docRef', grrNumber);
+                    }
 
                     const newRound = {
                         round: roundNumber, date: now, receivedBy: this.currentUser, grrNumber,
@@ -4184,7 +4219,7 @@ if (role === 'procurement') {
                         receiptUrl: procReceiptData?.url || null, receiptName: procReceiptData?.fileName || null,
                         notes
                     };
-                    const updatedReceivedJson = JSON.stringify([...receivedRounds, newRound]);
+                    const updatedReceivedJson = JSON.stringify([...priorRounds, newRound]);
 
                     const cnUpdates = {
                         receivedJson: updatedReceivedJson,
