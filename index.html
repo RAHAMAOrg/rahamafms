@@ -2668,12 +2668,18 @@ if (role === 'procurement') {
                             const dateB = new Date(b.approvedDate || b.rejectedDate || b.forwardedToED || b.submittedDate || 0);
                             return dateB - dateA;
                         });
-                        // Find CNs with a poNumber that have staff_po signed but NOT budget_owner_po signed yet
+                        // Find CNs with a poNumber that have staff_po signed but NOT budget_owner_po signed yet.
+                        // Previously this required status='approved' — but a procurement-required CN stays
+                        // 'pending' for the entire time it's actually going through procurement (creating
+                        // the PO, waiting on signatures, receiving goods), and only becomes 'approved' at
+                        // the very end, after the purchase is already done. That meant Budget Owner would
+                        // never see a PO here while it actually needed pre-purchase authorization. Now this
+                        // only excludes concept notes that are genuinely dead-ended.
                         const { data: cnsWithPO } = await supabaseClient
                             .from('concept_notes').select('*')
                             .not('poNumber', 'is', null)
                             .eq('requiresProcurement', 'yes')
-                            .eq('status', 'approved');
+                            .not('status', 'in', '("rejected","variance_rejected","variance_review","security_review")');
                         if (cnsWithPO && cnsWithPO.length > 0) {
                             const poNumbers = cnsWithPO.map(c => c.poNumber).filter(Boolean);
                             const { data: existingSigs } = await supabaseClient
