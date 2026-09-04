@@ -421,7 +421,7 @@
                         [auditBtn, superBtn, quarterlyBtn].forEach(b => b && (b.style.display = ''));
                     }
                     // Finance + Finance Manager: audit + reconciliation + quarterly
-                    if (role === 'finance' || role === 'finance_manager') {
+                    if (role === 'finance' || role === 'finance_manager' || role === 'GrantsCompliance') {
                         [auditBtn, reconcBtn, quarterlyBtn].forEach(b => b && (b.style.display = ''));
                     }
                     // Reconciliation role: only reconciliation view
@@ -695,7 +695,7 @@
                         this.data.payments = payments;
                         this.data.retirements = retirements;
                     }
-                    if (['budgetOwner','ed','finance','finance_manager'].includes(this.getUserRole())) {
+                    if (['budgetOwner','ed','finance','finance_manager','GrantsCompliance'].includes(this.getUserRole())) {
                         const { data: allPaymentsForReports } = await supabaseClient.from('payments').select('*');
                         if (allPaymentsForReports) {
                             const paymentMap = new Map();
@@ -710,7 +710,7 @@
                             this.data.retirements = Array.from(retMap.values());
                         }
                     }
-                    if (['finance','finance_manager'].includes(this.getUserRole())) {
+                    if (['finance','finance_manager','GrantsCompliance'].includes(this.getUserRole())) {
                         // Load ALL pending payments (includes procurement)
                         const { data: allPendingPay } = await supabaseClient.from('payments').select('*').in('status', ['pending','reviewed','finance_approved']);
                         if (allPendingPay) {
@@ -2635,7 +2635,7 @@ if (role === 'procurement') {
                 // POs awaiting Finance confirmation. Signature state is resolved
                 // asynchronously after render, so the list appears immediately.
                 const confirmedPOs = this.data.confirmedPOs || new Set();
-                const poAll = ['finance','finance_manager'].includes(role)
+                const poAll = ['finance','finance_manager','GrantsCompliance'].includes(role)
                     ? this.data.conceptNotes.filter(cn => cn.poNumber && !['rejected','variance_rejected'].includes(cn.status))
                     : [];
                 // Legacy POs were auto-generated at approval time under the old flow
@@ -2652,8 +2652,8 @@ if (role === 'procurement') {
                     ? this.data.conceptNotes.filter(cn => cn.travelRequired === 'yes' && cn.securityStatus === 'pending' && cn.status === 'security_review')
                     : [];
                 const financeActionableStatuses = ['pending','reviewed','finance_approved'];
-                const pendingPayments = this.data.payments.filter(p => financeActionableStatuses.includes(p.status) && ['finance','finance_manager'].includes(role));
-                const pendingRetirements = this.data.retirements.filter(r => financeActionableStatuses.includes(r.status) && ['finance','finance_manager'].includes(role));
+                const pendingPayments = this.data.payments.filter(p => financeActionableStatuses.includes(p.status) && ['finance','finance_manager','GrantsCompliance'].includes(role));
+                const pendingRetirements = this.data.retirements.filter(r => financeActionableStatuses.includes(r.status) && ['finance','finance_manager','GrantsCompliance'].includes(role));
                 let historyCNs = [], historyPayments = [], historyRetirements = [];
                 let pendingPOSignatures = []; // CNs where BO needs to sign PO
                 try {
@@ -2704,7 +2704,7 @@ if (role === 'procurement') {
                         const { data: completed } = await supabaseClient.from('concept_notes').select('*').eq('approvedBy', this.currentUser).not('procurementComplete', 'is', null).order('procurementComplete', { ascending: false }).limit(50);
                         historyCNs = completed || [];
                     }
-                    if (['finance','finance_manager'].includes(role)) {
+                    if (['finance','finance_manager','GrantsCompliance'].includes(role)) {
                         const { data: processedPay } = await supabaseClient.from('payments').select('*').eq('processedBy', this.currentUser).order('paidDate', { ascending: false }).limit(50);
                         const { data: rejectedPay } = await supabaseClient.from('payments').select('*').eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50);
                         const { data: approvedRet } = await supabaseClient.from('retirements').select('*').eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50);
@@ -3793,7 +3793,7 @@ if (role === 'procurement') {
                     // they are notified directly.
                     if (!wasEdit) {
                         const financeUsers = Object.entries(this.data.roles)
-                            .filter(([, r]) => ['finance','finance_manager'].includes(r))
+                            .filter(([, r]) => ['finance','finance_manager','GrantsCompliance'].includes(r))
                             .map(([n]) => n);
                         for (const f of financeUsers) {
                             await this.createNotification(f,
@@ -4383,7 +4383,7 @@ if (role === 'procurement') {
                                 if (myRole === 'procurement' && isProcurement && hasGRR)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>`;
                                 // Finance: confirm PO at commitment stage
-                                if (['finance','finance_manager'].includes(myRole) && isProcurement && hasPO)
+                                if (['finance','finance_manager','GrantsCompliance'].includes(myRole) && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app._financeSignPO('${cn.refNumber}')" style="border-color:#0D47A1;color:#0D47A1;">✍️ Confirm PO (Finance)</button>`;
                                 // Procurement: sign the PO they raised
                                 if (myRole === 'procurement' && isProcurement && hasPO)
@@ -4544,7 +4544,7 @@ if (role === 'procurement') {
             
             renderReports(content) {
                 const role = this.getUserRole();
-                if (!['budgetOwner','ed','procurement','finance','finance_manager'].includes(role)) { content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view reports.</p></div>`; return; }
+                if (!['budgetOwner','ed','procurement','finance','finance_manager','GrantsCompliance'].includes(role)) { content.innerHTML = `<div class="empty-state"><h3>Access Denied</h3><p>You don't have permission to view reports.</p></div>`; return; }
                 const allPayments = this.data.payments;
                 const allRetirements = this.data.retirements;
 
@@ -4603,7 +4603,7 @@ if (role === 'procurement') {
                     <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;">
                         <button class="btn btn-primary" onclick="app.exportPaymentsReport()">⬇ Download Pipeline Report (All Stages)</button>
                         <button class="btn btn-secondary" onclick="app.exportRetirementReport()">⬇ Download Retirement Report</button>
-                        ${['finance','finance_manager'].includes(this.getUserRole()) ? `
+                        ${['finance','finance_manager','GrantsCompliance'].includes(this.getUserRole()) ? `
                         <button class="btn btn-secondary" style="border-color:#0D47A1;color:#0D47A1;" onclick="app.exportPaymentSchedule()">💳 Payment Schedule (Authorised)</button>` : ''}
                     </div>
                     <div class="table-container"><table><thead><tr>
@@ -4660,7 +4660,7 @@ if (role === 'procurement') {
             // ══════════════════════════════════════════════════════════════
             async renderDonorPortal(content) {
                 const role = this.data.roles[this.currentUser];
-                if (!['donor','budgetOwner','ed','finance_manager'].includes(role)) {
+                if (!['donor','budgetOwner','ed','finance_manager','GrantsCompliance'].includes(role)) {
                     content.innerHTML = '<div class="empty-state"><h3>Access Denied</h3></div>'; return;
                 }
                 content.innerHTML = '<div class="header"><h2>🌍 Donor Portal</h2><p>Project expenditure overview</p></div><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
@@ -4708,7 +4708,7 @@ if (role === 'procurement') {
             // ══════════════════════════════════════════════════════════════
             async renderReconciliation(content) {
                 const role = this.data.roles[this.currentUser];
-                if (!['finance','finance_manager','reconciliation','budgetOwner','ed'].includes(role)) {
+                if (!['finance','finance_manager','GrantsCompliance','reconciliation','budgetOwner','ed'].includes(role)) {
                     content.innerHTML = '<div class="empty-state"><h3>Access Denied</h3></div>'; return;
                 }
                 content.innerHTML = '<div class="header"><h2>🏦 Bank Reconciliation</h2><p>Loading…</p></div><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
@@ -4779,7 +4779,7 @@ if (role === 'procurement') {
             // ══════════════════════════════════════════════════════════════
             renderQuarterlyReport(content) {
                 const role = this.data.roles[this.currentUser];
-                if (!['budgetOwner','ed','finance','finance_manager','reconciliation'].includes(role)) {
+                if (!['budgetOwner','ed','finance','finance_manager','GrantsCompliance','reconciliation'].includes(role)) {
                     content.innerHTML = '<div class="empty-state"><h3>Access Denied</h3></div>'; return;
                 }
                 const now = new Date();
@@ -7549,7 +7549,7 @@ ${vendors.length > 1 ? `
 
             async renderAuditTrail(content) {
                 const role = this.data.roles[this.currentUser];
-                const isAdmin = ['budgetOwner','ed','finance','finance_manager'].includes(role);
+                const isAdmin = ['budgetOwner','ed','finance','finance_manager','GrantsCompliance'].includes(role);
 
                 content.innerHTML = `
                 <div class="header">
