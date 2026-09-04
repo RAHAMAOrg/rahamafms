@@ -3704,7 +3704,7 @@ if (role === 'procurement') {
                     try {
                         submitBtn.disabled = true; submitBtn.textContent = 'Escalating…';
                         const now = new Date().toISOString();
-                        await supabaseClient.from('concept_notes').update({
+                        const { error: escError } = await supabaseClient.from('concept_notes').update({
                             status: 'variance_review',
                             currentApprover: 'budgetOwner',
                             actualProcurementCost: total,
@@ -3718,6 +3718,7 @@ if (role === 'procurement') {
                             financeRejectedBy: null,
                             vendorsJson: JSON.stringify(vendors)
                         }).eq('refNumber', refNumber);
+                        if (escError) throw escError;
 
                         await this._logAudit('concept_notes', refNumber, 'variance_escalated',
                             `${pctLabel}% over budget at PO stage. Proposed total: ₦${total.toLocaleString()}. Justification: ${justification.trim()}.`);
