@@ -408,7 +408,7 @@
                     if (el) el.innerText = user.name;
                     const role = this.getUserRole();
                     const btn = document.getElementById('reportsBtn');
-                    if (!['budgetOwner','ed','procurement','finance','finance_manager','donor','reconciliation'].includes(role)) {
+                    if (!['budgetOwner','ed', 'GrantsCompliance', 'procurement','finance','finance_manager','donor','reconciliation'].includes(role)) {
                         if (btn) btn.style.display = 'none';
                     }
                     const auditBtn      = document.getElementById('auditTrailBtn');
@@ -648,16 +648,16 @@
                         this.data.retirements = retResult.data || [];
                     } else {
                         const queries = [];
-                        if (!['finance','finance_manager'].includes(role)) {
+                        if (!['finance','GrantsCompliance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('concept_notes').select('*').eq('staffName', this.currentUser).order('submittedDate', { ascending: false }));
                         }
-                        if (['budgetOwner','ed','procurement','finance_manager'].includes(role)) {
+                        if (['budgetOwner','ed','procurement','GrantsCompliance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('concept_notes').select('*').eq('status', 'pending').order('submittedDate', { ascending: false }).limit(50));
                         }
                         // Finance confirms POs as a budget commitment, before any
                         // payment exists — so they need the concept notes carrying a
                         // PO, which the payment-linked fetch below would never return.
-                        if (['finance','finance_manager'].includes(role)) {
+                        if (['finance','GrantsCompliance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('concept_notes').select('*')
                                 .not('poNumber','is',null)
                                 .not('status','in','("rejected","variance_rejected")')
@@ -676,7 +676,7 @@
                         if (this._isSecurityOfficer()) {
                             queries.push(supabaseClient.from('concept_notes').select('*').eq('status', 'security_review').order('submittedDate', { ascending: false }).limit(50));
                         }
-                        if (['budgetOwner','ed','finance','finance_manager'].includes(role)) {
+                        if (['budgetOwner','ed','finance','GrantsCompliance','finance_manager'].includes(role)) {
                             queries.push(supabaseClient.from('retirements').select('*').in('status', ['pending','reviewed','finance_approved']).order('submittedDate', { ascending: false }).limit(50));
                         }
                         queries.push(supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).order('requestDate', { ascending: false }));
@@ -2524,7 +2524,7 @@
                 const role = this.getUserRole();
                 // Also fetch variance_review CNs from Supabase (not in local cache)
                 let varReviewCNs = [];
-                if (role === 'budgetOwner' || role === 'finance_manager') {
+                if (role === 'budgetOwner' || role === 'GrantsCompliance'|| role === 'finance_manager') {
                     const { data: vr } = await supabaseClient.from('concept_notes').select('*')
                         .eq('status', 'variance_review').eq('currentApprover', 'budgetOwner');
                     varReviewCNs = vr || [];
