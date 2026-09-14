@@ -304,12 +304,11 @@
         </div>
 
         <div style="padding:0 16px 14px">
-            <label style="display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:6px">Year</label>
-            <div style="display:flex;gap:6px">
-                <select id="yearSelect" onchange="setYear(this.value)"
-                        style="flex:1;padding:7px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-family:inherit;font-size:13px;font-weight:700"></select>
+            <label style="display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:7px">Year</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <span id="yearSelect" style="display:contents"></span>
                 <button onclick="addYear()" title="Add a year"
-                        style="width:32px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff;font-size:16px;cursor:pointer;font-family:inherit">+</button>
+                        style="padding:6px 10px;border-radius:7px;border:1px dashed rgba(255,255,255,.35);background:transparent;color:rgba(255,255,255,.75);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+</button>
             </div>
         </div>
 
@@ -469,11 +468,20 @@ async function reload() { await loadAllData(); refreshYearSelect(); showTab(STAT
 // YEARS
 // ═══════════════════════════════════════════════════════
 function refreshYearSelect() {
-    const sel = document.getElementById('yearSelect');
+    const box = document.getElementById('yearSelect');
     const years = allYears();
     if (!years.includes(Number(STATE.year))) STATE.year = years[0];
-    sel.innerHTML = years.map(y =>
-        `<option value="${y}"${Number(y) === Number(STATE.year) ? ' selected' : ''}>${y}</option>`).join('');
+
+    box.innerHTML = years.map(y => {
+        const on = Number(y) === Number(STATE.year);
+        return `<button onclick="setYear(${y})" style="
+            padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;
+            font-size:13px;font-weight:700;
+            border:1px solid ${on ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.22)'};
+            background:${on ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.08)'};
+            color:${on ? '#1E4D2B' : 'rgba(255,255,255,.75)'};">${y}</button>`;
+    }).join('');
+
     document.getElementById('yearCaption').textContent = years.length > 1
         ? years[years.length - 1] + ' – ' + years[0]
         : String(years[0]);
