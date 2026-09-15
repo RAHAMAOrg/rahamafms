@@ -128,9 +128,9 @@
         .status-rejected { background: #FFEBEE; color: var(--danger); }
         
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 32px; }
-        .stat-card { background: var(--surface); padding: 24px; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+       .stat-card { background: var(--surface); padding: 24px; border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); min-width: 0; }
         .stat-card h3 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; }
-        .stat-value { font-size: 32px; font-weight: 700; font-family: 'Archivo', sans-serif; color: var(--text); margin-bottom: 8px; }
+        .stat-value { font-size: clamp(22px, 1.6vw, 32px); font-weight: 700; font-family: 'Archivo', sans-serif; color: var(--text); margin-bottom: 8px; overflow-wrap: anywhere; }
         .stat-label { font-size: 13px; color: var(--text-muted); }
         .stat-card.danger .stat-value { color: var(--danger); }
         .stat-card.warning .stat-value { color: var(--warning); }
@@ -288,7 +288,7 @@
         // Named escHtml (not esc) — a few functions already declare their own
         // local `esc` for narrower, attribute-only escaping; this avoids
         // silently shadowing those.
-        const escHtml = (v) => {
+              const escHtml = (v) => {
             if (v === null || v === undefined) return '';
             return String(v)
                 .replace(/&/g, '&amp;')
@@ -298,6 +298,14 @@
                 .replace(/'/g, '&#39;');
         };
 
+        // Compact naira for headline figures — full value goes in the sub-label
+        function fmtNaira(n) {
+            n = Number(n) || 0;
+            if (n >= 1e9) return '₦' + (n / 1e9).toFixed(2) + 'B';
+            if (n >= 1e6) return '₦' + (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return '₦' + Math.round(n / 1e3).toLocaleString() + 'K';
+            return '₦' + Math.round(n).toLocaleString('en-NG');
+        }
         const app = {
             currentUser: '',
             cache: { myConceptNotes: null, myPayments: null, myRetirements: null },
@@ -4588,8 +4596,8 @@ if (role === 'procurement') {
                 content.innerHTML = `
                     <div class="header"><h2>Reports & Budget Tracking</h2><p>Financial overview and budget utilization</p></div>
                     <div class="stats-grid">
-                        <div class="stat-card"><h3>Total Budget</h3><div class="stat-value">₦${this.data.projects.reduce((s,p) => s+p.budget, 0).toLocaleString()}</div><div class="stat-label">Across all projects</div></div>
-                        <div class="stat-card warning"><h3>Total Spent</h3><div class="stat-value">₦${totalSpent.toLocaleString()}</div><div class="stat-label">${paidPayments.length} processed payments</div></div>
+                        <div class="stat-card"><h3>Total Budget</h3><div class="stat-value">${fmtNaira(this.data.projects.reduce((s,p) => s+p.budget, 0))}</div><div class="stat-label">Across all projects</div></div>
+                        <div class="stat-card warning"><h3>Total Spent</h3><div class="stat-value">${fmtNaira(totalSpent)}</div><div class="stat-label">${paidPayments.length} processed payments</div></div>
                         <div class="stat-card"><h3>Pending Approvals</h3><div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending').length}</div><div class="stat-label">Concept notes awaiting review</div></div>
                         <div class="stat-card danger"><h3>Unretired Advances</h3><div class="stat-value">${paidPayments.filter(p => !allRetirements.find(r => r.paymentRef === p.refNumber)).length}</div><div class="stat-label">Need retirement</div></div>
                     </div>
