@@ -6627,10 +6627,19 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const docRefsToFetch = vendors.length > 1
                     ? [basePoNum, ...vendors.map((_,i) => basePoNum + '-V' + (i+1))]
                     : [basePoNum];
-                const { data: sigsRaw } = await supabaseClient
+                                // Signatures live under two keys: some rows carry the PO docRef,
+                // others only carry relatedRef = the concept note ref. Querying
+                // docRef alone misses the second kind entirely — which is why the
+                // dossier showed signatures this document could not find.
+                const { data: sigsByDocRef } = await supabaseClient
                     .from('document_signatures').select('*')
                     .in('docRef', docRefsToFetch);
-                const allSigs = sigsRaw || [];
+                const { data: sigsByRelated } = await supabaseClient
+                    .from('document_signatures').select('*')
+                    .eq('relatedRef', refNumber);
+                const _sigMap = new Map();
+                [...(sigsByDocRef||[]), ...(sigsByRelated||[])].forEach(s => _sigMap.set(s.id, s));
+                const allSigs = Array.from(_sigMap.values());
 
                 // ── BO sig may live on the CN row if captured during approval ──
                 const boSigFromCN = cn.budgetOwnerSignatureData
@@ -6686,15 +6695,14 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     // against the BASE ref. Only the vendor signs a per-vendor document.
                     // Scoping all four to the vendor ref made staff and finance vanish
                     // from every multi-vendor PO.
-                    const internalSigs = allSigs.filter(s => s.docRef === basePoNum || s.docRef === vendorPoNum);
+                                        // Internal signers are resolved by document type, exactly as the
+                    // dossier does. Only the vendor signature stays scoped to this
+                    // vendor's own document.
+                    const poSigs      = allSigs.filter(s => s.docType === 'purchase_order');
                     const vendorSigs  = allSigs.filter(s => s.docRef === vendorPoNum || (vendors.length === 1 && s.docRef === basePoNum));
-                    const staffSig    = internalSigs.find(s => s.pageContext === 'staff_po');
-                    const boSig       = internalSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
-                    // Prefer a signature explicitly typed as a PO; fall back to any
-                    // finance signature on these refs for rows saved before docType existed.
-                    const finSig      = internalSigs.find(s => s.pageContext === 'finance_sign' && s.docType === 'purchase_order')
-                                     || internalSigs.find(s => s.pageContext === 'finance_sign' && !s.docType)
-                                     || internalSigs.find(s => s.pageContext === 'finance_sign' && s.docType !== 'grr');
+                    const staffSig    = poSigs.find(s => s.pageContext === 'staff_po');
+                    const boSig       = poSigs.find(s => s.pageContext === 'budget_owner_po' || s.signerRole === 'budgetOwner') || boSigFromCN;
+                    const finSig      = poSigs.find(s => s.pageContext === 'finance_sign');
                     const vendorSig   = vendorSigs.find(s =>
                         s.signerRole === 'vendor' &&
                         ['vendor_po_on_device','vendor_po_remote'].includes(s.pageContext));
