@@ -6682,11 +6682,19 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const vendorPoNum = vendors.length > 1 ? (basePoNum + '-V' + (vi+1)) : basePoNum;
                     const vendorTotal = Number(v.amount||0) * (v.qty||1);
 
-                    // Sigs scoped to this vendor's PO ref (or base ref for single-vendor)
+                    // Internal signers (staff, budget owner, finance) sign the PO once,
+                    // against the BASE ref. Only the vendor signs a per-vendor document.
+                    // Scoping all four to the vendor ref made staff and finance vanish
+                    // from every multi-vendor PO.
+                    const internalSigs = allSigs.filter(s => s.docRef === basePoNum || s.docRef === vendorPoNum);
                     const vendorSigs  = allSigs.filter(s => s.docRef === vendorPoNum || (vendors.length === 1 && s.docRef === basePoNum));
-                    const staffSig    = vendorSigs.find(s => s.pageContext === 'staff_po');
-                    const boSig       = vendorSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
-                    const finSig      = vendorSigs.find(s => s.pageContext === 'finance_sign');
+                    const staffSig    = internalSigs.find(s => s.pageContext === 'staff_po');
+                    const boSig       = internalSigs.find(s => s.pageContext === 'budget_owner_po') || boSigFromCN;
+                    // Prefer a signature explicitly typed as a PO; fall back to any
+                    // finance signature on these refs for rows saved before docType existed.
+                    const finSig      = internalSigs.find(s => s.pageContext === 'finance_sign' && s.docType === 'purchase_order')
+                                     || internalSigs.find(s => s.pageContext === 'finance_sign' && !s.docType)
+                                     || internalSigs.find(s => s.pageContext === 'finance_sign' && s.docType !== 'grr');
                     const vendorSig   = vendorSigs.find(s =>
                         s.signerRole === 'vendor' &&
                         ['vendor_po_on_device','vendor_po_remote'].includes(s.pageContext));
