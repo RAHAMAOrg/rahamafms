@@ -2889,8 +2889,10 @@ if (role === 'procurement') {
                                     '<td style="font-size:12px;max-width:200px;">' + (cn.varianceJustification || '—') + '</td>' +
                                     '<td style="font-size:12px;">' + (cn.varianceEscalatedAt ? new Date(cn.varianceEscalatedAt).toLocaleDateString() : '—') + '</td>' +
                                     '<td>' +
-                                        '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')" style="margin-bottom:6px;">✓ Approve Excess</button>' +
-                                        '<button class="action-btn reject" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'reject\')">✗ Reject — Re-source</button>' +
+                                        ((['budgetOwner','ed'].includes(app.getUserRole()) && app.currentUser !== cn.staffName && app.currentUser !== cn.varianceEscalatedBy)
+                                        ? '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')" style="margin-bottom:6px;">✓ Approve Excess</button>' +
+                                          '<button class="action-btn reject" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'reject\')">✗ Reject — Re-source</button>'
+                                        : '<span style="font-size:12px;color:#6B7280;">Awaiting Budget Owner</span>') +
                                     '</td>' +
                                 '</tr>';
                             }).join('')}
@@ -3991,7 +3993,10 @@ if (role === 'procurement') {
                 const _getReceivedQty = (vendorIndex) => priorRounds.reduce((s,r) =>
                     s + (r.lines||[]).filter(l => l.vendorIndex === vendorIndex).reduce((ss,l) => ss + (Number(l.qtyReceived)||0), 0), 0);
                 const roundsSoFar = priorRounds.length;
-                const cumulativeReceivedValue = Number(cn.actualProcurementCost || 0);
+                // Sum what earlier rounds actually received. actualProcurementCost can hold the
+                // proposed PO total (written at variance escalation), so it is not a receipt total.
+                const cumulativeReceivedValue = priorRounds.reduce((s,r) =>
+                    s + (r.lines||[]).reduce((ss,l) => ss + (Number(l.amount)||0), 0), 0);
                 const poBalance = poTotal - cumulativeReceivedValue;
 
                 const vendorBlocksHtml = vendors.map((v, i) => {
@@ -4317,12 +4322,19 @@ if (role === 'procurement') {
                 const isFullyReceived = merged.every(v => (v.receivedSoFar + v.receivingNow) >= (v.orderedQty - 0.001));
                 // Resubmitting after a Finance rejection corrects the same round rather
                 // than adding a new one — reuse its number so we don't leave a phantom
-                // tranche on file, and back its cost out of the running total first so
-                // it isn't counted twice.
+                // tranche on file. priorRounds already excludes that rejected round.
                 const roundNumber = isFinanceResubmission ? lastRound.round : (priorRounds.length + 1);
-                const lastRoundCost = isFinanceResubmission
-                    ? (lastRound.lines||[]).reduce((s,l) => s + (Number(l.amount)||0), 0) : 0;
-                const cumulativeActualCost = Number(cn.actualProcurementCost || 0) - lastRoundCost + roundCost;
+                // Cumulative cost is ALWAYS recomputed from the rounds on file plus this one.
+                // Never add to the stored actualProcurementCost: variance escalation writes the
+                // proposed PO total there, so adding to it double-counts (CN1787931397420).
+                const priorReceivedCost = priorRounds.reduce((s,r) =>
+                    s + (r.lines||[]).reduce((ss,l) => ss + (Number(l.amount)||0), 0), 0);
+                const cumulativeActualCost = priorReceivedCost + roundCost;
+                // Baseline for "Cumulative … of ₦X": the approved PO total once a variance
+                // has been approved, otherwise the CN estimate.
+                const approvedBaseline = cn.varianceApprovedAt
+                    ? vendors.reduce((s,v) => s + (Number(v.amount||0) * (v.qty||1)), 0)
+                    : Number(cn.estimatedCost || 0);
 
                 try {
                     submitBtn.disabled = true; submitBtn.textContent = 'Uploading documents...';
@@ -4389,7 +4401,10 @@ if (role === 'procurement') {
                     if (isFullyReceived) {
                         // Last tranche — close the CN out exactly as the old single-shot flow did.
                         Object.assign(cnUpdates, {
-                            status: 'approved', approvedDate: now, approvedBy: this.currentUser,
+                            // approvedDate marks closure (reports rely on it); approvedBy keeps the
+                            // person who actually approved the CN — not whoever confirmed receipt.
+                            status: 'approved', approvedDate: now,
+                            approvedBy: cn.approvedBy || cn.budgetOwnerApprovedBy || cn.edApprovedBy || this.currentUser,
                             procurementComplete: now, currentApprover: null,
                             retirementresponsibility: 'procurement'
                         });
@@ -4412,7 +4427,7 @@ if (role === 'procurement') {
                         paymentMethod: 'bank_transfer',
                         payMode,
                         paymentScheduleJson: JSON.stringify(paymentSchedule),
-                        justification: `Tranche ${roundNumber} confirmed by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | Vendor(s): ${vendorNamesThisRound} | Items: ${vendorItemsThisRound} | This delivery: ₦${roundCost.toLocaleString()} | Cumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${cn.estimatedCost.toLocaleString()}. ${notes}`,
+                        justification: `Tranche ${roundNumber} confirmed by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | Vendor(s): ${vendorNamesThisRound} | Items: ${vendorItemsThisRound} | This delivery: ₦${roundCost.toLocaleString()} | Cumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${approvedBaseline.toLocaleString()}. ${notes}`,
                         accountName: `Payment schedule — ${paymentSchedule.length} vendor(s)`,
                         accountNumber: '',
                         bankName: 'See payment schedule',
@@ -4432,9 +4447,9 @@ if (role === 'procurement') {
                     this.clearCache();
 
                     await this._logAudit('concept_notes', refNumber, isFullyReceived ? 'procurement_complete' : 'procurement_partial_receipt',
-                        `Tranche ${roundNumber} received by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | This delivery: ₦${roundCost.toLocaleString()} | Cumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${cn.estimatedCost.toLocaleString()}${isFullyReceived ? ' — PO fully received.' : ' — balance remains open, CN returned to Procurement queue.'}`);
+                        `Tranche ${roundNumber} received by ${this.currentUser}. PO: ${cn.poNumber} | GRR: ${grrNumber} | This delivery: ₦${roundCost.toLocaleString()} | Cumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${approvedBaseline.toLocaleString()}${isFullyReceived ? ' — PO fully received.' : ' — balance remains open, CN returned to Procurement queue.'}`);
 
-                    alert(`${isFullyReceived ? 'Final delivery' : 'Delivery'} confirmed!\n\nGRR Number: ${grrNumber}\nThis tranche: ₦${roundCost.toLocaleString()}\nCumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${cn.estimatedCost.toLocaleString()}\n\n${isFullyReceived ? 'This PO is now fully received and closed.' : 'This concept note stays open — it will reappear in your Approvals queue for the next delivery.'}\n\nGRR signing chain initiated:\nProcurement → Staff → Vendor → Finance\n\nYou will now be taken to sign the GRR (Procurement step).`);
+                    alert(`${isFullyReceived ? 'Final delivery' : 'Delivery'} confirmed!\n\nGRR Number: ${grrNumber}\nThis tranche: ₦${roundCost.toLocaleString()}\nCumulative: ₦${cumulativeActualCost.toLocaleString()} of ₦${approvedBaseline.toLocaleString()}\n\n${isFullyReceived ? 'This PO is now fully received and closed.' : 'This concept note stays open — it will reappear in your Approvals queue for the next delivery.'}\n\nGRR signing chain initiated:\nProcurement → Staff → Vendor → Finance\n\nYou will now be taken to sign the GRR (Procurement step).`);
 
                     // Procurement signs GRR first (received by procurement)
                     await this.showSigningView(grrNumber, 'grr', newPayRef, 'procurement_received', refNumber);
@@ -7421,6 +7436,19 @@ ${vendors.length > 1 ? `
                     || (await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single()).data;
                 if (!cn) { alert('Concept note not found.'); return; }
 
+                // Only the Budget Owner / ED may resolve a variance, and never the person who
+                // requested the CN or escalated the variance.
+                const myRoleVar = this.getUserRole();
+                if (myRoleVar !== 'budgetOwner' && myRoleVar !== 'ed') {
+                    alert('Only the Budget Owner or ED can approve or reject a variance escalation.'); return;
+                }
+                if (this.currentUser === cn.staffName || this.currentUser === cn.varianceEscalatedBy) {
+                    alert('You cannot resolve a variance on a concept note you submitted or escalated.'); return;
+                }
+                if (cn.status !== 'variance_review') {
+                    alert('This variance escalation has already been resolved.'); return;
+                }
+
                 const over = cn.estimatedCost > 0
                     ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '?';
 
@@ -7441,14 +7469,21 @@ ${vendors.length > 1 ? `
                         const poNumber  = cn.poNumber || `PO-${projCode}-${yearMonth}-${serial}`;
                         const now       = new Date().toISOString();
 
-                        await supabaseClient.from('concept_notes').update({
+                        const { data: updRows, error: updErr } = await supabaseClient.from('concept_notes').update({
                             status: 'pending',
                             currentApprover: 'procurement',
                             poNumber, poGeneratedAt: cn.poGeneratedAt || now,
                             varianceApprovedBy: this.currentUser,
                             varianceApprovedAt: now,
                             varianceApprovalSignature: sigData
-                        }).eq('refNumber', refNumber);
+                        }).eq('refNumber', refNumber).eq('status', 'variance_review').select('refNumber');
+                        if (updErr) throw updErr;
+                        // RLS blocks return zero rows with no error — stop here so no
+                        // notification, signature or audit entry claims an approval that didn't happen.
+                        if (!updRows || updRows.length === 0) {
+                            alert('The approval was NOT saved — you may not have permission, or it was already resolved. Nothing has been recorded.');
+                            return;
+                        }
 
                         await this.createNotification(cn.staffName,
                             `Your concept note ${refNumber} (${escHtml(cn.activityTitle)}) had its cost variance approved by the Budget Owner. PO ${poNumber} has been generated and is ready for your signature.`,
@@ -7485,13 +7520,18 @@ ${vendors.length > 1 ? `
                     if (!reason.trim()) { alert('Please provide a rejection reason.'); return; }
 
                     try {
-                        await supabaseClient.from('concept_notes').update({
+                        const { data: rejRows, error: rejErr } = await supabaseClient.from('concept_notes').update({
                             status: 'variance_rejected',
                             currentApprover: 'procurement',
                             rejectionReason: reason.trim(),
                             rejectedBy: this.currentUser,
                             rejectedDate: new Date().toISOString()
-                        }).eq('refNumber', refNumber);
+                        }).eq('refNumber', refNumber).eq('status', 'variance_review').select('refNumber');
+                        if (rejErr) throw rejErr;
+                        if (!rejRows || rejRows.length === 0) {
+                            alert('The rejection was NOT saved — you may not have permission, or it was already resolved. Nothing has been recorded.');
+                            return;
+                        }
 
                         await this._logAudit('concept_notes', refNumber, 'variance_rejected',
                             `Rejected by ${this.currentUser}. Reason: ${reason.trim()}`);
