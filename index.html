@@ -411,6 +411,31 @@
                  + escHtml(code) + '</span>';
         }
 
+        // One bank list for every form (payment requests, procurement receipt,
+        // vendor details). Edit here only. Existing names are kept exactly as
+        // before so saved records still match their dropdown entry.
+        const NIGERIAN_BANKS = [
+            'Access Bank','Citibank Nigeria','Ecobank Nigeria','Fidelity Bank','First Bank','FCMB',
+            'Globus Bank','GTBank','Jaiz Bank','Keystone Bank','Lotus Bank','Nova Bank','Optimus Bank',
+            'Parallex Bank','Polaris Bank','Premium Trust Bank','Providus Bank','Signature Bank',
+            'Stanbic IBTC','Standard Chartered','Sterling Bank','SunTrust Bank','TAJ Bank',
+            'The Alternative Bank','Titan Trust Bank','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank',
+            // Merchant banks
+            'Coronation Merchant Bank','FBNQuest Merchant Bank','FSDH Merchant Bank',
+            'Greenwich Merchant Bank','Rand Merchant Bank',
+            // Payment service banks
+            '9PSB','Hope PSB','MoMo PSB','SmartCash PSB',
+            // Microfinance banks and payment service providers
+            'AB Microfinance Bank','Accion MFB','Addosser MFB','Baobab MFB','Bowen MFB','Carbon',
+            'Eyowo','FairMoney MFB','Fina Trust MFB','Firmus MFB','Fortis MFB','Hasal MFB',
+            'Infinity MFB','Kuda MFB','LAPO MFB','Mint MFB','Mkobo MFB','Moniepoint MFB',
+            'Mutual Trust MFB','NPF MFB','Opay Services','Paga','Page MFB','PalmPay',
+            'Parkway ReadyCash','Renmoney MFB','Rubies MFB','Safe Haven MFB','Sparkle MFB',
+            'Unical MFB','VFD MFB',
+            // Mortgage banks
+            'Abbey Mortgage Bank','Haggai Mortgage Bank','Imperial Homes Mortgage Bank'
+        ].sort((a, b) => a.localeCompare(b));
+
         function fmtNaira(n) {
             n = Number(n) || 0;
             const sign = n < 0 ? '-' : '';
@@ -1627,6 +1652,12 @@
                     <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
                         <div class="form-group"><label>Project Code <span class="required">*</span></label><select name="projectCode" id="projectCode" required><option value="">Select project</option>${this.data.projects.map(p => `<option value="${p.code}">${p.code} - ${p.name}</option>`).join('')}</select></div>
                         <div class="form-group"><label>Activity Title <span class="required">*</span></label><input type="text" name="activityTitle" id="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano"></div>
+                        <div class="form-group full-width"><label>Cost Classification <span class="required">*</span></label><select name="costClassification" id="costClassification" required>
+                            <option value="">Select classification</option>
+                            <option value="programme_activity">Programme activity — direct delivery (trainings, sessions, campaigns, outreach)</option>
+                            <option value="programme_support">Programme support — enables delivery (M&amp;E, supervision, programme staff, field logistics)</option>
+                            <option value="administration">Administration / overhead — runs the organisation (office, finance, audit, governance)</option>
+                        </select><span class="form-hint">Donors review programme support and administration closely, so choose the purpose of the whole activity.</span></div>
                         <div class="form-group full-width"><label>Objective <span class="required">*</span></label><textarea name="objective" id="objective" required placeholder="What is the purpose of this activity?"></textarea></div>
                         <div class="form-group full-width"><label>Description <span class="required">*</span></label><textarea name="description" id="description" required placeholder="Detailed description of the activity"></textarea></div>
                         <input type="number" name="estimatedCost" id="estimatedCost" style="display:none;" min="0" step="0.01" value="0">
@@ -1967,7 +1998,7 @@
                     const firstApprover = submitterRole === 'budgetOwner' ? 'ed' : 'budgetOwner';
                     // Collect budget line items as text for storage
                     const budgetLinesText = this.getCNBudgetLinesText();
-                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, budgetBreakdown: budgetLinesText || null, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), travelRequired: formData.get('travelRequired') || 'no', travelDetailsJson: (formData.get('travelRequired') === 'yes' && app._travelDetails) ? JSON.stringify(app._travelDetails) : null, securityStatus: (formData.get('travelRequired') === 'yes') ? 'pending' : null, status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
+                    const conceptNote = { refNumber: 'CN' + Date.now(), staffName: this.currentUser, projectCode: formData.get('projectCode'), costClassification: formData.get('costClassification') || null, activityTitle: formData.get('activityTitle'), objective: formData.get('objective'), description: formData.get('description'), estimatedCost: amount, budgetBreakdown: budgetLinesText || null, implementation_date: formData.get('implementation_date') || null, requiresProcurement: formData.get('requiresProcurement'), travelRequired: formData.get('travelRequired') || 'no', travelDetailsJson: (formData.get('travelRequired') === 'yes' && app._travelDetails) ? JSON.stringify(app._travelDetails) : null, securityStatus: (formData.get('travelRequired') === 'yes') ? 'pending' : null, status: 'pending', currentApprover: firstApprover, submittedDate: new Date().toISOString(), staffSignatureData: sigData, staffSignedAt: new Date().toISOString() };
                     const { data, error } = await supabaseClient.from('concept_notes').insert([conceptNote]).select();
                     if (error) throw error;
                     // Upload optional budget document
@@ -2185,7 +2216,7 @@
     if (pendingPayment) return false;              // one tranche in flight at a time
     return true;
 });
-                const bankOptions = ['Access Bank','Fidelity Bank','First Bank','FCMB','GTBank','Jaiz Bank','Keystone Bank','Moniepoint MFB','Opay Services','Polaris Bank','Stanbic IBTC','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank'].map(b => `<option value="${b}">${b}</option>`).join('');
+                const bankOptions = NIGERIAN_BANKS.map(b => `<option value="${b}">${b}</option>`).join('');
                 content.innerHTML = `
                     <div class="header"><h2>Request Payment</h2><p>Submit a payment request for an approved concept note</p></div>
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
@@ -3968,7 +3999,7 @@ if (role === 'procurement') {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 if (!cn.poNumber) { alert('No PO exists for this concept note yet. Please create the PO first.'); this.showPOCreationForm(refNumber); return; }
-                const bankOptions = ['Access Bank','Fidelity Bank','First Bank','FCMB','GTBank','Jaiz Bank','Keystone Bank','Moniepoint MFB','Opay Services','Polaris Bank','Stanbic IBTC','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank'].map(b => `<option value="${b}">${b}</option>`).join('');
+                const bankOptions = NIGERIAN_BANKS.map(b => `<option value="${b}">${b}</option>`).join('');
                 const content = document.getElementById('mainContent');
 
                 let vendors = [];
@@ -4032,7 +4063,7 @@ if (role === 'procurement') {
                                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
                                     <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Name</label><input type="text" id="vAcctName_${id}" value="${(v.acctName||'').replace(/"/g,'&quot;')}" placeholder="As on the bank account" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
                                     <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Number</label><input type="text" id="vAcctNo_${id}" value="${(v.acctNo||'').replace(/"/g,'&quot;')}" maxlength="10" placeholder="10 digits" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
-                                    <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Bank</label><select id="vBank_${id}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;"><option value="">Select bank</option>${['Access Bank','Fidelity Bank','First Bank','FCMB','GTBank','Jaiz Bank','Keystone Bank','Moniepoint MFB','Opay Services','Polaris Bank','Stanbic IBTC','UBA','Union Bank','Unity Bank','Wema Bank','Zenith Bank'].map(b=>`<option value="${b}"${v.bank===b?' selected':''}>${b}</option>`).join('')}</select></div>
+                                    <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Bank</label><select id="vBank_${id}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;"><option value="">Select bank</option>${NIGERIAN_BANKS.map(b=>`<option value="${b}"${v.bank===b?' selected':''}>${b}</option>`).join('')}</select></div>
                                 </div>
                             </div>`}
                         </div>
@@ -4710,11 +4741,18 @@ if (role === 'procurement') {
                     }
                 });
 
-                const paidPayments = allPayments.filter(p => p.status === 'paid');
-                const totalSpent = paidPayments.reduce((s,p) => s+(p.amount||0), 0);
-                const totalBudget = this.data.projects.reduce((s,p) => s+p.budget, 0);
+                // Project filter — '' means all projects
+                const selProj = this._rptProject || '';
+                const inProj = code => !selProj || code === selProj;
+                const scopedProjects = this.data.projects.filter(p => inProj(p.code));
+                const scopedPayments = allPayments.filter(p => inProj(p.projectCode));
+                const selProjObj = this.data.projects.find(p => p.code === selProj);
 
-                const projectStats = this.data.projects.map(project => {
+                const paidPayments = scopedPayments.filter(p => p.status === 'paid');
+                const totalSpent = paidPayments.reduce((s,p) => s+(p.amount||0), 0);
+                const totalBudget = scopedProjects.reduce((s,p) => s+p.budget, 0);
+
+                const projectStats = scopedProjects.map(project => {
                     const spent = paidPayments.filter(p => p.projectCode === project.code).reduce((s,p) => s+(p.amount||0), 0);
                     const committed = allPayments.filter(p => p.status === 'pending' && p.projectCode === project.code).reduce((s,p) => s+(p.amount||0), 0);
                     const remaining = project.budget - spent;
@@ -4742,9 +4780,9 @@ if (role === 'procurement') {
                 content.innerHTML = `
                     <div class="header"><h2>Reports & Budget Tracking</h2><p>Financial overview and budget utilization</p></div>
                     <div class="stats-grid">
-                        <div class="stat-card"><h3>Total Budget</h3><div class="stat-value">${fmtNaira(this.data.projects.reduce((s,p) => s+p.budget, 0))}</div><div class="stat-label">Across all projects</div></div>
+                        <div class="stat-card"><h3>Total Budget</h3><div class="stat-value">${fmtNaira(totalBudget)}</div><div class="stat-label">${selProj ? escHtml(selProj + (selProjObj ? ' — ' + selProjObj.name : '')) : 'Across all projects'}</div></div>
                         <div class="stat-card warning"><h3>Total Spent</h3><div class="stat-value">${fmtNaira(totalSpent)}</div><div class="stat-label">${paidPayments.length} processed payments</div></div>
-                        <div class="stat-card"><h3>Pending Approvals</h3><div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending').length}</div><div class="stat-label">Concept notes awaiting review</div></div>
+                        <div class="stat-card"><h3>Pending Approvals</h3><div class="stat-value">${this.data.conceptNotes.filter(cn => cn.status === 'pending' && inProj(cn.projectCode)).length}</div><div class="stat-label">Concept notes awaiting review</div></div>
                         <div class="stat-card danger"><h3>Unretired Advances</h3><div class="stat-value">${(() => {
                             const un = paidPayments.filter(p => !allRetirements.find(r => r.paymentRef === p.refNumber));
                             app._unretiredAging = un.reduce((a, p) => {
@@ -4759,6 +4797,14 @@ if (role === 'procurement') {
                             <span style="color:#B45309;font-weight:700;">${app._unretiredAging.d30to60}</span> 30–60d ·
                             <span style="font-weight:700;">${app._unretiredAging.under30}</span> under 30d${app._unretiredAging.unknown ? ` · ${app._unretiredAging.unknown} undated` : ''}
                         </div></div>
+                    </div>
+                    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px 20px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                        <div><label for="rptProject" style="font-size:11px;font-weight:700;color:#1B4D8E;text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px;">Project</label>
+                            <select id="rptProject" onchange="app._setReportProject(this.value)" style="padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;min-width:260px;">
+                                <option value="">All projects</option>
+                                ${this.data.projects.map(p => `<option value="${escHtml(p.code)}" ${p.code === selProj ? 'selected' : ''}>${escHtml(p.code)} — ${escHtml(p.name)}</option>`).join('')}
+                            </select></div>
+                        <p style="font-size:11px;color:var(--text-muted);margin:0 0 4px;font-style:italic;">Filters the figures and tables on this page. Downloads still cover all projects.</p>
                     </div>
                     <h3 style="margin-bottom:16px;font-family:'Plus Jakarta Sans', sans-serif;">Project Budget Status</h3>
                     <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px 20px;margin-bottom:16px;">
@@ -4827,6 +4873,10 @@ if (role === 'procurement') {
                     </tbody></table></div>
                     <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">The vertical marker shows how far through the grant period each project is. Variance is spend minus elapsed time — negative means underspending, which is the usual donor risk.</p>
 
+                    <h3 style="margin-top:40px;margin-bottom:6px;font-family:'Plus Jakarta Sans', sans-serif;">Expense Categories${selProj ? ' — ' + escHtml(selProj) : ''}</h3>
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Concept note budget lines grouped by type, against what has been retired or received through procurement</p>
+                    <div id="rptCategories"><p style="font-size:13px;color:var(--text-muted);">Loading expense categories…</p></div>
+
                     <h3 style="margin-top:40px;margin-bottom:6px;font-family:'Plus Jakarta Sans', sans-serif;">Payment & Retirement Status</h3>
                     <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">All payments with their linked retirement status</p>
                     <div class="table-container"><table><thead><tr>
@@ -4835,7 +4885,7 @@ if (role === 'procurement') {
                         <th>Retirement Ref</th><th>Retirement Status</th><th>Retired Date</th>
                         <th>Variance</th>
                     </tr></thead><tbody>
-                    ${allPayments.map(p => {
+                    ${scopedPayments.map(p => {
                         const ret = allRetirements.find(r => r.paymentRef === p.refNumber);
                         const payBadge = p.status === 'paid' ? 'status-approved' : p.status === 'rejected' ? 'status-rejected' : 'status-pending';
                         const retBadge = !ret ? '' : ret.status === 'approved' ? 'status-approved' : ret.status === 'rejected' ? 'status-rejected' : 'status-pending';
@@ -4854,6 +4904,224 @@ if (role === 'procurement') {
                         </tr>`;
                     }).join('')}
                     </tbody></table></div>`;
+                this._renderExpenseCategories(selProj).catch(e => {
+                    const el = document.getElementById('rptCategories');
+                    if (el) el.innerHTML = '<p style="color:#B91C1C;font-size:13px;">Could not load expense categories: ' + escHtml(e.message || e) + '</p>';
+                });
+            },
+
+            // Switch the Reports page to one project ('' = all), keeping the period fields.
+            _setReportProject(code) {
+                const keep = ['rptFrom','rptTo','rptBasis'].map(id => [id, document.getElementById(id)?.value]);
+                this._rptProject = code || '';
+                this.renderReports(document.getElementById('mainContent'));
+                keep.forEach(([id, v]) => { const el = document.getElementById(id); if (el && v != null) el.value = v; });
+            },
+
+            _setReportClass(v) {
+                this._rptClass = v || '';
+                this._renderExpenseCategories(this._rptProject || '').catch(e => console.error(e));
+            },
+
+            // Keyword rules, checked in order — first match wins. Edit here to
+            // add categories or keywords. Order matters: "bed and breakfast"
+            // must hit Accommodation before Meals sees "breakfast".
+            EXPENSE_CATEGORIES: [
+                ['Accommodation',            /accom+odation|hotel|lodg|\broom|bed and breakfast|guest ?house/i],
+                ['Per diem / DSA',           /per ?diem|\bdsa\b|subsistence|out.?of.?station/i],
+                ['Transport & fuel',         /transport|fuel|diesel|petrol|vehicle|car hire|\bbus(es)?\b|taxi|keke|\bfares?\b|travel|logistic|movement/i],
+                ['Meals & refreshments',     /\btea\b|lunch|refreshment|\bmeals?\b|breakfast|dinner|\bfood|snack|water|catering|drinks?\b/i],
+                ['Venue & equipment',        /venue|\bhalls?\b|projector|public address|\bpa system|sound system|canopy|\bchairs?\b|\btents?\b|generator|equipment hire/i],
+                ['Facilitation & honoraria', /facilitat|honorari|resource person|stipend|consultan|volunteer|incentive/i],
+                ['Visibility & printing',    /print|banner|\bflex\b|flyer|poster|t-?shirt|\bcaps?\b|branding|jersey|sticker|photocop|stationer/i],
+                ['Communication & data',     /airtime|recharge|\bdata\b|internet|call card|phone|communication/i],
+                ['Medical & supplies',       /drug|test kit|\brdt\b|medical|consumable|supplies|\bkits?\b|glove|reagent/i],
+            ],
+            _expenseCategory(desc) {
+                for (const [name, re] of this.EXPENSE_CATEGORIES) if (re.test(desc || '')) return name;
+                return 'Other';
+            },
+            // Parses lines ending in "= ₦12,345" (concept note and retirement formats).
+            _parseAmountLines(text) {
+                const out = []; let unparsed = 0;
+                String(text || '').split('\n').forEach(raw => {
+                    const line = raw.trim(); if (!line) return;
+                    const m = line.match(/=\s*₦?\s*([\d,]+(?:\.\d+)?)\s*$/);
+                    if (!m) { unparsed++; return; }
+                    const amount = parseFloat(m[1].replace(/,/g, '')) || 0;
+                    let desc = line.replace(/^\s*\d+\.\s*/, '').replace(/:\s*₦[\s\S]*$/, '').trim();
+                    if (!desc) desc = line.split('=')[0].trim();
+                    out.push({ desc, amount });
+                });
+                return { lines: out, unparsed };
+            },
+            _parseJsonArray(v) {
+                if (!v) return [];
+                if (Array.isArray(v)) return v;
+                if (typeof v === 'string') {
+                    try { const x = JSON.parse(v); return Array.isArray(x) ? x : (typeof x === 'string' ? this._parseJsonArray(x) : []); }
+                    catch (e) { return []; }
+                }
+                return [];
+            },
+
+            async _renderExpenseCategories(selProj) {
+                const el = document.getElementById('rptCategories');
+                if (!el) return;
+                // Fetched fresh and without signature images: the local cache only
+                // holds concept notes this user is involved in.
+                let cnQ = supabaseClient.from('concept_notes')
+                    .select('refNumber,projectCode,status,estimatedCost,costClassification,budgetBreakdown,budgetbreakdown,vendorsJson,receivedJson,approvedBy,budgetOwnerApprovedBy,edApprovedBy')
+                    .limit(5000);
+                if (selProj) cnQ = cnQ.eq('projectCode', selProj);
+                const [cnRes, payRes, retRes] = await Promise.all([
+                    cnQ,
+                    supabaseClient.from('payments').select('refNumber,projectCode,conceptNoteRef,status,amount').limit(10000),
+                    supabaseClient.from('retirements').select('refNumber,paymentRef,status,expenditureDetails').eq('status', 'approved').limit(10000)
+                ]);
+                if (cnRes.error)  throw new Error('concept notes: ' + cnRes.error.message);
+                if (payRes.error) throw new Error('payments: ' + payRes.error.message);
+                if (retRes.error) throw new Error('retirements: ' + retRes.error.message);
+                if (document.getElementById('rptCategories') !== el) return; // page changed meanwhile
+
+                const cns = cnRes.data || [];
+                const cnMap = new Map(cns.map(c => [c.refNumber, c]));
+                const selClass = this._rptClass || '';
+                const classOf = cn => cn?.costClassification || 'unclassified';
+                const isApprovedCN = cn => !['rejected','variance_rejected'].includes(cn.status)
+                    && !!(cn.approvedBy || cn.budgetOwnerApprovedBy || cn.edApprovedBy);
+
+                // Cost classification summary — approved CN value and amount paid,
+                // per classification. Not affected by the classification filter.
+                const CLASS_LABELS = { programme_activity: 'Programme activity', programme_support: 'Programme support',
+                                       administration: 'Administration / overhead', unclassified: 'Unclassified' };
+                const cls = {}; Object.keys(CLASS_LABELS).forEach(k => cls[k] = { approved: 0, paid: 0, cns: 0 });
+                cns.forEach(cn => { if (!isApprovedCN(cn)) return; const c = cls[classOf(cn)] || cls.unclassified; c.approved += Number(cn.estimatedCost) || 0; c.cns++; });
+                (payRes.data || []).forEach(p => {
+                    if (p.status !== 'paid') return;
+                    const cn = cnMap.get(p.conceptNoteRef);
+                    if (!cn) return; // outside the selected project, or no linked CN
+                    (cls[classOf(cn)] || cls.unclassified).paid += Number(p.amount) || 0;
+                });
+                const clsTotalApproved = Object.values(cls).reduce((t, c) => t + c.approved, 0);
+                const clsTotalPaid = Object.values(cls).reduce((t, c) => t + c.paid, 0);
+                const pct = (n, d) => d > 0 ? (n / d * 100).toFixed(1) + '%' : '—';
+                const nairaC = n => '₦' + Math.round(n).toLocaleString();
+                const classHtml = `
+                    <div class="table-container" style="margin-bottom:18px;"><table><thead><tr>
+                        <th>Cost Classification</th><th class="num">Concept notes</th><th class="num">Approved value</th><th class="num">% of approved</th>
+                        <th class="num">Paid</th><th class="num">% of paid</th>
+                    </tr></thead><tbody>
+                    ${Object.entries(cls).filter(([k, c]) => k !== 'unclassified' || c.cns || c.paid).map(([k, c]) => `<tr${k === 'unclassified' ? ' style="color:#B45309;"' : ''}>
+                        <td style="font-weight:600;">${CLASS_LABELS[k]}</td><td class="num">${c.cns}</td>
+                        <td class="num">${nairaC(c.approved)}</td><td class="num">${pct(c.approved, clsTotalApproved)}</td>
+                        <td class="num">${nairaC(c.paid)}</td><td class="num">${pct(c.paid, clsTotalPaid)}</td></tr>`).join('')}
+                    </tbody></table></div>
+                    ${cls.unclassified.cns ? `<p style="font-size:11px;color:#B45309;margin:-10px 0 14px;">${cls.unclassified.cns} approved concept note(s) have no classification yet — mostly those created before the field existed.</p>` : ''}
+                    <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                        <label for="rptClass" style="font-size:12px;font-weight:600;">Show expense categories for:</label>
+                        <select id="rptClass" onchange="app._setReportClass(this.value)" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;">
+                            <option value="">All classifications</option>
+                            ${Object.entries(CLASS_LABELS).map(([k, l]) => `<option value="${k}" ${k === selClass ? 'selected' : ''}>${l}</option>`).join('')}
+                        </select></div>`;
+                const cats = new Map();
+                const bucket = name => {
+                    if (!cats.has(name)) cats.set(name, { name, budgeted: 0, procured: 0, retired: 0, lines: 0, descs: new Map() });
+                    return cats.get(name);
+                };
+                let unparsed = 0;
+                const procuredCNs = new Set();
+
+                cns.forEach(cn => {
+                    if (!isApprovedCN(cn)) return; // rejected or not yet approved
+                    if (selClass && classOf(cn) !== selClass) return;
+                    const parsed = this._parseAmountLines(cn.budgetBreakdown || cn.budgetbreakdown);
+                    unparsed += parsed.unparsed;
+                    parsed.lines.forEach(l => {
+                        const b = bucket(this._expenseCategory(l.desc));
+                        b.budgeted += l.amount; b.lines++;
+                        b.descs.set(l.desc, (b.descs.get(l.desc) || 0) + l.amount);
+                    });
+                    const rounds = this._parseJsonArray(cn.receivedJson);
+                    if (rounds.length) {
+                        procuredCNs.add(cn.refNumber);
+                        const vendors = this._parseJsonArray(cn.vendorsJson);
+                        rounds.forEach(r => (r.lines || []).forEach(l => {
+                            const desc = vendors[l.vendorIndex]?.items || l.vendorName || '';
+                            bucket(this._expenseCategory(desc)).procured += Number(l.amount) || 0;
+                        }));
+                    }
+                });
+
+                const payMap = new Map((payRes.data || []).map(p => [p.refNumber, p]));
+                (retRes.data || []).forEach(r => {
+                    const pay = payMap.get(r.paymentRef);
+                    if (!pay) return;
+                    if (pay.conceptNoteRef && procuredCNs.has(pay.conceptNoteRef)) return; // already counted via procurement
+                    if (selClass && classOf(cnMap.get(pay.conceptNoteRef)) !== selClass) return;
+                    const code = pay.projectCode || cnMap.get(pay.conceptNoteRef)?.projectCode;
+                    if (selProj && code !== selProj) return;
+                    const parsed = this._parseAmountLines(r.expenditureDetails);
+                    unparsed += parsed.unparsed;
+                    parsed.lines.forEach(l => { bucket(this._expenseCategory(l.desc)).retired += l.amount; });
+                });
+
+                const rows = [...cats.values()].sort((a, b) =>
+                    (a.name === 'Other') - (b.name === 'Other') || (b.budgeted + b.procured + b.retired) - (a.budgeted + a.procured + a.retired));
+                if (!rows.length) {
+                    el.innerHTML = classHtml + '<p style="font-size:13px;color:var(--text-muted);">No approved concept note budget lines found' + (selProj ? ' for ' + escHtml(selProj) : '') + (selClass ? ' in this classification' : '') + '.</p>';
+                    this._rptCategoryRows = []; return;
+                }
+                const tot = rows.reduce((t, r) => ({ b: t.b + r.budgeted, p: t.p + r.procured, r: t.r + r.retired }), { b: 0, p: 0, r: 0 });
+                const naira = n => '₦' + Math.round(n).toLocaleString();
+                const other = cats.get('Other');
+                const otherList = other ? [...other.descs.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15) : [];
+                this._rptCategoryRows = rows.map(r => ({ category: r.name, budgeted: r.budgeted, procured: r.procured, retired: r.retired }));
+
+                el.innerHTML = classHtml + `
+                    <div class="table-container"><table><thead><tr>
+                        <th>Category</th><th class="num">Approved in CNs</th><th class="num">Procured (received)</th>
+                        <th class="num">Retired (approved)</th><th class="num">Actual total</th><th class="num">Balance</th><th class="num">Lines</th>
+                    </tr></thead><tbody>
+                    ${rows.map(r => {
+                        const actual = r.procured + r.retired, bal = r.budgeted - actual;
+                        return `<tr>
+                            <td style="font-weight:600;">${escHtml(r.name)}</td>
+                            <td class="num">${naira(r.budgeted)}</td>
+                            <td class="num">${naira(r.procured)}</td>
+                            <td class="num">${naira(r.retired)}</td>
+                            <td class="num" style="font-weight:700;">${naira(actual)}</td>
+                            <td class="num" style="color:${bal < 0 ? '#DC2626' : 'inherit'};">${naira(bal)}</td>
+                            <td class="num">${r.lines}</td></tr>`;
+                    }).join('')}
+                    <tr style="font-weight:700;background:#F8FAFC;"><td>Total</td><td class="num">${naira(tot.b)}</td><td class="num">${naira(tot.p)}</td>
+                        <td class="num">${naira(tot.r)}</td><td class="num">${naira(tot.p + tot.r)}</td><td class="num">${naira(tot.b - tot.p - tot.r)}</td><td></td></tr>
+                    </tbody></table></div>
+                    <div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                        <button type="button" class="btn btn-secondary" onclick="app._exportCategoryCSV()">⬇ Download categories (CSV)</button>
+                        ${unparsed ? `<span style="font-size:11px;color:#B45309;">${unparsed} line(s) had no "= ₦amount" and were left out.</span>` : ''}
+                    </div>
+                    ${otherList.length ? `<details style="margin-top:10px;font-size:12px;"><summary style="cursor:pointer;color:var(--text-muted);">What is in "Other"? (top ${otherList.length})</summary>
+                        <ul style="margin:8px 0 0 18px;line-height:1.7;">${otherList.map(([d, a]) => `<li>${escHtml(d)} — ${naira(a)}</li>`).join('')}</ul></details>` : ''}
+                    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Categories are assigned from each line's description by keyword. "Actual" covers only approved retirements and procurement receipts — advances not yet retired are not included.</p>`;
+            },
+
+            _exportCategoryCSV() {
+                const rows = this._rptCategoryRows || [];
+                if (!rows.length) { alert('No category data to download.'); return; }
+                const proj = this._rptProject || 'ALL';
+                const klass = this._rptClass || 'ALL';
+                const csv = [['Project','Classification','Category','Approved in CNs','Procured (received)','Retired (approved)','Actual total','Balance'].join(',')];
+                rows.forEach(r => {
+                    const actual = r.procured + r.retired;
+                    csv.push([proj, klass, '"' + r.category + '"', r.budgeted, r.procured, r.retired, actual, r.budgeted - actual].join(','));
+                });
+                const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url; link.download = `rahama_expense_categories_${proj}_${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
             },
             
             // ══════════════════════════════════════════════════════════════
