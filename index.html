@@ -410,6 +410,7 @@
                 <li><button id="donorPortalBtn" onclick="app.showView('donorPortal')" data-view="donorPortal" style="display:none;">🌍 Donor Portal</button></li>
                 <li><button id="superAdminBtn" onclick="app.showView('superAdmin')" data-view="superAdmin" style="display:none;">👁 System Overview</button></li>
                 <li><button onclick="app.showView('settings')" data-view="settings">Settings</button></li>
+                <li><button onclick="app.changeFmsPassword()">🔑 Change Password</button></li>
                 <li><button onclick="window.location.href='grants-tracker.html'" style="color:#059669;font-weight:600;">📊 Project Tracker</button></li>
             </ul>
             <a href="https://rahamaorg.github.io/appraisal-system/" class="portal-link" target="_blank">← Back to Staff Portal</a>
@@ -660,6 +661,8 @@
                     // has expired).
                     const fmsUnlocked = await this._establishFmsSession(user.email);
                     if (!fmsUnlocked) return;
+                    // First FMS login with an admin-set password → choose your own
+                    await this._enforcePasswordChange();
                     const el = document.getElementById('loggedInUser');
                     if (el) el.innerText = user.name;
                     const role = this.getUserRole();
@@ -920,6 +923,18 @@
                             supabaseClient.from('retirements').select(retCols).eq('staffName', this.currentUser).order('submittedDate', { ascending: false })
                         ]);
                         this.data.conceptNotes = cnResult.data || [];
+                        // A security officer can hold the plain 'staff' role (e.g. a
+                        // dedicated security consultant). Load the travel awaiting
+                        // clearance for them too — previously only non-staff roles
+                        // fetched it, so a staff-role officer always saw an empty queue.
+                        if (this._isSecurityOfficer()) {
+                            try {
+                                const { data: secCNs } = await supabaseClient.from('concept_notes').select(cnCols)
+                                    .eq('status', 'security_review').order('submittedDate', { ascending: false }).limit(50);
+                                const seen = new Set(this.data.conceptNotes.map(c => c.refNumber));
+                                (secCNs || []).forEach(c => { if (!seen.has(c.refNumber)) { this.data.conceptNotes.push(c); seen.add(c.refNumber); } });
+                            } catch (e) { /* keep own notes if the queue can't load */ }
+                        }
                         this.data.payments = payResult.data || [];
                         this.data.retirements = retResult.data || [];
                     } else {
@@ -8710,6 +8725,89 @@ _recalcVendorTotal() {
                     enriched.push({ ...v, invoiceUrl, invoiceFileName });
                 }
                 return enriched;
+            },
+
+            // ── FMS password change ─────────────────────────────────────────
+            // FMS logins live in the FMS Supabase project, separate from the
+            // Staff Portal, so FMS needs its own change-password screen.
+            // An account flagged must_change_password (set automatically for
+            // every new FMS login by the database trigger) is asked to choose
+            // its own password right after unlocking FMS.
+            // Built with DOM methods only — no user data goes through innerHTML.
+            _passwordModal(forced) {
+                return new Promise((resolve) => {
+                    const overlay = document.createElement('div');
+                    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:10000;padding:16px;';
+                    const box = document.createElement('div');
+                    box.style.cssText = 'background:#fff;border-radius:12px;max-width:380px;width:100%;padding:28px;box-shadow:0 8px 30px rgba(0,0,0,0.2);';
+                    const h = document.createElement('h2');
+                    h.textContent = forced ? 'Choose your own FMS password' : 'Change FMS password';
+                    h.style.cssText = "font-family:'Plus Jakarta Sans', sans-serif;margin:0 0 8px;font-size:20px;";
+                    const p = document.createElement('p');
+                    p.style.cssText = 'color:#616161;font-size:13px;margin:0 0 16px;line-height:1.5;';
+                    p.textContent = forced
+                        ? 'Your FMS password was set by an administrator. Please choose your own before continuing. This changes your FMS password only; your Staff Portal password stays the same.'
+                        : 'This changes your FMS password only. Your Staff Portal password is changed separately, from the Staff Portal.';
+                    const mk = (ph) => { const i = document.createElement('input'); i.type = 'password'; i.placeholder = ph; i.autocomplete = 'new-password';
+                        i.style.cssText = 'width:100%;padding:10px;margin-bottom:10px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;'; return i; };
+                    const cur = mk(forced ? 'Current password (the one you just used)' : 'Current FMS password');
+                    cur.autocomplete = 'current-password';
+                    const np = mk('New password (at least 8 characters)');
+                    const cf = mk('Confirm new password');
+                    const err = document.createElement('p');
+                    err.style.cssText = 'color:#D32F2F;font-size:13px;margin:0 0 10px;';
+                    const ok = document.createElement('button');
+                    ok.className = 'action-btn approve'; ok.style.cssText = 'width:100%;margin-bottom:8px;'; ok.textContent = 'Save new password';
+                    const alt = document.createElement('button');
+                    alt.style.cssText = 'width:100%;background:none;border:none;color:#616161;font-size:13px;cursor:pointer;';
+                    alt.textContent = forced ? 'Not now — return to Staff Portal' : 'Cancel';
+                    box.append(h, p, cur, np, cf, err, ok, alt);
+                    overlay.append(box); document.body.append(overlay); cur.focus();
+                    alt.onclick = () => {
+                        overlay.remove();
+                        if (forced) {
+                            try { supabaseClient.auth.signOut(); } catch (e) {}
+                            window.location.href = 'https://rahamaorg.github.io/appraisal-system/';
+                        }
+                        resolve(false);
+                    };
+                    const reset = () => { ok.disabled = false; ok.textContent = 'Save new password'; };
+                    const submit = async () => {
+                        err.textContent = '';
+                        if (!cur.value || !np.value || !cf.value) { err.textContent = 'Fill in all three fields.'; return; }
+                        if (np.value.length < 8) { err.textContent = 'The new password must be at least 8 characters.'; return; }
+                        if (np.value !== cf.value) { err.textContent = 'The two new passwords do not match.'; return; }
+                        if (np.value === cur.value) { err.textContent = 'Choose a password different from the current one.'; return; }
+                        ok.disabled = true; ok.textContent = 'Saving…';
+                        try {
+                            const { data: { user } } = await supabaseClient.auth.getUser();
+                            const email = user && user.email;
+                            if (!email) { err.textContent = 'Your FMS session has expired. Please reload the page.'; reset(); return; }
+                            // Confirm the current password first (also gives a fresh login,
+                            // which Supabase may require before a password change).
+                            const { error: authErr } = await supabaseClient.auth.signInWithPassword({ email, password: cur.value });
+                            if (authErr) { err.textContent = 'Current password is incorrect.'; reset(); return; }
+                            const { error: upErr } = await supabaseClient.auth.updateUser({ password: np.value, data: { must_change_password: false } });
+                            if (upErr) { err.textContent = 'Could not change the password: ' + (upErr.message || 'please try again.'); reset(); return; }
+                            overlay.remove();
+                            alert('Your FMS password has been changed. Use the new one next time FMS asks.');
+                            resolve(true);
+                        } catch (e) { err.textContent = 'Something went wrong. Check your connection and try again.'; reset(); }
+                    };
+                    ok.onclick = submit;
+                    cf.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+                });
+            },
+
+            changeFmsPassword() { return this._passwordModal(false); },
+
+            async _enforcePasswordChange() {
+                try {
+                    const { data: { user } } = await supabaseClient.auth.getUser();
+                    if (user && user.user_metadata && user.user_metadata.must_change_password === true) {
+                        await this._passwordModal(true);
+                    }
+                } catch (e) { /* never block FMS on a failed check */ }
             },
 
             logout() {
