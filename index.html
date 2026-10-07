@@ -2867,7 +2867,7 @@
                     this._lightCols('concept_notes'), this._lightCols('payments'), this._lightCols('retirements')]);
                 // Also fetch variance_review CNs from Supabase (not in local cache)
                 let varReviewCNs = [];
-                if (role === 'budgetOwner' || role === 'GrantsCompliance'|| role === 'finance_manager') {
+                if (role === 'budgetOwner' || role === 'ed' || role === 'GrantsCompliance'|| role === 'finance_manager') {
                     const { data: vr } = await supabaseClient.from('concept_notes').select(cnCols)
                         .eq('status', 'variance_review').eq('currentApprover', 'budgetOwner');
                     varReviewCNs = vr || [];
