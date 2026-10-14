@@ -2871,6 +2871,8 @@
                     const { data: vr } = await supabaseClient.from('concept_notes').select(cnCols)
                         .eq('status', 'variance_review').eq('currentApprover', 'budgetOwner');
                     varReviewCNs = vr || [];
+                    // ED steps in only when the Budget Owner raised the note (a BO can't approve their own)
+                    if (role === 'ed') varReviewCNs = varReviewCNs.filter(c => this.data.roles[c.staffName] === 'budgetOwner');
                     // merge into data so the template can access via allCNs
                     varReviewCNs.forEach(c => {
                         if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
