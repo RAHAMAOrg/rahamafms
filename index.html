@@ -4735,7 +4735,7 @@ if (role === 'procurement') {
                                 if (myRole === 'budgetOwner' && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (Budget Owner)</button>`;
                                 // ED: authorise PO
-                                if (myRole === 'ed' && isProcurement && hasPO)
+                                if (myRole === 'ed' && isProcurement && hasPO && (cn.forwardedToED || this.data.roles[cn.staffName] === 'budgetOwner'))
                                     btns += `<button class="btn btn-secondary" onclick="app._boSignPO('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Authorise PO (ED)</button>`;
                                 // Procurement: vendor sign GRR
                                 if (myRole === 'procurement' && isProcurement && hasGRR)
@@ -7862,6 +7862,7 @@ ${vendors.length > 1 ? `
                 if (myRole !== 'budgetOwner' && myRole !== 'ed') { alert('Only Budget Owner or ED can authorise the PO.'); return; }
                 // BO cannot self-authorise a CN they submitted (those go to ED anyway, but guard it)
                 if (myRole === 'budgetOwner' && cn.staffName === this.currentUser) { alert('You cannot authorise a PO for a concept note you submitted.'); return; }
+                if (myRole === 'ed' && !cn.forwardedToED && this.data.roles[cn.staffName] !== 'budgetOwner') { alert('This PO is for the Budget Owner to authorise.'); return; }
                 // Check if PO already has a BO/ED authorisation
                 const { data: existing } = await supabaseClient.from('document_signatures')
                     .select('id,signerName').eq('docRef', cn.poNumber).eq('pageContext', 'budget_owner_po');
