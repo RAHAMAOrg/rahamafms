@@ -612,6 +612,11 @@
                 const _vendorToken = _initParams.get('vendorSign');
                 if (_vendorToken) { this._renderVendorSignPage(_vendorToken); return; }
                 const _poVendorToken = _initParams.get('poVendorSign');
+                const _benefLink = _initParams.get('beneficiaries');
+                if (_benefLink) {
+                    try { localStorage.setItem('fms_pending_beneficiaries', _benefLink); } catch (e) {}
+                    try { _initParams.delete('beneficiaries'); const q = _initParams.toString(); window.history.replaceState({}, document.title, window.location.pathname + (q ? '?' + q : '') + window.location.hash); } catch (e) {}
+                }
                 if (_poVendorToken) { this._renderVendorPOSignPage(_poVendorToken); return; }
                 this._setupOfflineDetection();
                 this._setupSessionTimeout();
@@ -696,6 +701,7 @@
                 }
                 this.showView('dashboard');
                 this.loadData().then(() => {
+                    this._consumePendingBeneficiaryLink().catch(() => {});
                     if (this.getUserRole() === 'staff') this._sendOverdueRetirementReminders();
                 }).catch(error => console.error('Background data load error:', error));
             },
@@ -1121,6 +1127,12 @@
                         }
                         const lines = schedule.map(s => `${s.vendor} — ₦${Number(s.amount||0).toLocaleString()} (${s.accountName}, ${s.accountNumber}, ${s.bankName})`).join('\n');
                         if (!confirm(`Authorize payment of ₦${payment.amount.toLocaleString()} across ${schedule.length} vendor(s)?\n\n${lines}\n\nConfirm payment?`)) return;
+                    } else if (Number(payment.beneficiaryCount) > 0) {
+                        const { data: bl, error: blErr } = await supabaseClient.from('payment_beneficiaries').select('full_name,bank_name,account_number,amount').eq('payment_ref', payment.refNumber).order('line_no');
+                        if (blErr || !bl || bl.length !== Number(payment.beneficiaryCount)) { alert(`Beneficiary list incomplete or not accessible (${bl ? bl.length : 0} of ${payment.beneficiaryCount} found). Do not authorize until this is resolved.`); return; }
+                        const bTot = bl.reduce((s, r) => s + Number(r.amount || 0), 0);
+                        const preview = bl.slice(0, 8).map(r => `${r.full_name} — ₦${Number(r.amount).toLocaleString()} (${r.bank_name} ${r.account_number})`).join('\n') + (bl.length > 8 ? `\n…and ${bl.length - 8} more (use 👥 Beneficiaries to see all)` : '');
+                        if (!confirm(`Authorize batch payment of ₦${payment.amount.toLocaleString()} to ${bl.length} beneficiaries (list total ₦${bTot.toLocaleString()})?\n\n${preview}\n\nConfirm payment?`)) return;
                     } else if (payment.beneficiaryFileUrl) {
                         if (!confirm(`Authorize batch payment of ₦${payment.amount.toLocaleString()}?\n\nBeneficiary file attached.\n\nConfirm payment?`)) return;
                     } else {
@@ -2404,6 +2416,7 @@
     return true;
 });
                 const bankOptions = NIGERIAN_BANKS.map(b => `<option value="${b}">${b}</option>`).join('');
+                this._benefDraft = this._benefEmptyDraft();
                 content.innerHTML = `
                     <div class="header"><h2>Request Payment</h2><p>Submit a payment request for an approved concept note</p></div>
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
@@ -2412,7 +2425,8 @@
                         <div class="form-group"><label>Payment Amount (₦) <span class="required">*</span></label><input type="number" name="amount" id="amount" required min="0" step="0.01"></div>
                         <div class="form-group"><label>Payment Method <span class="required">*</span></label><select name="paymentMethod" required><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="cheque">Cheque</option></select></div>
                         <div class="form-group full-width"><label>Justification</label><textarea name="justification" placeholder="Additional payment information"></textarea></div>
-                        <div class="form-group full-width"><label>Beneficiary List (Optional)</label><div class="file-upload-area" id="beneficiaryUploadArea" onclick="document.getElementById('beneficiaryFile').click()"><p>📎 Click to upload attendance or payment list</p><span class="form-hint">Maximum 5MB - Excel, CSV, PDF, or Image</span></div><input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)"></div>
+                        <div class="form-group full-width"><label>Beneficiaries (batch payment)</label><button type="button" class="btn btn-secondary" id="benefBtn" onclick="app.openBeneficiaryEditor()" style="width:100%;">👥 Add beneficiaries one by one</button><span class="form-hint" id="benefSummary">For batch payments (e.g. facilitators, participants). Leave empty for a single payee.</span></div>
+                        <div class="form-group full-width"><label>Signed Attendance Sheet / Supporting Document (Optional)</label><div class="file-upload-area" id="beneficiaryUploadArea" onclick="document.getElementById('beneficiaryFile').click()"><p>📎 Click to upload the signed attendance sheet</p><span class="form-hint">Maximum 5MB - Excel, CSV, PDF, or Image</span></div><input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)"></div>
                         <div id="bankDetailsSection">
                             <div class="form-group"><label>Account Name <span class="required">*</span></label><input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account"></div>
                             <div class="form-group"><label>Account Number <span class="required">*</span></label><input type="text" name="accountNumber" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number"></div>
@@ -2422,6 +2436,158 @@
                     </form>`;
             },
             
+            // ── Beneficiaries entered one by one (follows RAHAMA attendance sheet) ──
+            _benefEmptyDraft() { return { title: '', location: '', rows: [] }; },
+
+            _benefSummaryUpdate() {
+                const d = this._benefDraft || this._benefEmptyDraft();
+                const sum = document.getElementById('benefSummary');
+                const btn = document.getElementById('benefBtn');
+                const bankSection = document.getElementById('bankDetailsSection');
+                const total = d.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+                if (btn) btn.textContent = d.rows.length ? `👥 Edit beneficiaries (${d.rows.length})` : '👥 Add beneficiaries one by one';
+                if (sum) sum.textContent = d.rows.length ? `${d.rows.length} beneficiaries · total ₦${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} — bank details below are not needed` : 'For batch payments (e.g. facilitators, participants). Leave empty for a single payee.';
+                if (bankSection) {
+                    if (d.rows.length) { bankSection.style.display = 'none'; bankSection.querySelectorAll('[required]').forEach(el => { el.removeAttribute('required'); el.value = ''; }); }
+                    else { bankSection.style.display = ''; ['accountName', 'accountNumber', 'bankName'].forEach(id => { const el = document.getElementById(id); if (el) el.setAttribute('required', ''); }); }
+                }
+            },
+
+            openBeneficiaryEditor() {
+                if (!this._benefDraft) this._benefDraft = this._benefEmptyDraft();
+                const d = this._benefDraft;
+                document.getElementById('benefOverlay')?.remove();
+                const ov = document.createElement('div');
+                ov.id = 'benefOverlay';
+                ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;overflow-y:auto;padding:12px;';
+                const banks = NIGERIAN_BANKS.map(b => `<option value="${escHtml(b)}">${escHtml(b)}</option>`).join('');
+                const inp = 'width:100%;padding:9px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;font-size:14px;';
+                const lbl = 'display:block;font-size:12px;font-weight:600;color:#374151;margin:8px 0 3px;';
+                ov.innerHTML = `
+                  <div style="background:#fff;max-width:760px;margin:0 auto;border-radius:12px;padding:18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                      <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;">Beneficiaries (attendance)</h3>
+                      <button type="button" id="benefClose" style="background:none;border:0;font-size:22px;cursor:pointer;">✕</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">
+                      <div><label style="${lbl}">Title of the Meeting</label><input id="bfTitle" style="${inp}"></div>
+                      <div><label style="${lbl}">Location of the Meeting</label><input id="bfLocation" style="${inp}"></div>
+                    </div>
+                    <div style="background:#F4F7F5;border-radius:10px;padding:12px;margin-top:14px;">
+                      <div style="font-weight:700;font-size:13px;color:#1B4332;">Add one beneficiary</div>
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0 10px;">
+                        <div><label style="${lbl}">Name *</label><input id="bfName" style="${inp}"></div>
+                        <div><label style="${lbl}">Gender *</label><select id="bfGender" style="${inp}"><option value="">Select</option><option>Female</option><option>Male</option></select></div>
+                        <div><label style="${lbl}">Organization</label><input id="bfOrg" value="Rahama" style="${inp}"></div>
+                        <div><label style="${lbl}">Designation</label><input id="bfDesig" style="${inp}"></div>
+                        <div><label style="${lbl}">Phone Number</label><input id="bfPhone" inputmode="tel" style="${inp}"></div>
+                        <div><label style="${lbl}">Email Address</label><input id="bfEmail" type="email" placeholder="Optional" style="${inp}"></div>
+                        <div><label style="${lbl}">Bank Name *</label><select id="bfBank" style="${inp}"><option value="">Select bank</option>${banks}</select></div>
+                        <div><label style="${lbl}">Account Number *</label><input id="bfAcct" inputmode="numeric" maxlength="10" placeholder="10 digits" style="${inp}"></div>
+                        <div><label style="${lbl}">Amount (₦) *</label><input id="bfAmt" type="number" min="0" step="0.01" style="${inp}"></div>
+                      </div>
+                      <p id="bfErr" style="color:#B91C1C;font-size:13px;margin:8px 0 0;"></p>
+                      <button type="button" id="bfAdd" class="btn btn-primary" style="margin-top:10px;width:100%;">+ Add to list</button>
+                    </div>
+                    <div id="bfTotals" style="margin:14px 0 6px;font-size:13px;font-weight:600;"></div>
+                    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;" id="bfTable"></table></div>
+                    <div style="display:flex;gap:8px;margin-top:14px;">
+                      <button type="button" id="bfDone" class="btn btn-primary" style="flex:2;">Done</button>
+                      <button type="button" id="bfClear" class="btn btn-secondary" style="flex:1;">Clear all</button>
+                    </div>
+                  </div>`;
+                document.body.appendChild(ov);
+                const $ = id => document.getElementById(id);
+                $('bfTitle').value = d.title; $('bfLocation').value = d.location;
+                $('bfTitle').oninput = e => { d.title = e.target.value; };
+                $('bfLocation').oninput = e => { d.location = e.target.value; };
+                const render = () => {
+                    const total = d.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+                    const payAmt = parseFloat(document.getElementById('amount')?.value || '0') || 0;
+                    const diff = Math.round((payAmt - total) * 100) / 100;
+                    $('bfTotals').innerHTML = `${d.rows.length} beneficiaries · Total ₦${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` +
+                        (payAmt ? (diff === 0 ? ` <span style="color:#047857;">✓ matches payment amount</span>` : ` <span style="color:#B91C1C;">· payment amount is ₦${payAmt.toLocaleString()} (difference ₦${diff.toLocaleString()})</span>`) : ` <span style="color:#6B7280;">· enter the payment amount on the form to compare</span>`);
+                    $('bfTable').innerHTML = d.rows.length ? `<tr style="background:#E8F5E9;text-align:left;"><th style="padding:6px;">S/N</th><th>Name</th><th>Gender</th><th>Designation</th><th>Phone</th><th>Bank</th><th>Account No</th><th style="text-align:right;">Amount</th><th></th></tr>` +
+                        d.rows.map((r, i) => `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${i + 1}</td><td>${escHtml(r.full_name)}</td><td>${escHtml(r.gender)}</td><td>${escHtml(r.designation || '')}</td><td>${escHtml(r.phone || '')}</td><td>${escHtml(r.bank_name)}</td><td>${escHtml(r.account_number)}</td><td style="text-align:right;">${Number(r.amount).toLocaleString()}</td><td><button type="button" data-i="${i}" class="bfDel" style="background:none;border:0;color:#B91C1C;cursor:pointer;">✕</button></td></tr>`).join('') : '';
+                    ov.querySelectorAll('.bfDel').forEach(b => b.onclick = () => { d.rows.splice(Number(b.dataset.i), 1); render(); });
+                };
+                $('bfAdd').onclick = () => {
+                    const r = {
+                        full_name: $('bfName').value.trim(), gender: $('bfGender').value, organization: $('bfOrg').value.trim(),
+                        designation: $('bfDesig').value.trim(), phone: $('bfPhone').value.trim(), email: $('bfEmail').value.trim(),
+                        bank_name: $('bfBank').value, account_number: $('bfAcct').value.trim(), amount: parseFloat($('bfAmt').value)
+                    };
+                    let err = '';
+                    if (r.full_name.length < 2) err = 'Enter the beneficiary\'s full name.';
+                    else if (!r.gender) err = 'Select gender.';
+                    else if (!r.bank_name) err = 'Select the bank.';
+                    else if (!/^[0-9]{10}$/.test(r.account_number)) err = 'Account number must be exactly 10 digits.';
+                    else if (!(r.amount > 0)) err = 'Enter an amount greater than zero.';
+                    else if (d.rows.some(x => x.account_number === r.account_number && x.bank_name === r.bank_name)) err = 'This account is already on the list.';
+                    $('bfErr').textContent = err;
+                    if (err) return;
+                    d.rows.push(r);
+                    // Keep organization, designation, bank and amount for the next entry — often the same
+                    ['bfName', 'bfPhone', 'bfEmail', 'bfAcct'].forEach(id => { $(id).value = ''; });
+                    $('bfGender').value = '';
+                    render(); $('bfName').focus();
+                };
+                $('bfClear').onclick = () => { if (d.rows.length && confirm('Remove all beneficiaries from this list?')) { d.rows = []; render(); } };
+                const close = () => { ov.remove(); this._benefSummaryUpdate(); };
+                $('bfDone').onclick = close; $('benefClose').onclick = close;
+                render();
+            },
+
+            async viewPaymentBeneficiaries(ref) {
+                const { data, error } = await supabaseClient.from('payment_beneficiaries').select('*').eq('payment_ref', ref).order('line_no');
+                if (error || !data || !data.length) { alert('You do not have access to this beneficiary list at this stage.'); return; }
+                const total = data.reduce((s, r) => s + Number(r.amount || 0), 0);
+                document.getElementById('benefViewOverlay')?.remove();
+                const ov = document.createElement('div');
+                ov.id = 'benefViewOverlay';
+                ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;overflow-y:auto;padding:12px;';
+                ov.innerHTML = `
+                  <div style="background:#fff;max-width:900px;margin:0 auto;border-radius:12px;padding:18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                      <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;">Beneficiaries — ${escHtml(ref)}</h3>
+                      <button type="button" id="bvClose" style="background:none;border:0;font-size:22px;cursor:pointer;">✕</button>
+                    </div>
+                    <p style="font-size:13px;color:#4B5563;margin:6px 0 10px;">${escHtml(data[0].meeting_title || '')}${data[0].meeting_location ? ' · ' + escHtml(data[0].meeting_location) : ''} · ${data.length} beneficiaries · Total ₦${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+                      <tr style="background:#E8F5E9;text-align:left;"><th style="padding:6px;">S/N</th><th>Name</th><th>Gender</th><th>Organization</th><th>Designation</th><th>Phone</th><th>Email</th><th>Bank</th><th>Account No</th><th style="text-align:right;">Amount</th></tr>
+                      ${data.map(r => `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${r.line_no}</td><td>${escHtml(r.full_name)}</td><td>${escHtml(r.gender || '')}</td><td>${escHtml(r.organization || '')}</td><td>${escHtml(r.designation || '')}</td><td>${escHtml(r.phone || '')}</td><td>${escHtml(r.email || '')}</td><td>${escHtml(r.bank_name)}</td><td>${escHtml(r.account_number)}</td><td style="text-align:right;">${Number(r.amount).toLocaleString()}</td></tr>`).join('')}
+                    </table></div>
+                    <button type="button" id="bvCsv" class="btn btn-primary" style="margin-top:14px;width:100%;">⬇ Download list (CSV)</button>
+                  </div>`;
+                document.body.appendChild(ov);
+                document.getElementById('bvClose').onclick = () => ov.remove();
+                document.getElementById('bvCsv').onclick = () => {
+                    const esc = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+                    const lines = [
+                        ['RAHAMA Girl Child & Women Empowerment Initiative'], ['Beneficiary list — ' + ref],
+                        ['Title of the Meeting', data[0].meeting_title || ''], ['Location of the Meeting', data[0].meeting_location || ''], [],
+                        ['S/N', 'Name', 'Gender', 'Organization', 'Designation', 'Phone Number', 'Email Address', 'Bank Name', 'Account Number', 'Amount (NGN)'],
+                        ...data.map(r => [r.line_no, r.full_name, r.gender, r.organization, r.designation, r.phone, r.email, r.bank_name, r.account_number, r.amount]),
+                        [], ['Total', '', '', '', '', '', '', '', '', total]
+                    ].map(row => row.map(esc).join(','));
+                    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+                    a.href = url; a.download = `beneficiaries_${ref}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+                };
+            },
+
+            // Link in the authorised payment sheet: ?beneficiaries=PAYxxx opens the list after login
+            async _consumePendingBeneficiaryLink() {
+                let ref = null;
+                try { ref = localStorage.getItem('fms_pending_beneficiaries'); localStorage.removeItem('fms_pending_beneficiaries'); } catch (e) {}
+                if (!ref || !/^PAY[0-9]+$/.test(ref)) return;
+                const { data } = await supabaseClient.from('payments').select('refNumber,beneficiaryCount,beneficiaryFileUrl,beneficiaryFileName').eq('refNumber', ref).maybeSingle();
+                if (!data) { alert('Payment ' + ref + ' was not found, or you do not have access to it.'); return; }
+                if (Number(data.beneficiaryCount) > 0) return this.viewPaymentBeneficiaries(ref);
+                if (data.beneficiaryFileUrl) return this.downloadFile(data.beneficiaryFileUrl, data.beneficiaryFileName);
+                alert('Payment ' + ref + ' has no beneficiary list.');
+            },
+
             handleBeneficiaryUpload(input) {
                 const area = document.getElementById('beneficiaryUploadArea');
                 const file = input.files[0];
@@ -2429,11 +2595,9 @@
                 if (file) {
                     if (file.size > MAX_FILE_SIZE) { alert(`File too large! Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`); input.value = ''; return; }
                     area.classList.add('has-file');
-                    area.innerHTML = `<p>✓ ${file.name}</p><span class="form-hint">${(file.size / 1024).toFixed(1)} KB — Bank details not needed for batch payments</span>`;
-                    if (bankSection) { bankSection.style.display = 'none'; bankSection.querySelectorAll('[required]').forEach(el => { el.removeAttribute('required'); el.value = ''; }); }
-                } else {
-                    if (bankSection) { bankSection.style.display = ''; document.getElementById('accountName').setAttribute('required', ''); document.getElementById('accountNumber').setAttribute('required', ''); document.getElementById('bankName').setAttribute('required', ''); }
+                    area.innerHTML = `<p>✓ ${escHtml(file.name)}</p><span class="form-hint">${(file.size / 1024).toFixed(1)} KB — supporting document</span>`;
                 }
+                this._benefSummaryUpdate();
             },
             
             loadConceptNoteDetails(id) {
@@ -2449,6 +2613,8 @@
                         Estimated Cost: ₦${cn.estimatedCost.toLocaleString()} ·
                         Already Paid: ₦${paidSoFar.toLocaleString()} ·
                         <strong>Balance Remaining: ₦${(cn.estimatedCost - paidSoFar).toLocaleString()}</strong>`;
+                    const amtInput = document.getElementById('amount');
+                    if (amtInput) amtInput.max = Math.max(0, cn.estimatedCost - paidSoFar);
                 }
             },
             
@@ -2459,18 +2625,43 @@
                 const submitBtn = document.getElementById('submitPaymentBtn');
                 const amount = parseFloat(formData.get('amount'));
                 if (!this.validateAmount(amount)) { this.showError('amount', 'Please enter a valid amount'); return; }
+                if (conceptNote) {
+                    const used = this.data.payments
+                        .filter(p => p.conceptNoteRef === conceptNote.refNumber && p.status !== 'rejected')
+                        .reduce((s, p) => s + Number(p.amount || 0), 0);
+                    const balance = Math.round((Number(conceptNote.estimatedCost || 0) - used) * 100) / 100;
+                    if (amount > balance + 0.009) {
+                        this.showError('amount', `Cannot exceed the approved balance of ₦${balance.toLocaleString()}`);
+                        alert(`This request (₦${amount.toLocaleString()}) is more than what remains of the approved amount.\n\nApproved: ₦${Number(conceptNote.estimatedCost || 0).toLocaleString()}\nAlready requested or paid: ₦${used.toLocaleString()}\nRemaining: ₦${balance.toLocaleString()}`);
+                        return;
+                    }
+                }
                 const accountNumber = formData.get('accountNumber');
-                const hasBeneficiaryFile = document.getElementById('beneficiaryFile').files.length > 0;
-                if (!hasBeneficiaryFile && !this.validateAccountNumber(accountNumber)) { this.showError('accountNumber', 'Account number must be exactly 10 digits'); return; }
+                const benefRows = (this._benefDraft && this._benefDraft.rows) || [];
+                if (benefRows.length) {
+                    const bTotal = Math.round(benefRows.reduce((s, r) => s + Number(r.amount || 0), 0) * 100) / 100;
+                    if (Math.abs(bTotal - amount) > 0.009) { alert(`The beneficiaries add up to ₦${bTotal.toLocaleString()}, but the payment amount is ₦${amount.toLocaleString()}.\n\nPlease correct the list or the amount before submitting.`); return; }
+                }
+                if (!benefRows.length && !this.validateAccountNumber(accountNumber)) { this.showError('accountNumber', 'Account number must be exactly 10 digits'); return; }
                 try {
                     submitBtn.disabled = true; submitBtn.textContent = 'Uploading...';
                     const file = document.getElementById('beneficiaryFile').files[0];
                     let beneficiaryFileData = null;
                     if (file) beneficiaryFileData = await this.uploadFile(file, 'beneficiaries');
-                    const payment = { refNumber: 'PAY' + Date.now(), conceptNoteId: parseInt(formData.get('conceptNoteId')), staffName: this.currentUser, amount, paymentMethod: formData.get('paymentMethod'), justification: formData.get('justification'), accountName: formData.get('accountName'), accountNumber, bankName: formData.get('bankName'), beneficiaryFileUrl: beneficiaryFileData?.url, beneficiaryFileName: beneficiaryFileData?.fileName, status: 'pending', requestDate: new Date().toISOString(), conceptNoteRef: conceptNote?.refNumber, projectCode: conceptNote?.projectCode };
+                    const payment = { beneficiaryCount: benefRows.length || null, refNumber: 'PAY' + Date.now(), conceptNoteId: parseInt(formData.get('conceptNoteId')), staffName: this.currentUser, amount, paymentMethod: formData.get('paymentMethod'), justification: formData.get('justification'), accountName: formData.get('accountName'), accountNumber, bankName: formData.get('bankName'), beneficiaryFileUrl: beneficiaryFileData?.url, beneficiaryFileName: beneficiaryFileData?.fileName, status: 'pending', requestDate: new Date().toISOString(), conceptNoteRef: conceptNote?.refNumber, projectCode: conceptNote?.projectCode };
                     const { data, error } = await supabaseClient.from('payments').insert([payment]).select();
                     if (error) throw error;
                     this.data.payments.unshift(data[0]); this.clearCache();
+                    if (benefRows.length) {
+                        const d = this._benefDraft;
+                        const { error: bErr } = await supabaseClient.from('payment_beneficiaries').insert(benefRows.map((r, i) => ({
+                            payment_ref: payment.refNumber, line_no: i + 1, meeting_title: d.title || null, meeting_location: d.location || null,
+                            full_name: r.full_name, gender: r.gender, organization: r.organization || null, designation: r.designation || null,
+                            phone: r.phone || null, email: r.email || null, bank_name: r.bank_name, account_number: r.account_number,
+                            amount: r.amount, created_by: this.currentUser })));
+                        if (bErr) { alert(`Payment ${payment.refNumber} was created, but the beneficiary list did not save (${bErr.message}).\n\nDo NOT submit again — contact Finance with this reference. The payment cannot be approved until the list is complete.`); this.showView('dashboard'); return; }
+                    }
+                    this._benefDraft = this._benefEmptyDraft();
                     alert('Payment request submitted successfully!'); this.showView('dashboard');
                 } catch (error) { console.error('Submit error:', error); alert('Error submitting payment: ' + error.message); }
                 finally { submitBtn.disabled = false; submitBtn.textContent = 'Submit Payment Request'; }
@@ -3149,10 +3340,10 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     ${poQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">🛒 Purchase Orders — Finance Confirmation (${poQueue.length})</h3>${(poConfirmedCount > 0 || poLegacyCount > 0) ? `<p style="font-size:12px;color:var(--text-muted);margin:-8px 0 12px;">${[poConfirmedCount > 0 ? `${poConfirmedCount} already confirmed` : '', poLegacyCount > 0 ? `${poLegacyCount} legacy PO${poLegacyCount!==1?'s':''} raised under the old flow` : ''].filter(Boolean).join(' · ')} — not listed.</p>` : ''}<div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>PO Number</th><th>Concept Note</th><th>Project</th><th>Requester</th><th>Activity</th><th>Amount</th><th>Raised</th><th>Actions</th></tr></thead><tbody>${poQueue.map(cn => { let vs=[]; try { if (cn.vendorsJson) vs=JSON.parse(cn.vendorsJson); } catch(e){} const tot=vs.reduce((s,v)=>s+(Number(v.amount||0)*(v.qty||1)),0)||cn.estimatedCost||0; return `<tr id="poq_${cn.refNumber}"><td style="font-weight:700;color:var(--primary);">${cn.poNumber}</td><td>${cn.refNumber}</td><td>${cn.projectCode||'—'}</td><td>${cn.staffName}</td><td style="max-width:220px;">${escHtml(cn.activityTitle)}</td><td style="font-weight:600;">₦${tot.toLocaleString()}</td><td style="font-size:12px;">${cn.poGeneratedAt ? new Date(cn.poGeneratedAt).toLocaleDateString('en-NG') : '—'}</td><td style="display:flex;flex-direction:column;gap:6px;"><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:140px;border-color:var(--primary);color:var(--primary);font-size:12px;">📄 View Concept Note</button><button class="action-btn" onclick="app._previewPODraft('${cn.refNumber}')" style="min-width:140px;border-color:#059669;color:#059669;font-size:12px;">🛒 View PO</button><span id="poqact_${cn.refNumber}"><button class="action-btn approve" onclick="app._financeSignPO('${cn.refNumber}')" style="min-width:140px;font-size:12px;">✍️ Confirm PO</button></span></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${escHtml(t.destination||'—')}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) : ''}<button class="action-btn reject" onclick="app.rejectConceptNote('${cn.refNumber}')">✗ Reject</button></td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Justification</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td style="max-width:260px;white-space:pre-wrap;font-size:12px;line-height:1.5;">${p.justification ? escHtml(p.justification) : '<span style="color:var(--text-muted);">— none given</span>'}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${p.beneficiaryFileUrl ? ((p.status === 'finance_approved' && app.getFinanceStage(app.currentUser) === 'authorizer') ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : `<span style="font-size:11px;color:var(--text-muted);">🔒 Beneficiary list: authorizer only</span><br>`) : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${app._renderFinancePaymentActions(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Justification</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td style="max-width:260px;white-space:pre-wrap;font-size:12px;line-height:1.5;">${p.justification ? escHtml(p.justification) : '<span style="color:var(--text-muted);">— none given</span>'}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${Number(p.beneficiaryCount) > 0 ? ((p.status === 'finance_approved' && app.getFinanceStage(app.currentUser) === 'authorizer') ? `<button class="action-btn" onclick="app.viewPaymentBeneficiaries('${p.refNumber}')">👥 Beneficiaries (${p.beneficiaryCount})</button><br>` : `<span style="font-size:11px;color:var(--text-muted);">🔒 ${p.beneficiaryCount} beneficiaries: authorizer only</span><br>`) : ''}${p.beneficiaryFileUrl ? ((p.status === 'finance_approved' && app.getFinanceStage(app.currentUser) === 'authorizer') ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : `<span style="font-size:11px;color:var(--text-muted);">🔒 Beneficiary list: authorizer only</span><br>`) : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${app._renderFinancePaymentActions(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br>${app._renderFinanceRetirementActions(r)}</td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : cn.boPreApprovedAt && cn.budgetOwnerApprovedBy === this.currentUser ? { label: 'Pre-approved → ED', date: cn.boPreApprovedAt, cls: 'status-pending' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
-                    ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}${(p.status==='paid' && p.beneficiaryFileUrl) ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')" style="min-width:90px;">📎 Beneficiaries</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+                    ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}${(p.status==='paid' && Number(p.beneficiaryCount) > 0) ? `<button class="action-btn" onclick="app.viewPaymentBeneficiaries('${p.refNumber}')" style="min-width:90px;">👥 Beneficiaries (${p.beneficiaryCount})</button>` : ''}${(p.status==='paid' && p.beneficiaryFileUrl) ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')" style="min-width:90px;">📎 Beneficiaries</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
                     ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected.</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Retirement Ref</th><th>Payment Ref</th><th>Staff</th><th>Amount Spent</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyRetirements.map(r => { const linkedCN = app.data.conceptNotes.find(c => app.data.payments.find(p => p.refNumber===r.paymentRef && p.conceptNoteRef===c.refNumber)); const cnRef = linkedCN?.refNumber; return `<tr><td>${r.refNumber}</td><td>${r.paymentRef}</td><td>${r.staffName}</td><td>₦${Number(r.actualSpent||0).toLocaleString()}</td><td><span class="status-badge ${r.status==='approved'?'status-approved':'status-rejected'}">${r.status==='approved'?'Approved':'Rejected'}</span></td><td>${r.status==='approved'?(r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'-'):(r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
 
                 // Safety net: if a confirmation landed since this data was loaded,
@@ -5596,8 +5787,29 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
         return;
     }
 
+    // Entered beneficiary lists (readable only where the access rule allows)
+    const benefByRef = {};
+    const benefRefs = scope.filter(p => Number(p.beneficiaryCount) > 0).map(p => p.refNumber);
+    for (let i = 0; i < benefRefs.length; i += 100) {
+        const { data: bRows } = await supabaseClient.from('payment_beneficiaries').select('*').in('payment_ref', benefRefs.slice(i, i + 100)).order('line_no');
+        (bRows || []).forEach(b => { (benefByRef[b.payment_ref] = benefByRef[b.payment_ref] || []).push(b); });
+    }
+    const listLink = ref => `${window.location.origin}${window.location.pathname}?beneficiaries=${ref}`;
+
     const rows = [];
     scope.forEach(p => {
+        const bl = benefByRef[p.refNumber] || [];
+        if (bl.length) {
+            bl.forEach((b, i) => rows.push({
+                payRef: p.refNumber, line: `${i+1} of ${bl.length}`, cn: p.conceptNoteRef || '',
+                project: p.projectCode || '', beneficiary: b.full_name,
+                detail: [b.designation, b.organization, b.meeting_title].filter(Boolean).join(' · '),
+                amount: b.amount, acctName: b.full_name, acctNo: b.account_number, bank: b.bank_name,
+                status: p.status, reviewed: p.reviewedBy || '', approved: p.financeApprovedBy || '',
+                authorised: p.processedBy || '', paidDate: fmt(p.paidDate), phone: b.phone || '', listLink: listLink(p.refNumber)
+            }));
+            return;
+        }
         let sched = [];
         try { if (p.paymentScheduleJson) sched = JSON.parse(p.paymentScheduleJson); } catch(e) {}
         if (sched.length) {
@@ -5611,17 +5823,20 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
         } else {
             rows.push({
                 payRef: p.refNumber, line: '1 of 1', cn: p.conceptNoteRef || '',
-                project: p.projectCode || '', beneficiary: p.staffName, detail: p.justification ? String(p.justification).slice(0,80) : '',
+                project: p.projectCode || '', beneficiary: p.staffName,
+                detail: Number(p.beneficiaryCount) > 0 ? `${p.beneficiaryCount} beneficiaries — list restricted` : (p.justification ? String(p.justification).slice(0,80) : ''),
                 amount: p.amount, acctName: p.accountName || '', acctNo: p.accountNumber || '', bank: p.bankName || '',
                 status: p.status, reviewed: p.reviewedBy || '', approved: p.financeApprovedBy || '',
-                authorised: p.processedBy || '', paidDate: fmt(p.paidDate)
+                authorised: p.processedBy || '', paidDate: fmt(p.paidDate), phone: '',
+                listLink: (p.beneficiaryFileUrl || Number(p.beneficiaryCount) > 0) ? listLink(p.refNumber) : ''
             });
         }
     });
 
     const total = rows.reduce((s,r) => s + Number(r.amount||0), 0);
     const headers = ['Payment Ref','Line','Concept Note','Project','Beneficiary','Description','Amount (NGN)',
-                     'Account Name','Account Number','Bank','Status','Reviewed By','Approved By','Authorised By','Paid Date'];
+                     'Account Name','Account Number','Bank','Status','Reviewed By','Approved By','Authorised By','Paid Date',
+                     'Phone Number','Beneficiary List (opens FMS)'];
     const csv = [
         ['RAHAMA Girl Child & Women Empowerment Initiative'].map(csvEscape).join(','),
         ['Payment Schedule — Authorised Payments'].map(csvEscape).join(','),
@@ -5634,7 +5849,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
         headers.map(csvEscape).join(',')
     ];
     rows.forEach(r => csv.push([r.payRef, r.line, r.cn, r.project, r.beneficiary, r.detail, r.amount,
-        r.acctName, r.acctNo, r.bank, r.status, r.reviewed, r.approved, r.authorised, r.paidDate].map(csvEscape).join(',')));
+        r.acctName, r.acctNo, r.bank, r.status, r.reviewed, r.approved, r.authorised, r.paidDate,
+        r.phone || '', r.listLink || ''].map(csvEscape).join(',')));
 
     const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
