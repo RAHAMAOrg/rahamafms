@@ -2426,7 +2426,7 @@
                         <div class="form-group"><label>Payment Method <span class="required">*</span></label><select name="paymentMethod" required><option value="bank_transfer">Bank Transfer</option><option value="cash">Cash</option><option value="cheque">Cheque</option></select></div>
                         <div class="form-group full-width"><label>Justification</label><textarea name="justification" placeholder="Additional payment information"></textarea></div>
                         <div class="form-group full-width"><label>Beneficiaries (batch payment)</label><button type="button" class="btn btn-secondary" id="benefBtn" onclick="app.openBeneficiaryEditor()" style="width:100%;">👥 Add beneficiaries one by one</button><span class="form-hint" id="benefSummary">For batch payments (e.g. facilitators, participants). Leave empty for a single payee.</span></div>
-                        <div class="form-group full-width"><label>Signed Attendance Sheet / Supporting Document (Optional)</label><div class="file-upload-area" id="beneficiaryUploadArea" onclick="document.getElementById('beneficiaryFile').click()"><p>📎 Click to upload the signed attendance sheet</p><span class="form-hint">Maximum 5MB - Excel, CSV, PDF, or Image</span></div><input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)"></div>
+                        <div class="form-group full-width"><label>Signed Attendance &amp; Payment Sheet <span class="required" id="benefFileReq" style="display:none;">* required for batch payments</span></label><div class="file-upload-area" id="beneficiaryUploadArea" onclick="document.getElementById('beneficiaryFile').click()"><p>📎 Click to upload the signed hard copy (scan or photo)</p><span class="form-hint">Maximum 5MB - Excel, CSV, PDF, or Image</span></div><input type="file" id="beneficiaryFile" accept=".xlsx,.xls,.csv,.pdf,.jpg,.png" style="display:none" onchange="app.handleBeneficiaryUpload(this)"></div>
                         <div id="bankDetailsSection">
                             <div class="form-group"><label>Account Name <span class="required">*</span></label><input type="text" name="accountName" id="accountName" required placeholder="Name as it appears on bank account"></div>
                             <div class="form-group"><label>Account Number <span class="required">*</span></label><input type="text" name="accountNumber" id="accountNumber" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit account number"></div>
@@ -2447,6 +2447,8 @@
                 const total = d.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
                 if (btn) btn.textContent = d.rows.length ? `👥 Edit beneficiaries (${d.rows.length})` : '👥 Add beneficiaries one by one';
                 if (sum) sum.textContent = d.rows.length ? `${d.rows.length} beneficiaries · total ₦${total.toLocaleString(undefined, { minimumFractionDigits: 2 })} — bank details below are not needed` : 'For batch payments (e.g. facilitators, participants). Leave empty for a single payee.';
+                const req = document.getElementById('benefFileReq');
+                if (req) req.style.display = d.rows.length ? '' : 'none';
                 if (bankSection) {
                     if (d.rows.length) { bankSection.style.display = 'none'; bankSection.querySelectorAll('[required]').forEach(el => { el.removeAttribute('required'); el.value = ''; }); }
                     else { bankSection.style.display = ''; ['accountName', 'accountNumber', 'bankName'].forEach(id => { const el = document.getElementById(id); if (el) el.setAttribute('required', ''); }); }
@@ -2638,6 +2640,10 @@
                 }
                 const accountNumber = formData.get('accountNumber');
                 const benefRows = (this._benefDraft && this._benefDraft.rows) || [];
+                if (benefRows.length && !document.getElementById('beneficiaryFile').files.length) {
+                    alert('Batch payments need the signed hard copy of the attendance and payment sheet.\n\nPlease upload a scan or photo of it before submitting.');
+                    return;
+                }
                 if (benefRows.length) {
                     const bTotal = Math.round(benefRows.reduce((s, r) => s + Number(r.amount || 0), 0) * 100) / 100;
                     if (Math.abs(bTotal - amount) > 0.009) { alert(`The beneficiaries add up to ₦${bTotal.toLocaleString()}, but the payment amount is ₦${amount.toLocaleString()}.\n\nPlease correct the list or the amount before submitting.`); return; }
