@@ -1307,6 +1307,12 @@
                 const timestamp = Date.now();
                 const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const fileName = `${type}/${timestamp}_${sanitizedName}`;
+                // Beneficiary lists go to a PRIVATE bucket: no public link; the database decides each download
+                if (type === 'beneficiaries') {
+                    const { error: bErr } = await supabaseClient.storage.from('fms-beneficiaries').upload(fileName, file);
+                    if (bErr) throw new Error('Failed to upload file: ' + bErr.message);
+                    return { url: 'private:fms-beneficiaries/' + fileName, fileName: original.name, size: file.size, type: file.type };
+                }
                 try {
                     const { data, error } = await supabaseClient.storage.from(STORAGE_BUCKET).upload(fileName, file);
                     if (error) throw error;
@@ -1319,6 +1325,15 @@
             },
             
             async downloadFile(fileUrl, fileName) {
+                if (typeof fileUrl === 'string' && fileUrl.startsWith('private:')) {
+                    const rest = fileUrl.slice(8); const slash = rest.indexOf('/');
+                    const { data: blob, error } = await supabaseClient.storage.from(rest.slice(0, slash)).download(rest.slice(slash + 1));
+                    if (error || !blob) { alert('You do not have access to this beneficiary list at this stage.'); return; }
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a'); link.href = url; link.download = fileName || 'beneficiaries';
+                    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url); return;
+                }
                 try {
                     const response = await fetch(fileUrl);
                     const blob = await response.blob();
