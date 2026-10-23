@@ -1264,6 +1264,13 @@
             getMyPayments() { if (!this.cache.myPayments) this.cache.myPayments = this.data.payments.filter(p => p.staffName === this.currentUser); return this.cache.myPayments; },
             getMyRetirements() { if (!this.cache.myRetirements) this.cache.myRetirements = this.data.retirements.filter(r => r.staffName === this.currentUser); return this.cache.myRetirements; },
             
+            // As soon as a project is picked: if it is closed or has nothing left,
+            // say so straight away (plain message, no figures) and clear the choice.
+            async _checkProjectOnPick(sel) {
+                if (!sel || !sel.value || this._editingCN) return;
+                const ok = await this._canSubmitAgainst(sel.value, 0.01);
+                if (ok === false) { alert('This concept note cannot be submitted against this budget line.'); sel.value = ''; sel.focus(); }
+            },
             // Yes/no from the database: is the project active with enough uncommitted
             // budget for this amount? null = rule not installed yet (no check here).
             async _canSubmitAgainst(code, amount) {
@@ -1845,7 +1852,7 @@
                 content.innerHTML = `
                     <div class="header"><h2>Create Concept Note</h2><p>Step 1: Develop your concept note or Terms of Reference</p></div>
                     <form class="form-grid two-col" onsubmit="app.submitConceptNote(event)">
-                        <div class="form-group"><label>Project Code <span class="required">*</span></label><select name="projectCode" id="projectCode" required><option value="">Select project</option>${this.data.projects.map(p => `<option value="${p.code}">${p.code} - ${p.name}</option>`).join('')}</select></div>
+                        <div class="form-group"><label>Project Code <span class="required">*</span></label><select name="projectCode" id="projectCode" required onchange="app._checkProjectOnPick(this)"><option value="">Select project</option>${this.data.projects.filter(p => !p.endDate || String(p.endDate).slice(0, 10) >= new Date().toISOString().slice(0, 10)).map(p => `<option value="${p.code}">${p.code} - ${p.name}</option>`).join('')}</select></div>
                         <div class="form-group"><label>Activity Title <span class="required">*</span></label><input type="text" name="activityTitle" id="activityTitle" required placeholder="e.g., Radio Jingle Production - Kano"></div>
                         <div class="form-group full-width"><label>Cost Classification <span class="required">*</span></label><select name="costClassification" id="costClassification" required>
                             <option value="">Select classification</option>
@@ -3757,6 +3764,18 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 await this.loadData(); this.showView('dashboard');
             },
 
+            // Close a note that is no longer needed: keeps what was paid, releases the
+            // rest of its budget. Rules in the database (fms_cn_close_timer.sql).
+            async closeConceptNote(refNumber) {
+                const reason = prompt('Close ' + refNumber + '?\n\nWhatever was already paid stays; the unspent balance goes back to the project and no further payment can be made on it.\n\nReason (shown to the owner):');
+                if (reason === null) return; if (!reason.trim()) { alert('A reason is required.'); return; }
+                const { error } = await supabaseClient.rpc('close_concept_note', { p_ref: refNumber, p_reason: reason.trim() });
+                if (error) { alert('Could not close it: ' + error.message); return; }
+                await this._logAudit('concept_notes', refNumber, 'closed', `Closed by ${this.currentUser}: ${reason.trim()}`);
+                alert('Concept note closed.');
+                await this.loadData(); this.showView('approvals');
+            },
+
             async rejectConceptNote(refNumber) {
                 if (this.getUserRole() === 'procurement') { alert('Procurement cannot reject a concept note. Use "Return to staff" or "Refer to Budget Owner / ED".'); return; }
                 const reason = prompt('Please provide a reason for rejection:'); if (!reason) return;
@@ -5258,6 +5277,9 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                                 // Procurement: vendor sign PO
                                 if (myRole === 'procurement' && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignPO('${cn.refNumber}')" style="border-color:#1B4D8E;color:#1B4D8E;">✍️ Vendor Sign PO</button>`;
+                                // Budget Owner, ED or Procurement: close a note that is no longer needed
+                                if (['budgetOwner','ed','procurement'].includes(myRole) && (cn.status === 'approved' || (cn.status === 'pending' && cn.currentApprover === 'procurement') || (myRole !== 'procurement' && cn.status === 'returned')))
+                                    btns += `<button class="btn btn-secondary" onclick="app.closeConceptNote('${cn.refNumber}')" style="border-color:#6B7280;color:#374151;">🔒 Close concept note</button>`;
                                 return btns;
                             })()}
                             <button class="btn btn-secondary" onclick="app.downloadConceptNoteFile('${cn.refNumber}')">⬇ Download Full Dossier</button>
