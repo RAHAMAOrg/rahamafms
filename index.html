@@ -668,6 +668,8 @@
                     if (!fmsUnlocked) return;
                     // First FMS login with an admin-set password → choose your own
                     await this._enforcePasswordChange();
+                    // New staff: create their ordinary 'staff' role on first open (server decides)
+                    await this._ensureStaffRole(user.name);
                     const el = document.getElementById('loggedInUser');
                     if (el) el.innerText = user.name;
                     const role = this.getUserRole();
@@ -5011,6 +5013,10 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             .in('docRef', docRefs)
                             .order('signedAt', { ascending: true });
                         const allSigs = sigs || [];
+                        const { data: onlineSigs } = await supabaseClient.from('document_signatures')
+                            .select('signerName,signerRole,pageContext,signedAt,docType')
+                            .eq('relatedRef', cn.refNumber).eq('pageContext', 'vendor_po_online');
+                        (onlineSigs || []).forEach(s => allSigs.push(s));
                         const poSteps = [
                             { ctx: 'procurement_po',  label: 'Procurement raises PO' },
                             { ctx: 'staff_po',        label: 'Staff signs PO' },
@@ -5020,23 +5026,24 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         const grrSteps = [
                             { ctx: 'procurement_received', label: 'Procurement signs GRR (received)' },
                             { ctx: 'staff_grr_verify',     label: 'Staff verifies GRR' },
-                            { ctx: 'vendor_on_device',     label: 'Vendor signs GRR', alt: 'vendor_remote' },
+                            { ctx: 'vendor_on_device',     label: 'Vendor signs GRR', alt: ['vendor_remote', 'vendor_po_online'] },
                             { ctx: 'finance_sign',         label: 'Finance confirms GRR' },
                         ];
                         const renderStep = (step, sigList) => {
-                            const sig = sigList.find(s => s.pageContext === step.ctx || s.pageContext === step.alt);
+                            const sig = sigList.find(s => s.pageContext === step.ctx || (Array.isArray(step.alt) ? step.alt.includes(s.pageContext) : s.pageContext === step.alt));
                             return sig
                                 ? `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #D1FAE5;"><span style="color:#059669;font-size:16px;">&#x2705;</span><div><div style="font-size:13px;font-weight:600;color:#065F46;">${step.label}</div><div style="font-size:11px;color:#6B7280;">${sig.signerName} &middot; ${new Date(sig.signedAt).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</div></div></div>`
                                 : `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #D1FAE5;"><span style="color:#D1D5DB;font-size:16px;">&#x25EF;</span><div style="font-size:13px;color:#9CA3AF;">${step.label} <em style="font-size:11px;">(pending)</em></div></div>`;
                         };
                         const poSigs  = allSigs.filter(s => s.docType === 'purchase_order' || ['procurement_po','staff_po','budget_owner_po'].includes(s.pageContext));
-                        const grrSigs = allSigs.filter(s => s.docType === 'grr' || ['procurement_received','staff_grr_verify','vendor_on_device','vendor_remote'].includes(s.pageContext));
+                        const grrSigs = allSigs.filter(s => s.docType === 'grr' || ['procurement_received','staff_grr_verify','vendor_on_device','vendor_remote','vendor_po_online'].includes(s.pageContext));
                         // finance_sign appears in both — split by docType
                         allSigs.filter(s => s.pageContext === 'finance_sign').forEach(s => {
                             if (s.docType === 'purchase_order') poSigs.push(s);
                             if (s.docType === 'grr') grrSigs.push(s);
                         });
                         statusEl.innerHTML = `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => renderStep(s, grrSigs)).join('')}</div></div></div>`;
+                        statusEl.insertAdjacentHTML('beforeend', this._onlineReceiptsHtml(cn));
                     } catch(e) { if (statusEl) statusEl.innerHTML = ''; console.warn('Signing status load error:', e); }
                 })();
             },
@@ -6096,7 +6103,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
 
                 const poSigs   = docSigs.filter(s => s.docType === 'purchase_order');
                 const grrSigs  = docSigs.filter(s => s.docType === 'grr');
-                const vendorSigs   = grrSigs.filter(s => s.signerRole === 'vendor');
+                const _grrVendorSigs = grrSigs.filter(s => s.signerRole === 'vendor');
+                const vendorSigs   = _grrVendorSigs.length ? _grrVendorSigs : docSigs.filter(s => s.pageContext === 'vendor_po_online');
                 const vendorSig    = vendorSigs[0] || null; // kept for compat
                 const poStaffSig   = poSigs.find(s => s.pageContext === 'staff_po');
                 const poBoSig      = poSigs.find(s => s.pageContext === 'budget_owner_po' || s.signerRole === 'budgetOwner');
@@ -6241,7 +6249,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         ? vendorSigs.map((vs, i) => sigBlock(vendorSigs.length > 1 ? `3.${i+1} Vendor — ${vs.signerName}` : '3. Vendor', vs, vs.signerName, vs.signedAt)).join('')
                         : sigBlock('3. Vendor', null, cn.grrVendorName, cn.grrVendorSignedAt)}
                     ${sigBlock(`${vendorSigs.length > 1 ? vendorSigs.length + 3 : 4}. Finance`, grrFinSig, null, null)}
-                </div>` : '';
+                </div>${this._onlineReceiptsHtml(cn, true)}` : '';
 
                 const payRows = payments.map(p => `<tr>
                     <td>${p.refNumber}</td><td>${p.staffName}</td>
@@ -6494,6 +6502,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                             <button class="btn btn-primary" onclick="app._submitVendorGRRSignature('${refNumber}', ${_gvi})" style="flex:1;min-width:160px;">✓ Confirm &amp; Sign GRR</button>
                             <button class="btn btn-secondary" onclick="app._clearVendorCanvas()" style="min-width:100px;">Clear</button>
                             <button class="btn btn-secondary" onclick="app._showRemoteVendorSign('${refNumber}', ${_gvi})" style="min-width:160px;border-color:#059669;color:#059669;">📱 Remote Sign Link</button>
+                        </div>
+                        <div style="margin-top:16px;padding:12px 16px;background:#F8FAFC;border:1px dashed #94A3B8;border-radius:8px;font-size:12px;color:#475569;">
+                            Bought online with no vendor to sign? If it was already marked as an online purchase on the PO, nothing more is needed here: the GRR shows it automatically.
+                            <button class="btn btn-secondary" onclick="document.getElementById('vendorSignOverlay')?.classList.remove('open');app._onlinePurchaseForm('${refNumber}', ${_gvi})" style="margin-left:8px;border-color:#1B4D8E;color:#1B4D8E;font-size:12px;padding:6px 12px;">🌐 Online purchase: attach e-receipt</button>
                         </div>
                         <div id="vendorSignStatus" style="margin-top:16px;"></div>
                     </div>`;
@@ -6801,6 +6813,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                             <button class="btn btn-secondary" onclick="app._clearPOVendorCanvas()" style="min-width:100px;">Clear</button>
                             <button class="btn btn-secondary" onclick="app._showRemoteVendorSignPO('${refNumber}',${vi})" style="min-width:160px;border-color:#1B4D8E;color:#1B4D8E;">📱 Remote Sign Link</button>
                         </div>
+                        <div style="margin-top:16px;padding:12px 16px;background:#F8FAFC;border:1px dashed #94A3B8;border-radius:8px;font-size:12px;color:#475569;">
+                            Bought online (flight, visa fee, courier booking…) with no vendor representative to sign?
+                            <button class="btn btn-secondary" onclick="app._onlinePurchaseForm('${refNumber}',${vi})" style="margin-left:8px;border-color:#1B4D8E;color:#1B4D8E;font-size:12px;padding:6px 12px;">🌐 Online purchase: attach e-receipt instead</button>
+                        </div>
                         <div id="poVendorSignStatus" style="margin-top:16px;"></div>
                     </div>`;
 
@@ -6819,6 +6835,128 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 cv.addEventListener('touchstart',e=>{e.preventDefault();pd=true;const p=pp(e);cctx.beginPath();cctx.moveTo(p.x,p.y);},{passive:false});
                 cv.addEventListener('touchmove', e=>{e.preventDefault();if(!pd)return;cv._hasMark=true;const p=pp(e);cctx.lineTo(p.x,p.y);cctx.stroke();},{passive:false});
                 cv.addEventListener('touchend',  ()=>pd=false);
+            },
+
+            // ── Online purchases (flights, visa fees, online bookings) ─────
+            // No vendor representative exists to sign, so procurement records the
+            // purchase as ONLINE: a booking/order reference and the e-receipt are
+            // required. It is saved as the vendor's PO signature (pageContext
+            // 'vendor_po_online') with a printed stamp in place of a signature, and
+            // the GRR's vendor box picks the same record up automatically.
+            _onlineStamp(ref) {
+                const c = document.createElement('canvas'); c.width = 600; c.height = 200;
+                const x = c.getContext('2d');
+                x.fillStyle = '#ffffff'; x.fillRect(0, 0, 600, 200);
+                x.strokeStyle = '#1B4D8E'; x.lineWidth = 6; x.strokeRect(6, 6, 588, 188);
+                x.fillStyle = '#1B4D8E'; x.textAlign = 'center';
+                x.font = 'bold 50px sans-serif'; x.fillText('ONLINE PURCHASE', 300, 72);
+                x.font = '28px sans-serif'; x.fillText('No vendor signature · e-receipt attached', 300, 120);
+                x.font = 'bold 30px sans-serif'; x.fillText(('Ref: ' + ref).slice(0, 36), 300, 168);
+                return c.toDataURL('image/png');
+            },
+
+            _onlinePurchaseForm(refNumber, vendorIndex) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const vi = vendorIndex !== undefined && vendorIndex !== null ? vendorIndex : 0;
+                const v = vendors[vi] || null;
+                const basePoNum = cn.poNumber || ('PO-' + refNumber);
+                const vendorPoNum = vendors.length > 1 ? (basePoNum + '-V' + (vi + 1)) : basePoNum;
+                let overlay = document.getElementById('poSignOverlay');
+                if (!overlay) { overlay = document.createElement('div'); overlay.id = 'poSignOverlay'; overlay.className = 'po-sign-overlay'; document.body.appendChild(overlay); }
+                const inp = 'padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:100%;';
+                overlay.innerHTML = `
+                    <div class="vendor-sign-header" style="background:#1B4D8E;">
+                        <div style="font-size:20px;">🌐</div>
+                        <div><h2>Online Purchase — no vendor signature</h2>
+                        <div style="font-size:12px;opacity:.8;">${vendorPoNum}${v ? ' · ' + escHtml(v.name) : ''}</div></div>
+                        <button onclick="document.getElementById('poSignOverlay').classList.remove('open')" style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">✕ Close</button>
+                    </div>
+                    <div class="vendor-sign-body">
+                        <p style="font-size:13px;color:#555;margin-bottom:16px;">Use this only when the item was paid for online (airline website, visa portal, courier booking) and there is no vendor representative who can sign. The e-receipt replaces the vendor's signature on the PO and the GRR.</p>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Website / company <span class="required">*</span></label>
+                                <input type="text" id="onlineVendorName" value="${escHtml(v ? v.name : (cn.grrVendorName || ''))}" placeholder="e.g. Air Peace, TLScontact, DHL" style="${inp}"></div>
+                            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Booking / order / receipt number <span class="required">*</span></label>
+                                <input type="text" id="onlineRef" placeholder="e.g. PNR X7K2LQ" style="${inp}"></div>
+                        </div>
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">E-receipt or booking confirmation <span class="required">*</span></label>
+                        <input type="file" id="onlineReceiptFile" accept="image/*,application/pdf" style="${inp}">
+                        <div style="font-size:11px;color:#777;margin-top:4px;">The receipt or confirmation showing the amount paid. PDF or photo.</div>
+                        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:16px;font-size:13px;">
+                            <input type="checkbox" id="onlineConfirm" style="margin-top:3px;">
+                            <span>I, ${escHtml(this.currentUser)}, confirm this was bought online and there is no vendor representative available to sign.</span></label>
+                        <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="onlineSaveBtn" onclick="app._saveOnlinePurchase('${refNumber}',${vi})" style="flex:1;min-width:160px;background:linear-gradient(135deg,#1B4D8E,#1e3a6e);">✓ Record online purchase</button>
+                            ${vendors.length ? `<button class="btn btn-secondary" onclick="app.vendorSignPO('${refNumber}',${vi})">← Back to vendor signature</button>` : ''}
+                        </div>
+                        <div id="onlineStatus" style="margin-top:16px;"></div>
+                    </div>`;
+                overlay.classList.add('open');
+            },
+
+            async _saveOnlinePurchase(refNumber, vendorIndex) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
+                if (!cn) { alert('Concept note not found.'); return; }
+                const site = document.getElementById('onlineVendorName')?.value?.trim();
+                const ref  = document.getElementById('onlineRef')?.value?.trim();
+                const file = document.getElementById('onlineReceiptFile')?.files?.[0];
+                const ok   = document.getElementById('onlineConfirm')?.checked;
+                if (!site) { alert('Enter the website or company the item was bought from.'); return; }
+                if (!ref)  { alert('Enter the booking, order or receipt number.'); return; }
+                if (!file) { alert('Attach the e-receipt or booking confirmation. It replaces the vendor signature.'); return; }
+                if (!ok)   { alert('Tick the confirmation box.'); return; }
+                let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const vi = vendorIndex || 0;
+                const basePoNum = cn.poNumber || ('PO-' + refNumber);
+                const vendorPoNum = vendors.length > 1 ? (basePoNum + '-V' + (vi + 1)) : basePoNum;
+                const signerName = (vendors[vi] && vendors[vi].name) || site;
+                const btn = document.getElementById('onlineSaveBtn');
+                try {
+                    const { data: existing } = await supabaseClient.from('document_signatures')
+                        .select('id').eq('docRef', vendorPoNum).eq('signerRole', 'vendor');
+                    if (existing && existing.length) { alert('This vendor has already signed this PO or it was already recorded as an online purchase.'); return; }
+                    if (btn) { btn.disabled = true; btn.textContent = 'Uploading receipt…'; }
+                    const up = await this.uploadFile(file, 'procurement');
+                    const now = new Date().toISOString();
+                    const { error } = await supabaseClient.from('document_signatures').insert([{
+                        docRef: vendorPoNum, docType: 'purchase_order', relatedRef: refNumber,
+                        signerName, signerRole: 'vendor',
+                        signatureData: this._onlineStamp(ref), signedAt: now,
+                        pageContext: 'vendor_po_online'
+                    }]);
+                    if (error) throw error;
+                    if (vendors.length) {
+                        vendors[vi] = { ...vendors[vi], online: true, onlineSite: site, onlineRef: ref,
+                            onlineReceiptUrl: up?.url || null, onlineReceiptName: up?.fileName || null,
+                            onlineMarkedBy: this.currentUser, onlineMarkedAt: now };
+                        const { error: uErr } = await supabaseClient.from('concept_notes')
+                            .update({ vendorsJson: JSON.stringify(vendors) }).eq('refNumber', refNumber);
+                        if (uErr) console.warn('Could not save receipt link on the concept note:', uErr);
+                        else cn.vendorsJson = JSON.stringify(vendors);
+                    }
+                    await this._logAudit('document_signatures', vendorPoNum, 'po_vendor_online',
+                        `Online purchase: ${site} · Ref ${ref} · e-receipt ${up?.url || ''} · recorded by ${this.currentUser}`);
+                    document.getElementById('onlineStatus').innerHTML =
+                        '<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:14px 18px;color:#1B4D8E;font-weight:600;">✓ Recorded as an online purchase. The PO and GRR will show "Online purchase · e-receipt attached" in the vendor box.</div>';
+                    if (btn) btn.textContent = '✓ Recorded';
+                    setTimeout(() => { document.getElementById('poSignOverlay')?.classList.remove('open'); this.loadData(); }, 2200);
+                } catch (e) {
+                    if (btn) { btn.disabled = false; btn.textContent = '✓ Record online purchase'; }
+                    alert('Could not record the online purchase: ' + (e.message || e));
+                }
+            },
+
+            _onlineReceiptsHtml(cn, forDocument) {
+                let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const on = vendors.filter(v => v.online);
+                if (!on.length) return '';
+                return `<div style="margin-top:12px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:12px 16px;font-size:12px;color:#1B4D8E;">
+                    <div style="font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🌐 Online purchases (no vendor signature)</div>
+                    ${on.map(v => `<div style="padding:4px 0;">${escHtml(v.name)}${v.onlineSite && v.onlineSite !== v.name ? ' via ' + escHtml(v.onlineSite) : ''} · Ref <b>${escHtml(v.onlineRef || '')}</b> · recorded by ${escHtml(v.onlineMarkedBy || '')}
+                        ${v.onlineReceiptUrl && forDocument ? ` · <a href="${v.onlineReceiptUrl}" target="_blank" rel="noopener" style="color:#1B4D8E;font-weight:700;">View e-receipt</a>` : ''}${v.onlineReceiptUrl && !forDocument ? ` · <a href="#" onclick="app.downloadFile('${v.onlineReceiptUrl}','${escHtml((v.onlineReceiptName||'e-receipt').replace(/'/g,''))}');return false;" style="color:#1B4D8E;font-weight:700;">View e-receipt</a>` : ''}</div>`).join('')}
+                </div>`;
             },
 
             _clearPOVendorCanvas() {
@@ -7412,7 +7550,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const finSig      = poSigs.find(s => s.pageContext === 'finance_sign');
                     const vendorSig   = vendorSigs.find(s =>
                         s.signerRole === 'vendor' &&
-                        ['vendor_po_on_device','vendor_po_remote'].includes(s.pageContext));
+                        ['vendor_po_on_device','vendor_po_remote','vendor_po_online'].includes(s.pageContext));
 
                     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>Purchase Order — ${vendorPoNum}</title>${commonStyle}</head><body>
@@ -7551,6 +7689,12 @@ ${vendors.length > 1 ? `
                     return true;
                 });
 
+                // Online purchases are recorded once, on the PO; the GRR vendor box uses the same record.
+                try {
+                    const { data: onlineSigs } = await supabaseClient.from('document_signatures').select('*')
+                        .eq('relatedRef', refNumber).eq('pageContext', 'vendor_po_online');
+                    (onlineSigs || []).forEach(s => { if (!seen.has(s.id)) { seen.add(s.id); allSigs.push(s); } });
+                } catch(e) {}
                 const procSig  = allSigs.find(s => s.pageContext === 'procurement_received');
                 const staffSig = allSigs.find(s => s.pageContext === 'staff_grr_verify');
                 const finSig   = allSigs.find(s => s.pageContext === 'finance_sign');
@@ -9043,6 +9187,19 @@ _recalcVendorTotal() {
             },
 
             changeFmsPassword() { return this._passwordModal(false); },
+
+            // First time a staff member opens FMS, make sure they have a role row linked
+            // to their login. The database function only ever creates a plain 'staff'
+            // role, never claims an existing name, and does nothing if one exists.
+            async _ensureStaffRole(name) {
+                try {
+                    const { data, error } = await supabaseClient.rpc('ensure_staff_role', { p_name: name });
+                    if (error) { console.warn('ensure_staff_role:', error.message); return; }
+                    if (data === 'name_taken') {
+                        alert(`Your FMS account is not fully set up yet.\n\nThe name "${name}" is already registered in FMS but not linked to your login. Please ask the administrator to link it before submitting anything.`);
+                    }
+                } catch (e) { /* never block FMS on this check */ }
+            },
 
             async _enforcePasswordChange() {
                 try {
