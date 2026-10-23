@@ -1264,6 +1264,16 @@
             getMyPayments() { if (!this.cache.myPayments) this.cache.myPayments = this.data.payments.filter(p => p.staffName === this.currentUser); return this.cache.myPayments; },
             getMyRetirements() { if (!this.cache.myRetirements) this.cache.myRetirements = this.data.retirements.filter(r => r.staffName === this.currentUser); return this.cache.myRetirements; },
             
+            // Yes/no from the database: is the project active with enough uncommitted
+            // budget for this amount? null = rule not installed yet (no check here).
+            async _canSubmitAgainst(code, amount) {
+                if (!code) return null;
+                try {
+                    const { data, error } = await supabaseClient.rpc('can_submit_concept_note', { p_code: code, p_amount: amount });
+                    if (error || typeof data !== 'boolean') return null;
+                    return data;
+                } catch (e) { return null; }
+            },
             updateProjectBudget(projectCode) {
                 const project = this.data.projects.find(p => p.code === projectCode);
                 const infoDiv = document.getElementById('budgetInfo');
@@ -2162,6 +2172,12 @@
                 const form = event.target; const formData = new FormData(form);
                 const amount = parseFloat(document.getElementById('estimatedCost')?.value) || 0;
                 if (amount <= 0) { alert('Please fill in at least one budget line item before submitting.'); return; }
+                // The project must be active and have enough uncommitted budget (also enforced by
+                // the database). Staff only get a yes/no: budget figures are not shown to them.
+                if (await this._canSubmitAgainst(formData.get('projectCode'), amount) === false) {
+                    alert('This concept note cannot be submitted against this budget line.');
+                    return;
+                }
                 const uncategorised = [...document.querySelectorAll('#cnBudgetBody tr')].filter(row => {
                     const m = row.id.match(/cnRow_(\d+)/);
                     return m && document.getElementById('cn_desc_' + m[1])?.value?.trim() && !document.getElementById('cn_cat_' + m[1])?.value;
