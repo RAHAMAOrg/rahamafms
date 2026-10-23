@@ -1121,14 +1121,18 @@
                         // itself (those are just a placeholder label for this payment type).
                         let schedule = [];
                         try { schedule = JSON.parse(payment.paymentScheduleJson); } catch(e) {}
-                        const badLines = schedule.filter(s => !s.accountName || !s.accountNumber || !s.bankName);
+                        // Online purchase: Procurement pays on the website with the RAHAMA card.
+                        // Finance authorises the spend; no transfer, so no bank account.
+                        const isOnlinePay = schedule.length > 0 && schedule.every(s => s.method === 'online_card');
+                        if (isOnlinePay && !confirm(`Authorise Procurement to pay ₦${payment.amount.toLocaleString()} online with the RAHAMA card?\n\n${schedule.map(s => `${s.vendor}: ₦${Number(s.amount||0).toLocaleString()} · ${s.website || ''}`).join('\n')}\n\nNo transfer is made. Procurement pays on the website and attaches the e-receipt.`)) return;
+                        const badLines = isOnlinePay ? [] : schedule.filter(s => !s.accountName || !s.accountNumber || !s.bankName);
                         if (schedule.length === 0 || badLines.length > 0) {
                             alert('Error: Payment account details are missing for one or more vendors on this payment schedule.' +
                                 (badLines.length ? '\n\n' + badLines.map(s => '  • ' + (s.vendor || 'Unknown vendor')).join('\n') : ''));
                             return;
                         }
                         const lines = schedule.map(s => `${s.vendor} — ₦${Number(s.amount||0).toLocaleString()} (${s.accountName}, ${s.accountNumber}, ${s.bankName})`).join('\n');
-                        if (!confirm(`Authorize payment of ₦${payment.amount.toLocaleString()} across ${schedule.length} vendor(s)?\n\n${lines}\n\nConfirm payment?`)) return;
+                        if (!isOnlinePay && !confirm(`Authorize payment of ₦${payment.amount.toLocaleString()} across ${schedule.length} vendor(s)?\n\n${lines}\n\nConfirm payment?`)) return;
                     } else if (Number(payment.beneficiaryCount) > 0) {
                         const { data: bl, error: blErr } = await supabaseClient.from('payment_beneficiaries').select('full_name,bank_name,account_number,amount').eq('payment_ref', payment.refNumber).order('line_no');
                         if (blErr || !bl || bl.length !== Number(payment.beneficiaryCount)) { alert(`Beneficiary list incomplete or not accessible (${bl ? bl.length : 0} of ${payment.beneficiaryCount} found). Do not authorize until this is resolved.`); return; }
@@ -1163,7 +1167,8 @@
                     } else {
                         Object.assign(updates, {
                             paidDate: now, processedBy: this.currentUser, authorizeSignatureData: sigData,
-                            retirementresponsibility: conceptNote?.retirementresponsibility || payment.retirementresponsibility || 'staff',
+                            // Vendor payments are retired by Procurement; anything paid to staff by the staff member
+                            retirementresponsibility: payment.payMode === 'vendors' ? 'procurement' : (payment.retirementresponsibility || 'staff'),
                             bankReconciled: false, reconciliationNote: null
                         });
                     }
@@ -1172,6 +1177,10 @@
                     if (stage === 'authorizer') {
                         if (conceptNote?.poNumber) await supabaseClient.from('document_signatures').insert([{ docRef: conceptNote.poNumber, docType: 'purchase_order', relatedRef: conceptNote.refNumber, signerName: this.currentUser, signerRole: 'finance_authorizer', signatureData: sigData, signedAt: now, pageContext: 'finance_sign' }]);
                         if (conceptNote?.grrNumber) await supabaseClient.from('document_signatures').insert([{ docRef: conceptNote.grrNumber, docType: 'grr', relatedRef: conceptNote.refNumber, signerName: this.currentUser, signerRole: 'finance_authorizer', signatureData: sigData, signedAt: now, pageContext: 'finance_sign' }]);
+                    }
+                    if (stage === 'authorizer' && payment.paymentMethod === 'card_online') {
+                        for (const pu of Object.entries(this.data.roles || {}).filter(([, r]) => r === 'procurement').map(([n]) => n))
+                            await this.createNotification(pu, `Card payment ${refNumber} (₦${payment.amount.toLocaleString()}) authorised. Pay online with the RAHAMA card, then attach the e-receipt on the PO.`, 'success', refNumber);
                     }
                     await supabaseClient.from('document_signatures').insert([{
                         docRef: refNumber, docType: 'payment', relatedRef: payment.conceptNoteRef || refNumber,
@@ -2280,7 +2289,9 @@
                     return out;
                 }
                 if (!cn.grrNumber) {
-                    return '<button class="action-btn" onclick="app._procurementSignPO(\'' + cn.refNumber + '\')" style="border-color:#7B1FA2;color:#7B1FA2;font-size:12px;margin-bottom:6px;">✍️ Sign PO (Procurement)</button><br>'
+                    return '<button class="action-btn" onclick="app.requestOnlinePayment(\'' + cn.refNumber + '\')" style="border-color:#1B4D8E;color:#1B4D8E;font-size:12px;margin-bottom:6px;">💳 Online purchase: request card payment</button><br>'
+                         + (this._needsOnlineReceipt(cn) ? '<button class="action-btn approve" onclick="app._uploadOnlineReceipt(\'' + cn.refNumber + '\')" style="font-size:12px;margin-bottom:6px;">🧾 Paid online: attach e-receipt</button><br>' : '')
+                         + '<button class="action-btn" onclick="app._procurementSignPO(\'' + cn.refNumber + '\')" style="border-color:#7B1FA2;color:#7B1FA2;font-size:12px;margin-bottom:6px;">✍️ Sign PO (Procurement)</button><br>'
                          + '<button class="action-btn approve" onclick="app.showProcurementUpload(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">✅ Confirm Receipt &amp; Forward to Finance</button><br>'
                          + '<button class="action-btn" onclick="app.editPO(\'' + cn.refNumber + '\')" style="border-color:#E65100;color:#E65100;font-size:12px;margin-bottom:6px;">✏️ Edit PO</button><br>'
                          + '<button class="action-btn" onclick="app.cancelAndReissuePO(\'' + cn.refNumber + '\')" style="border-color:#B71C1C;color:#B71C1C;font-size:12px;margin-bottom:6px;">🚫 Cancel &amp; Reissue PO</button><br>'
@@ -2397,30 +2408,30 @@
                         .from('concept_notes')
                         .select('*')
                         .eq('staffName', this.currentUser)
-                        .eq('status', 'approved');
+                        .in('status', ['approved', 'pending']);
                     if (freshApproved) {
                         const cMap = new Map(this.data.conceptNotes.map(c => [c.refNumber, c]));
                         freshApproved.forEach(c => cMap.set(c.refNumber, c));
                         this.data.conceptNotes = Array.from(cMap.values());
                     }
                 } catch (e) { console.warn('Fresh CN fetch failed, using cache:', e); }
+                await this._loadMyProcReqs();
 
                const approvedNotes = this.data.conceptNotes.filter(cn => {
     if (cn.staffName !== this.currentUser) return false;
-    if (cn.status !== 'approved') return false;
-    const paidSoFar = this.data.payments
-        .filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid')
-        .reduce((s,p) => s + Number(p.amount||0), 0);
-    const balance = cn.estimatedCost - paidSoFar;
-    if (balance <= 0) return false;               // fully spent — closed
-    const pendingPayment = this.data.payments.find(p => p.conceptNoteRef === cn.refNumber && ['pending','reviewed','finance_approved'].includes(p.status));
-    if (pendingPayment) return false;              // one tranche in flight at a time
+    // Approved notes, and notes still with Procurement once their PO exists:
+    // the non-PO lines (per diem, local transport) can be requested meanwhile.
+    if (!(cn.status === 'approved' || this._withProcurementWithPO(cn))) return false;
+    if (this._cnFree(cn) <= 0) return false;       // nothing left outside the PO
+    const pendingPayment = this.data.payments.find(p => p.conceptNoteRef === cn.refNumber && p.payMode !== 'vendors' && ['pending','reviewed','finance_approved'].includes(p.status));
+    if (pendingPayment) return false;              // one staff tranche in flight at a time
     return true;
 });
                 const bankOptions = NIGERIAN_BANKS.map(b => `<option value="${b}">${b}</option>`).join('');
                 this._benefDraft = this._benefEmptyDraft();
                 content.innerHTML = `
                     <div class="header"><h2>Request Payment</h2><p>Submit a payment request for an approved concept note</p></div>
+                    ${this._myProcReqsHtml()}
                     <form class="form-grid two-col" onsubmit="app.submitPayment(event)">
                         <div class="form-group full-width"><label>Select Approved Concept Note <span class="required">*</span></label><select name="conceptNoteId" required onchange="app.loadConceptNoteDetails(this.value)"><option value="">Choose a concept note</option>${approvedNotes.map(cn => { const paidSoFar = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid').reduce((s,p) => s + Number(p.amount||0), 0); const bal = cn.estimatedCost - paidSoFar; return `<option value="${cn.id}">${cn.refNumber} - ${escHtml(cn.activityTitle)} (Balance: ₦${bal.toLocaleString()})</option>`; }).join('')}</select></div>
                         <div id="conceptNoteDetails" style="display: none;" class="form-group full-width"><div class="threshold-info"><div id="cnDetailsContent"></div></div></div>
@@ -2612,16 +2623,145 @@
                     const paidSoFar = this.data.payments
                         .filter(p => p.conceptNoteRef === cn.refNumber && p.status === 'paid')
                         .reduce((s,p) => s + Number(p.amount||0), 0);
+                    const held = this._cnHeld(cn.refNumber);
+                    const poRes = this._cnPOReserved(cn);
+                    const free = this._cnFree(cn);
+                    const staffPaid = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.payMode !== 'vendors' && p.status === 'paid').reduce((s,p) => s + Number(p.amount||0), 0);
                     detailsDiv.style.display = 'block';
                     contentDiv.innerHTML = `<strong>${escHtml(cn.activityTitle)}</strong> (${cn.refNumber})<br>
                         Estimated Cost: ₦${cn.estimatedCost.toLocaleString()} ·
-                        Already Paid: ₦${paidSoFar.toLocaleString()} ·
-                        <strong>Balance Remaining: ₦${(cn.estimatedCost - paidSoFar).toLocaleString()}</strong>`;
+                        ${poRes ? `Procurement (PO ${escHtml(cn.poNumber || '')}): ₦${poRes.toLocaleString()} · ` : ''}Already Paid${poRes ? ' to you' : ''}: ₦${(poRes ? staffPaid : paidSoFar).toLocaleString()} ·
+                        ${held ? `Held for Procurement: ₦${held.toLocaleString()} · ` : ''}<strong>Balance you can request: ₦${free.toLocaleString()}</strong>
+                        ${cn.status === 'pending' ? `<div style="font-size:12px;color:#065F46;margin-top:6px;">Procurement is buying the PO items. You can request the other lines now (e.g. per diem, local transport).</div>` : ''}
+                        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #A7F3D0;font-size:12px;">
+                            Do some of the remaining items need to be bought by Procurement (vendor, PO) instead of paid to you?
+                            <button type="button" class="btn btn-secondary" onclick="app.openProcurementRequestForm('${cn.refNumber}')" style="margin-left:6px;font-size:12px;padding:6px 12px;">🛒 Send items to Procurement</button></div>`;
                     const amtInput = document.getElementById('amount');
-                    if (amtInput) amtInput.max = Math.max(0, cn.estimatedCost - paidSoFar);
+                    if (amtInput) amtInput.max = free;
                 }
             },
             
+            // ── Staff → Procurement: "these items must be bought by Procurement" ──
+            // The request and every check live in the database
+            // (fms_procurement_requests.sql). While pending, its amount is held:
+            // no payment can be requested against it. Procurement then either
+            // takes the purchase (the concept note returns to its queue for a PO)
+            // or releases it back to the staff member.
+            async _loadMyProcReqs() {
+                try {
+                    const { data, error } = await supabaseClient.from('procurement_requests').select('*')
+                        .eq('staff_name', this.currentUser).order('created_at', { ascending: false }).limit(20);
+                    this._myProcReqs = error ? [] : (data || []);
+                } catch (e) { this._myProcReqs = []; }
+            },
+            // Money on a concept note that belongs to Procurement: the PO total, or what
+            // vendors have actually been paid if that is more. Staff can request the rest.
+            _cnPOReserved(cn) {
+                const vendorPaid = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.payMode === 'vendors' && p.status !== 'rejected').reduce((s, p) => s + Number(p.amount || 0), 0);
+                let po = 0;
+                if (cn.poNumber) { try { po = (JSON.parse(cn.vendorsJson || '[]') || []).reduce((s, v) => s + Number(v.amount || 0) * Number(v.qty || 1), 0); } catch(e) {} }
+                return Math.max(po, vendorPaid);
+            },
+            _cnFree(cn) {
+                const staffUsed = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.payMode !== 'vendors' && p.status !== 'rejected').reduce((s, p) => s + Number(p.amount || 0), 0);
+                return Math.max(0, Math.round((Number(cn.estimatedCost || 0) - staffUsed - this._cnPOReserved(cn) - this._cnHeld(cn.refNumber)) * 100) / 100);
+            },
+            _withProcurementWithPO(cn) {
+                return cn.status === 'pending' && cn.currentApprover === 'procurement' && cn.requiresProcurement === 'yes' && !!cn.poNumber;
+            },
+            _cnHeld(cnRef) {
+                return (this._myProcReqs || []).filter(r => r.concept_note_ref === cnRef && r.status === 'pending')
+                    .reduce((s, r) => s + Number(r.amount || 0), 0);
+            },
+            _myProcReqsHtml() {
+                const list = (this._myProcReqs || []).filter(r => r.status === 'pending' || (Date.now() - new Date(r.decided_at || r.created_at)) < 30 * 86400000);
+                if (!list.length) return '';
+                const badge = s => ({ pending: ['⏳ With Procurement', '#FFF8E1', '#B45309'], accepted: ['🛒 Procurement is buying', '#E8F5E9', '#1B5E20'],
+                    released: ['↩ Released: request payment as normal', '#EEF2FF', '#1B4D8E'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] }[s] || [s, '#F3F4F6', '#6B7280']);
+                return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+                    <div style="font-weight:700;margin-bottom:8px;">Your requests to Procurement</div>
+                    ${list.map(r => { const [t, bg, fg] = badge(r.status); return `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid #F3F4F6;font-size:13px;">
+                        <div><b>${escHtml(r.concept_note_ref)}</b> · ₦${Number(r.amount).toLocaleString()} · ${escHtml(r.items)}
+                            ${r.decision_note ? `<div style="font-size:12px;color:#555;margin-top:2px;">${escHtml(r.decided_by || '')}: "${escHtml(r.decision_note)}"</div>` : ''}</div>
+                        <div style="display:flex;gap:6px;align-items:center;"><span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;">${t}</span>
+                            ${r.status === 'pending' ? `<button type="button" class="btn btn-secondary" onclick="app._decideProcReq(${r.id},'cancel')" style="font-size:11px;padding:4px 10px;">Cancel</button>` : ''}</div></div>`; }).join('')}
+                </div>`;
+            },
+            openProcurementRequestForm(cnRef) {
+                const cn = this.data.conceptNotes.find(c => c.refNumber === cnRef);
+                if (!cn) { alert('Choose the concept note first.'); return; }
+                if ((this._myProcReqs || []).some(r => r.concept_note_ref === cnRef && r.status === 'pending')) { alert('There is already a request with Procurement on this concept note. Wait for their decision, or cancel it.'); return; }
+                const free = this._cnFree(cn) + this._cnHeld(cnRef);
+                document.getElementById('procReqOverlay')?.remove();
+                const ov = document.createElement('div'); ov.id = 'procReqOverlay';
+                ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;overflow-y:auto;padding:12px;';
+                const inp = 'width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;font-size:14px;';
+                ov.innerHTML = `<div style="background:#fff;max-width:560px;margin:40px auto;border-radius:14px;padding:22px;">
+                    <h3 style="margin:0 0 4px;font-family:'Plus Jakarta Sans',sans-serif;">🛒 Send items to Procurement</h3>
+                    <p style="font-size:13px;color:#555;margin:0 0 14px;">${escHtml(cn.activityTitle)} (${cn.refNumber}) · Free balance: <b>₦${free.toLocaleString()}</b><br>
+                    This amount will be held until Procurement decides: they either buy the items (PO, vendor) or release it back so you can request payment as normal.</p>
+                    <label style="font-size:13px;font-weight:600;">What should Procurement buy? *</label>
+                    <textarea id="prItems" rows="3" style="${inp}" placeholder="e.g. 2 return flights Kano–Lagos; DHL two-way courier"></textarea>
+                    <label style="font-size:13px;font-weight:600;display:block;margin-top:10px;">Amount to hold (₦) *</label>
+                    <input id="prAmount" type="number" min="1" max="${free}" step="0.01" style="${inp}" placeholder="Up to ₦${free.toLocaleString()}">
+                    <label style="font-size:13px;font-weight:600;display:block;margin-top:10px;">Why Procurement? (optional)</label>
+                    <textarea id="prWhy" rows="2" style="${inp}" placeholder="e.g. vendor needs a PO; must be bought online"></textarea>
+                    <div style="display:flex;gap:10px;margin-top:16px;"><button type="button" class="btn btn-primary" id="prSend" onclick="app.submitProcurementRequest('${cn.refNumber}')" style="flex:1;">Send to Procurement</button>
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('procReqOverlay').remove()">Cancel</button></div></div>`;
+                document.body.appendChild(ov);
+            },
+            async submitProcurementRequest(cnRef) {
+                const items = document.getElementById('prItems')?.value?.trim();
+                const amount = parseFloat(document.getElementById('prAmount')?.value);
+                const why = document.getElementById('prWhy')?.value?.trim() || '';
+                if (!items || items.length < 3) { alert('Describe what Procurement should buy.'); return; }
+                if (!(amount > 0)) { alert('Enter the amount to hold for Procurement.'); return; }
+                const btn = document.getElementById('prSend'); if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+                const { error } = await supabaseClient.rpc('create_procurement_request', { p_cn_ref: cnRef, p_items: items, p_amount: amount, p_justification: why });
+                if (error) { if (btn) { btn.disabled = false; btn.textContent = 'Send to Procurement'; } alert('Could not send: ' + error.message); return; }
+                await this._logAudit('concept_notes', cnRef, 'sent_to_procurement_by_staff', `₦${amount.toLocaleString()} held for Procurement: ${items}`);
+                document.getElementById('procReqOverlay')?.remove();
+                alert(`Sent to Procurement. ₦${amount.toLocaleString()} is held on ${cnRef} until they decide.`);
+                this.showView('payment');
+            },
+            async _decideProcReq(id, decision) {
+                let note = '';
+                if (decision === 'release') {
+                    note = prompt('Release back to the staff member. They will request payment as normal.\n\nReason (shown to them):');
+                    if (note === null) return; if (!note.trim()) { alert('A reason is required.'); return; }
+                } else if (decision === 'accept') {
+                    if (!confirm('Procurement will buy these items.\n\nThe concept note moves to your queue to raise a PO. The PO total cannot be more than the amount held.')) return;
+                    note = prompt('Note to the staff member (optional):') || '';
+                } else if (decision === 'cancel') {
+                    if (!confirm('Cancel this request to Procurement? The held amount is freed.')) return;
+                }
+                const { error } = await supabaseClient.rpc('decide_procurement_request', { p_id: id, p_decision: decision, p_note: note });
+                if (error) { alert('Could not save: ' + error.message); return; }
+                await this._logAudit('procurement_requests', String(id), 'procurement_request_' + decision, note || '');
+                alert(decision === 'accept' ? 'Accepted. The concept note is now in your Procurement queue.' : decision === 'release' ? 'Released back to the staff member.' : 'Request cancelled.');
+                if (decision === 'accept' && typeof this.loadData === 'function') { try { await this.loadData(); } catch (e) {} }
+                this.showView(decision === 'cancel' ? 'payment' : 'approvals');
+            },
+            async _procReqApprovalsHtml() {
+                try {
+                    const { data: reqs, error } = await supabaseClient.from('procurement_requests').select('*').eq('status', 'pending').order('created_at', { ascending: true });
+                    if (error || !reqs || !reqs.length) return '';
+                    const { data: cns } = await supabaseClient.from('concept_notes').select('refNumber,activityTitle,projectCode,estimatedCost,poNumber').in('refNumber', [...new Set(reqs.map(r => r.concept_note_ref))]);
+                    const cm = {}; (cns || []).forEach(c => cm[c.refNumber] = c);
+                    return `<div style="background:#FFF8E1;border:2px solid #F59E0B;border-radius:12px;padding:20px;margin-bottom:28px;">
+                        <h3 style="font-family:'Plus Jakarta Sans', sans-serif;margin-bottom:6px;color:#92400E;">🛒 Staff requests for Procurement to buy (${reqs.length})</h3>
+                        <p style="font-size:13px;color:#92400E;margin-bottom:14px;">The amount is held on the concept note until you decide. <b>Procurement will buy</b> sends the concept note to your queue for a PO (capped at the held amount). <b>Release</b> lets the staff member request payment as normal.</p>
+                        <div class="table-container"><table><thead><tr><th>Concept note</th><th>Staff</th><th>Items</th><th>Amount held</th><th>Date</th><th>Action</th></tr></thead><tbody>
+                        ${reqs.map(r => { const c = cm[r.concept_note_ref] || {}; return `<tr>
+                            <td><a href="#" onclick="app.viewConceptNoteDetails('${r.concept_note_ref}');return false;">${r.concept_note_ref}</a><div style="font-size:11px;color:#777;">${escHtml(c.activityTitle || '')} · ${escHtml(c.projectCode || '')}</div></td>
+                            <td>${escHtml(r.staff_name)}</td><td>${escHtml(r.items)}${r.justification ? `<div style="font-size:11px;color:#777;">${escHtml(r.justification)}</div>` : ''}</td>
+                            <td style="font-weight:700;">₦${Number(r.amount).toLocaleString()}</td><td>${new Date(r.created_at).toLocaleDateString('en-NG')}</td>
+                            <td>${c.poNumber ? `<div style="font-size:11px;color:#B45309;max-width:200px;margin-bottom:6px;">Already has PO ${escHtml(c.poNumber)}: ask for a new concept note, or release.</div>` : `<button class="action-btn approve" onclick="app._decideProcReq(${r.id},'accept')" style="margin-bottom:6px;">🛒 Procurement will buy</button>`}
+                                <button class="action-btn" onclick="app._decideProcReq(${r.id},'release')" style="border-color:#1B4D8E;color:#1B4D8E;">↩ Release to staff</button></td></tr>`; }).join('')}
+                        </tbody></table></div></div>`;
+                } catch (e) { return ''; }
+            },
+
             async submitPayment(event) {
                 event.preventDefault(); this.clearErrors();
                 const form = event.target; const formData = new FormData(form);
@@ -2631,12 +2771,12 @@
                 if (!this.validateAmount(amount)) { this.showError('amount', 'Please enter a valid amount'); return; }
                 if (conceptNote) {
                     const used = this.data.payments
-                        .filter(p => p.conceptNoteRef === conceptNote.refNumber && p.status !== 'rejected')
+                        .filter(p => p.conceptNoteRef === conceptNote.refNumber && p.payMode !== 'vendors' && p.status !== 'rejected')
                         .reduce((s, p) => s + Number(p.amount || 0), 0);
-                    const balance = Math.round((Number(conceptNote.estimatedCost || 0) - used) * 100) / 100;
+                    const balance = this._cnFree(conceptNote);
                     if (amount > balance + 0.009) {
                         this.showError('amount', `Cannot exceed the approved balance of ₦${balance.toLocaleString()}`);
-                        alert(`This request (₦${amount.toLocaleString()}) is more than what remains of the approved amount.\n\nApproved: ₦${Number(conceptNote.estimatedCost || 0).toLocaleString()}\nAlready requested or paid: ₦${used.toLocaleString()}\nRemaining: ₦${balance.toLocaleString()}`);
+                        alert(`This request (₦${amount.toLocaleString()}) is more than what remains of the approved amount.\n\nApproved: ₦${Number(conceptNote.estimatedCost || 0).toLocaleString()}\nAlready requested or paid: ₦${used.toLocaleString()}${this._cnPOReserved(conceptNote) ? `\nReserved for Procurement (PO): ₦${this._cnPOReserved(conceptNote).toLocaleString()}` : ''}${this._cnHeld(conceptNote.refNumber) ? `\nHeld for Procurement: ₦${this._cnHeld(conceptNote.refNumber).toLocaleString()}` : ''}\nYou can request: ₦${balance.toLocaleString()}`);
                         return;
                     }
                 }
@@ -2656,7 +2796,7 @@
                     const file = document.getElementById('beneficiaryFile').files[0];
                     let beneficiaryFileData = null;
                     if (file) beneficiaryFileData = await this.uploadFile(file, 'beneficiaries');
-                    const payment = { beneficiaryCount: benefRows.length || null, refNumber: 'PAY' + Date.now(), conceptNoteId: parseInt(formData.get('conceptNoteId')), staffName: this.currentUser, amount, paymentMethod: formData.get('paymentMethod'), justification: formData.get('justification'), accountName: formData.get('accountName'), accountNumber, bankName: formData.get('bankName'), beneficiaryFileUrl: beneficiaryFileData?.url, beneficiaryFileName: beneficiaryFileData?.fileName, status: 'pending', requestDate: new Date().toISOString(), conceptNoteRef: conceptNote?.refNumber, projectCode: conceptNote?.projectCode };
+                    const payment = { retirementresponsibility: 'staff', beneficiaryCount: benefRows.length || null, refNumber: 'PAY' + Date.now(), conceptNoteId: parseInt(formData.get('conceptNoteId')), staffName: this.currentUser, amount, paymentMethod: formData.get('paymentMethod'), justification: formData.get('justification'), accountName: formData.get('accountName'), accountNumber, bankName: formData.get('bankName'), beneficiaryFileUrl: beneficiaryFileData?.url, beneficiaryFileName: beneficiaryFileData?.fileName, status: 'pending', requestDate: new Date().toISOString(), conceptNoteRef: conceptNote?.refNumber, projectCode: conceptNote?.projectCode };
                     const { data, error } = await supabaseClient.from('payments').insert([payment]).select();
                     if (error) throw error;
                     this.data.payments.unshift(data[0]); this.clearCache();
@@ -3286,8 +3426,10 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     }
                 } catch (e) { console.error('History load error:', e); }
                 
+                const procReqHtml = role === 'procurement' ? await this._procReqApprovalsHtml() : '';
                 content.innerHTML = `
                     <div class="header"><h2>My Approvals</h2><p>Items requiring your review and approval</p></div>
+                    ${procReqHtml}
                     ${pendingConceptNotes.length === 0 && pendingPayments.length === 0 && pendingRetirements.length === 0 ? `<div class="empty-state"><h3>No pending approvals</h3><p>You don't have any items waiting for your approval.</p></div>` : ''}
                     ${(() => {
                         const varCNs = (allCNs || this.data.conceptNotes).filter(c => c.status === 'variance_review' && c.currentApprover === 'budgetOwner');
@@ -4255,6 +4397,15 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     }
                 }
 
+                // Sent to Procurement by the staff member: the PO is capped at what was held
+                try {
+                    const { data: accReq } = await supabaseClient.from('procurement_requests').select('amount,items')
+                        .eq('concept_note_ref', refNumber).eq('status', 'accepted').order('decided_at', { ascending: false }).limit(1);
+                    if (accReq && accReq.length && total > Number(accReq[0].amount) + 0.009) {
+                        alert(`This purchase was sent to Procurement by the staff member for ₦${Number(accReq[0].amount).toLocaleString()} (${accReq[0].items}).\n\nThe PO total (₦${total.toLocaleString()}) cannot be more than that. Reduce the PO, or ask the staff member to raise a new concept note for the extra.`);
+                        return;
+                    }
+                } catch (e) { /* table not set up yet: no cap */ }
                 const variance = cn.estimatedCost - total;
                 const overPct = cn.estimatedCost > 0 ? ((total - cn.estimatedCost) / cn.estimatedCost) : 0;
 
@@ -4451,7 +4602,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             </div>
                             ${isComplete ? '' : `<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Quality / Condition of This Delivery <span style="color:var(--danger)">*</span></label><select id="vQuality_${id}" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:white;"><option value="Good"${v.quality==='Good'?' selected':''}>✅ Good</option><option value="Partial"${v.quality==='Partial'?' selected':''}>⚠️ Partial / Minor Issues</option><option value="Poor"${v.quality==='Poor'?' selected':''}>❌ Poor / Rejected</option></select></div>`}
                             <div style="grid-column:1/-1"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Address / Contact Details</label><textarea id="vAddress_${id}" rows="2" readonly style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:60px;background:#F3F4F6;">${escHtml((v.address||''))}</textarea></div>
-                            ${isComplete ? '' : `<div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;">
+                            ${isComplete ? '' : v.prepaidRef ? `<div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;font-size:12px;font-weight:600;color:#1B4D8E;">💳 Online purchase: paid by Procurement with the RAHAMA card (${escHtml(v.prepaidRef)}). No bank details needed and it is not paid again.</div>` : `<div style="grid-column:1/-1;border-top:1px dashed #A7F3D0;padding-top:12px;margin-top:4px;">
                                 <div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💳 Payment Account for this Delivery</div>
                                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
                                     <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Account Name</label><input type="text" id="vAcctName_${id}" value="${(v.acctName||'').replace(/"/g,'&quot;')}" placeholder="As on the bank account" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;"></div>
@@ -4714,12 +4865,25 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const activeLines = merged.filter(v => v.receivingNow > 0);
                 if (activeLines.length === 0) { alert('Enter the quantity received in this delivery for at least one vendor.'); return; }
 
-                const badAcct = activeLines.filter(v => !v.acctName || !v.acctNo || !v.bank);
+                // Online purchases were paid by Finance before delivery: they must be
+                // paid already, need no bank details, and are not paid a second time.
+                const prepaidLines = activeLines.filter(v => v.prepaidRef);
+                if (prepaidLines.length) {
+                    const { data: pre } = await supabaseClient.from('payments').select('refNumber,status').in('refNumber', prepaidLines.map(v => v.prepaidRef));
+                    const notPaid = prepaidLines.filter(v => !(pre || []).some(p => p.refNumber === v.prepaidRef && p.status === 'paid'));
+                    const rej = prepaidLines.filter(v => (pre || []).some(p => p.refNumber === v.prepaidRef && p.status === 'rejected'));
+                    if (rej.length) { alert(`Finance rejected the online payment for:\n\n${rej.map(v => '  • ' + v.name + ' (' + v.prepaidRef + ')').join('\n')}\n\nUse "Online purchase: ask Finance to pay" again before confirming receipt.`); return; }
+                    const noReceipt = prepaidLines.filter(v => !v.online);
+                    if (!notPaid.length && noReceipt.length) { alert(`Attach the e-receipt first ("Paid online: attach e-receipt") for:\n\n${noReceipt.map(v => '  • ' + v.name).join('\n')}`); return; }
+                    if (notPaid.length) { alert(`Finance has not yet authorised the card payment for:\n\n${notPaid.map(v => '  • ' + v.name + ' (' + v.prepaidRef + ')').join('\n')}\n\nPay online and confirm receipt only after it is authorised.`); return; }
+                }
+                const payLines = activeLines.filter(v => !v.prepaidRef);
+                const badAcct = payLines.filter(v => !v.acctName || !v.acctNo || !v.bank);
                 if (badAcct.length) {
                     alert(`Payment account details are missing for:\n\n${badAcct.map(v => '  • ' + v.name).join('\n')}\n\nEnter each vendor's account name, number and bank.`);
                     return;
                 }
-                const badNo = activeLines.filter(v => !/^[0-9]{10}$/.test(v.acctNo));
+                const badNo = payLines.filter(v => !/^[0-9]{10}$/.test(v.acctNo));
                 if (badNo.length) {
                     alert(`Account number must be exactly 10 digits for:\n\n${badNo.map(v => '  • ' + v.name).join('\n')}`);
                     return;
@@ -4729,7 +4893,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const roundCost = activeLines.reduce((s,v) => s + (Number(v.amount||0) * v.receivingNow), 0);
                 if (roundCost <= 0) { alert('Total received value for this delivery must be greater than zero.'); return; }
 
-                const paymentSchedule = activeLines.map(v => ({
+                const paymentSchedule = payLines.map(v => ({
                     vendor: v.name, phone: v.phone || '', items: v.items || '',
                     qty: v.receivingNow, unitPrice: Number(v.amount||0),
                     amount: Number(v.amount||0) * v.receivingNow,
@@ -4841,13 +5005,16 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     const { error: cnError } = await supabaseClient.from('concept_notes').update(cnUpdates).eq('refNumber', refNumber);
                     if (cnError) throw cnError;
 
+                    const payAmount = payLines.reduce((s,v) => s + (Number(v.amount||0) * v.receivingNow), 0);
+                    let newPayRef = prepaidLines.length ? prepaidLines[0].prepaidRef : null;
+                    if (payLines.length) {
                     const payRecord = {
                         refNumber: 'PAY' + Date.now(),
                         conceptNoteId: cn.id,
                         conceptNoteRef: cn.refNumber,
                         projectCode: cn.projectCode,
                         staffName: cn.staffName,
-                        amount: roundCost,
+                        amount: payAmount,
                         paymentMethod: 'bank_transfer',
                         payMode,
                         paymentScheduleJson: JSON.stringify(paymentSchedule),
@@ -4864,8 +5031,9 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         .from('payments').insert([payRecord]).select();
                     if (payError) throw payError;
 
-                    const newPayRef = payData[0].refNumber;
+                    newPayRef = payData[0].refNumber;
                     this.data.payments.unshift(payData[0]);
+                    }
                     const cnIdx = this.data.conceptNotes.findIndex(c => c.refNumber === refNumber);
                     if (cnIdx !== -1) Object.assign(this.data.conceptNotes[cnIdx], cnUpdates);
                     this.clearCache();
@@ -4959,6 +5127,9 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                                 // Procurement: vendor sign GRR
                                 if (myRole === 'procurement' && isProcurement && hasGRR)
                                     btns += `<button class="btn btn-secondary" onclick="app.vendorSignGRR('${cn.refNumber}')" style="border-color:#285B3C;color:#285B3C;">✍️ Vendor Sign GRR</button>`;
+                                // Finance: confirm the GRR when everything was paid online before delivery
+                                if (['finance','finance_manager','GrantsCompliance'].includes(myRole) && isProcurement && hasGRR && this._hasPrepaid(cn))
+                                    btns += `<button class="btn btn-secondary" onclick="app._financeSignGRR('${cn.refNumber}')" style="border-color:#0D47A1;color:#0D47A1;">✍️ Confirm GRR (Finance, card payment)</button>`;
                                 // Finance: confirm PO at commitment stage
                                 if (['finance','finance_manager','GrantsCompliance'].includes(myRole) && isProcurement && hasPO)
                                     btns += `<button class="btn btn-secondary" onclick="app._financeSignPO('${cn.refNumber}')" style="border-color:#0D47A1;color:#0D47A1;">✍️ Confirm PO (Finance)</button>`;
@@ -6946,6 +7117,119 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     if (btn) { btn.disabled = false; btn.textContent = '✓ Record online purchase'; }
                     alert('Could not record the online purchase: ' + (e.message || e));
                 }
+            },
+
+            // ── Online purchases paid by Procurement with the RAHAMA card ──
+            // Once the PO is authorised, Procurement asks Finance to authorise a card
+            // payment (you pay before you receive a flight or a visa). It goes through
+            // reviewer → approver → authorizer; no transfer is made. Procurement then
+            // pays on the website and attaches the e-receipt (which also stands in for
+            // the vendor's signature). At receipt those vendors need no bank details
+            // and are not paid again.
+            _hasPrepaid(cn) {
+                let v = []; try { if (cn.vendorsJson) v = JSON.parse(cn.vendorsJson); } catch(e) {}
+                return v.some(x => x.prepaidRef);
+            },
+            async requestOnlinePayment(refNumber) {
+                const { data: cn } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                if (!cn || !cn.poNumber) { alert('Create the PO first.'); return; }
+                const { data: bo } = await supabaseClient.from('document_signatures').select('id').eq('docRef', cn.poNumber).eq('pageContext', 'budget_owner_po');
+                if (!(bo && bo.length) && !cn.budgetOwnerSignedAt) { alert('The PO must be authorised by the Budget Owner (or ED) before anything is paid.'); return; }
+                let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                let rounds = []; try { if (cn.receivedJson) rounds = JSON.parse(cn.receivedJson); } catch(e) {}
+                const received = i => rounds.reduce((s, r) => s + (r.lines || []).filter(l => l.vendorIndex === i).reduce((a, l) => a + (Number(l.qtyReceived) || 0), 0), 0);
+                // A vendor whose online payment Finance rejected can be asked for again
+                const preRefs = vendors.map(v => v.prepaidRef).filter(Boolean);
+                const { data: prePays } = preRefs.length ? await supabaseClient.from('payments').select('refNumber,status').in('refNumber', preRefs) : { data: [] };
+                const rejected = new Set((prePays || []).filter(p => p.status === 'rejected').map(p => p.refNumber));
+                const open = vendors.map((v, i) => ({ v, i })).filter(({ v, i }) => (!v.prepaidRef || rejected.has(v.prepaidRef)) && received(i) < (v.qty || 1));
+                if (!open.length) { alert('Every vendor on this PO already has an online payment requested, or has been received.'); return; }
+                document.getElementById('onlinePayOverlay')?.remove();
+                const ov = document.createElement('div'); ov.id = 'onlinePayOverlay';
+                ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;overflow-y:auto;padding:12px;';
+                const inp = 'width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;font-size:13px;';
+                ov.innerHTML = `<div style="background:#fff;max-width:620px;margin:40px auto;border-radius:14px;padding:22px;">
+                    <h3 style="margin:0 0 4px;font-family:'Plus Jakarta Sans',sans-serif;">💳 Online purchase: request card payment</h3>
+                    <p style="font-size:13px;color:#555;margin:0 0 14px;">${cn.poNumber} · ${escHtml(cn.activityTitle)}<br>For flights, visa fees, online bookings. Finance reviews, approves and authorises the spend; then <b>you pay on the website with the RAHAMA card</b> and attach the e-receipt. No transfer is made. The amount is the PO amount for that vendor.</p>
+                    ${open.map(({ v, i }) => `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;margin-bottom:10px;">
+                        <label style="display:flex;gap:8px;align-items:center;font-weight:700;font-size:13px;"><input type="checkbox" id="opSel_${i}"> ${escHtml(v.name)} · ₦${(Number(v.amount || 0) * (v.qty || 1)).toLocaleString()}</label>
+                        <div style="font-size:12px;color:#666;margin:4px 0 6px 24px;">${escHtml(v.items || '')}</div>
+                        <input id="opSite_${i}" style="${inp}" placeholder="Website you will pay on (e.g. https://www.flyairpeace.com)"></div>`).join('')}
+                    <label style="font-size:13px;font-weight:600;">Booking details for Finance (traveller name, dates, application number…)</label>
+                    <textarea id="opNote" rows="3" style="${inp}"></textarea>
+                    <div style="display:flex;gap:10px;margin-top:14px;"><button class="btn btn-primary" id="opSend" onclick="app._submitOnlinePaymentRequest('${refNumber}')" style="flex:1;">Send to Finance for authorisation</button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('onlinePayOverlay').remove()">Cancel</button></div></div>`;
+                document.body.appendChild(ov);
+            },
+            async _submitOnlinePaymentRequest(refNumber) {
+                const { data: cn } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                if (!cn) return;
+                let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const chosen = vendors.map((v, i) => ({ v, i })).filter(({ i }) => document.getElementById('opSel_' + i)?.checked);
+                if (!chosen.length) { alert('Tick at least one vendor.'); return; }
+                const missing = chosen.filter(({ i }) => !(document.getElementById('opSite_' + i)?.value || '').trim());
+                if (missing.length) { alert('Enter the website or payment link for: ' + missing.map(({ v }) => v.name).join(', ')); return; }
+                const note = (document.getElementById('opNote')?.value || '').trim();
+                const schedule = chosen.map(({ v, i }) => ({
+                    vendor: v.name, phone: v.phone || '', items: v.items || '', qty: v.qty || 1, unitPrice: Number(v.amount || 0),
+                    amount: Number(v.amount || 0) * (v.qty || 1), vendorIndex: i, method: 'online_card',
+                    website: document.getElementById('opSite_' + i).value.trim(),
+                    accountName: 'RAHAMA card (Procurement pays online)', accountNumber: '', bankName: 'Card / online payment'
+                }));
+                const total = schedule.reduce((s, l) => s + l.amount, 0);
+                const btn = document.getElementById('opSend'); if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+                try {
+                    const now = new Date().toISOString();
+                    const payRecord = {
+                        refNumber: 'PAY' + Date.now(), conceptNoteId: cn.id, conceptNoteRef: cn.refNumber, projectCode: cn.projectCode,
+                        staffName: cn.staffName, amount: total, paymentMethod: 'card_online', payMode: 'vendors',
+                        paymentScheduleJson: JSON.stringify(schedule),
+                        justification: `ONLINE PURCHASE BY CARD: Procurement pays on the website with the RAHAMA card after authorisation. No transfer. PO: ${cn.poNumber} | Vendor(s): ${schedule.map(s => s.vendor + ' (' + s.website + ')').join(' | ')} | Requested by ${this.currentUser}${note ? ' | ' + note : ''}`,
+                        accountName: 'RAHAMA card (Procurement pays online)', accountNumber: '', bankName: 'Card / online payment',
+                        status: 'pending', requestDate: now, procurementComplete: null, retirementresponsibility: 'procurement'
+                    };
+                    const { data: payData, error } = await supabaseClient.from('payments').insert([payRecord]).select();
+                    if (error) throw error;
+                    const payRef = payData[0].refNumber;
+                    chosen.forEach(({ i }) => { vendors[i] = { ...vendors[i], prepaidRef: payRef, payOnline: true, website: document.getElementById('opSite_' + i).value.trim() }; });
+                    const { error: uErr } = await supabaseClient.from('concept_notes').update({ vendorsJson: JSON.stringify(vendors) }).eq('refNumber', refNumber);
+                    if (uErr) throw uErr;
+                    const loc = this.data.conceptNotes.find(c => c.refNumber === refNumber); if (loc) loc.vendorsJson = JSON.stringify(vendors);
+                    await this._logAudit('payments', payRef, 'online_payment_requested', `₦${total.toLocaleString()} for ${schedule.map(s => s.vendor).join(', ')} on ${cn.poNumber}, by ${this.currentUser}`);
+                    for (const off of (this._financeOfficersForStage ? this._financeOfficersForStage('reviewer') : []))
+                        await this.createNotification(off, `Card payment request ${payRef} (₦${total.toLocaleString()}): Procurement will pay online with the RAHAMA card once authorised.`, 'info', payRef);
+                    document.getElementById('onlinePayOverlay')?.remove();
+                    alert(`Sent to Finance: ${payRef} (₦${total.toLocaleString()}).\n\nOnce it is authorised you will be notified. Then pay on the website with the RAHAMA card and use "Paid online: attach e-receipt". Confirm receipt after that.`);
+                    this.clearCache && this.clearCache();
+                    this.showView('approvals');
+                } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Send to Finance'; } alert('Could not send: ' + (e.message || e)); }
+            },
+            // Vendors on this PO that were authorised for card payment but whose
+            // e-receipt has not been attached yet
+            _needsOnlineReceipt(cn) {
+                let v = []; try { if (cn.vendorsJson) v = JSON.parse(cn.vendorsJson); } catch(e) {}
+                return v.some(x => x.prepaidRef && !x.online);
+            },
+            async _uploadOnlineReceipt(refNumber) {
+                const { data: cn } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
+                if (!cn) return;
+                let v = []; try { if (cn.vendorsJson) v = JSON.parse(cn.vendorsJson); } catch(e) {}
+                const waiting = v.map((x, i) => ({ x, i })).filter(({ x }) => x.prepaidRef && !x.online);
+                if (!waiting.length) { alert('Every card payment on this PO already has its e-receipt.'); return; }
+                const { data: pays } = await supabaseClient.from('payments').select('refNumber,status').in('refNumber', [...new Set(waiting.map(w => w.x.prepaidRef))]);
+                const ready = waiting.filter(({ x }) => (pays || []).some(p => p.refNumber === x.prepaidRef && p.status === 'paid'));
+                if (!ready.length) { alert('Finance has not authorised the card payment yet. Pay online only after it is authorised.'); return; }
+                const loc = this.data.conceptNotes.find(c => c.refNumber === refNumber); if (loc) Object.assign(loc, cn); else this.data.conceptNotes.push(cn);
+                // One vendor at a time, using the same online-purchase form as the vendor signature screen
+                this._onlinePurchaseForm(refNumber, ready[0].i);
+            },
+            async _financeSignGRR(cnRef) {
+                const { data: cn } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                if (!cn || !cn.grrNumber) { alert('GRR has not been generated yet.'); return; }
+                const { data: ex } = await supabaseClient.from('document_signatures').select('id').eq('docRef', cn.grrNumber).eq('pageContext', 'finance_sign');
+                if (ex && ex.length) { alert('Finance has already confirmed this GRR.'); return; }
+                const { data: pays } = await supabaseClient.from('payments').select('refNumber').eq('conceptNoteRef', cnRef).limit(1);
+                await this.showSigningView(cn.grrNumber, 'grr', (pays && pays[0] && pays[0].refNumber) || cnRef, 'finance_sign', cnRef);
             },
 
             _onlineReceiptsHtml(cn, forDocument) {
