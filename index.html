@@ -402,7 +402,7 @@
                 <li><button onclick="app.showView('conceptNote')" data-view="conceptNote">Create Concept Note</button></li>
                 <li><button onclick="app.showView('payment')" data-view="payment">Request Payment</button></li>
                 <li><button onclick="app.showView('retirement')" data-view="retirement">Submit Retirement</button></li>
-                <li><button onclick="app.showView('approvals')" data-view="approvals">My Approvals</button></li>
+                <li><button onclick="app._nextMode=null;app.showView('approvals')" data-view="approvals">My Approvals</button></li>
                 <li><button id="reportsBtn" onclick="app.showView('reports')" data-view="reports">Reports & Budget</button></li>
                 <li><button id="auditTrailBtn" onclick="app.showView('auditTrail')" data-view="auditTrail" style="display:none;">🔍 Audit Trail</button></li>
                 <li><button id="quarterlyReportBtn" onclick="app.showView('quarterlyReport')" data-view="quarterlyReport" style="display:none;">📊 Quarterly Report</button></li>
@@ -1402,6 +1402,16 @@
             },
             
             showView(viewName) {
+                if (viewName === 'approvals' && this._nextMode && this.currentUser) {
+                    const nm = this._nextMode; this._nextMode = null;
+                    let nxt = null;
+                    try { if (Date.now() - nm.at < 30 * 60 * 1000) nxt = this._nextAfter(nm.key); } catch (e) { nxt = null; }
+                    if (nxt) {
+                        const left = this._itemsWaitingForMe().length;
+                        this._openWithBanner(nxt, '✓ Done. This is the next item waiting for you (' + left + ' left).');
+                        return;
+                    }
+                }
                 document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
                 const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
                 if (targetBtn) targetBtn.classList.add('active');
@@ -3547,7 +3557,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 }
             },
             
-            async approveConceptNote(refNumber, action) {
+            async approveConceptNote(refNumber, action, withNote) {
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) return;
                 let updates = {};
@@ -3567,9 +3577,10 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const needsSig = ['approve_under_1m','approve_with_note','ed_approve','approve_needs_ed'].includes(action);
                 let boSigData = null;
                 if (needsSig) {
-                    if (action === 'approve_with_note') {
+                    if (action === 'approve_with_note' || withNote) {
                         approvalNote = prompt('Enter your approval note:');
-                        if (!approvalNote) return;
+                        if (!approvalNote || !approvalNote.trim()) return;
+                        approvalNote = approvalNote.trim();
                     }
                     boSigData = await this._showSignaturePad(
                         'Approver Signature',
@@ -3618,6 +3629,12 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
             : { status: 'approved', approvedDate: now, approvedBy: this.currentUser, retirementresponsibility: 'staff', ...boFields };
         break; }
 }
+                // A note added by the ED or with Sign & Forward is kept with any
+                // earlier note, under the approver's name.
+                if (withNote && approvalNote && action !== 'approve_with_note' && needsSig) {
+                    const line = (action === 'ed_approve' ? 'ED ' : '') + this.currentUser + ': ' + approvalNote;
+                    updates.budgetOwnerNote = cn.budgetOwnerNote ? cn.budgetOwnerNote + '\n' + line : line;
+                }
                 try {
                     const { error } = await supabaseClient.from('concept_notes').update(updates).eq('refNumber', refNumber);
                     if (error) throw error;
@@ -3677,6 +3694,146 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
             // Procurement no longer rejects. Rules are enforced in the database
             // (fms_cn_return_refer.sql): only Procurement, only notes in its queue,
             // never once a PO exists.
+            // Decision panel at the bottom of a concept note: the same actions the
+            // approvals list offers, for whoever is due to act on this note now,
+            // so they can decide right after reading it.
+            _cnDecisionParts(cn) {
+                const role = this.getUserRole();
+                const me = this.currentUser;
+                const reject = '<button class="action-btn reject" onclick="app.rejectConceptNote(\'' + cn.refNumber + '\')">✗ Reject</button>';
+                const parts = [];
+                if (cn.status === 'variance_review' && cn.currentApprover === 'budgetOwner'
+                    && (role === 'budgetOwner' || (role === 'ed' && this.data.roles[cn.staffName] === 'budgetOwner')) && cn.staffName !== me) {
+                    parts.push({ t: 'Variance above 20%: approve or reject the higher cost',
+                        b: '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')">✓ Approve variance</button>'
+                         + '<button class="action-btn reject" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'reject\')">✗ Reject variance</button>' });
+                } else if (role === 'budgetOwner' && cn.currentApprover === 'budgetOwner' && ['pending', 'variance_rejected'].includes(cn.status) && cn.staffName !== me) {
+                    parts.push({ t: 'Approve or reject this concept note', b: this._renderBOApproveButtons(cn)
+                        + (this._renderBOApproveButtons(cn).includes('approve_needs_ed') ? '<button class="action-btn approve" onclick="app.approveConceptNote(\'' + cn.refNumber + '\', \'approve_needs_ed\', true)" style="background:none;border-color:#059669;color:#059669;">✍️ Sign &amp; Forward with Note</button>' : '') + reject });
+                } else if (role === 'ed' && cn.currentApprover === 'ed' && ['pending', 'variance_rejected'].includes(cn.status) && cn.staffName !== me) {
+                    parts.push({ t: 'Approve or reject this concept note',
+                        b: '<button class="action-btn approve" onclick="app.approveConceptNote(\'' + cn.refNumber + '\', \'ed_approve\')">✓ ' + (cn.boPreApprovedAt ? 'Counter-Sign &amp; Approve' : 'Approve') + (cn.requiresProcurement === 'yes' ? ' → Procurement' : '') + '</button>'
+                         + '<button class="action-btn approve" onclick="app.approveConceptNote(\'' + cn.refNumber + '\', \'ed_approve\', true)" style="background:none;border-color:#059669;color:#059669;">✓ Approve with Note</button>' + reject });
+                } else if (role === 'procurement' && cn.currentApprover === 'procurement' && cn.status === 'pending') {
+                    parts.push({ t: 'Procurement action', b: this._renderProcurementActions(cn) + this._procReturnButtons(cn) });
+                }
+                if (role === 'budgetOwner' && cn.quoteExceptionStatus === 'pending')
+                    parts.push({ t: '3-quote exception requested' + (cn.quoteExceptionReason ? ': "' + escHtml(String(cn.quoteExceptionReason).slice(0, 160)) + '"' : ''),
+                        b: '<button class="action-btn approve" onclick="app.resolveQuoteException(\'' + cn.refNumber + '\', true)">✓ Approve exception</button>'
+                         + '<button class="action-btn reject" onclick="app.resolveQuoteException(\'' + cn.refNumber + '\', false)">✗ Decline exception</button>' });
+                if (this._isSecurityOfficer && this._isSecurityOfficer() && cn.travelRequired === 'yes' && cn.securityStatus === 'pending' && cn.status === 'security_review')
+                    parts.push({ t: 'Travel awaiting security clearance', b: '<button class="action-btn approve" onclick="app.showSecurityReview(\'' + cn.refNumber + '\')">🛡️ Review travel &amp; decide</button>' });
+                parts.forEach(p => { p.key = 'cn:' + cn.refNumber; });
+                return parts;
+            },
+            // Finance: payments and retirements on this concept note that are at
+            // the current user's stage (Review / Approve / Authorize).
+            _cnFinanceParts(cn) {
+                const myStage = this.getFinanceStage(this.currentUser);
+                if (!myStage) return [];
+                const parts = [];
+                const auth = myStage === 'authorizer';
+                const money = n => '₦' + Number(n || 0).toLocaleString();
+                const pays = (this.data.payments || []).filter(p => p.conceptNoteRef === cn.refNumber);
+                pays.filter(p => this._financeStageForCurrentStatus(p.status) === myStage).forEach(p => {
+                    let docs = '';
+                    if (Number(p.beneficiaryCount) > 0 && auth && p.status === 'finance_approved')
+                        docs += '<button class="action-btn" onclick="app.viewPaymentBeneficiaries(\'' + p.refNumber + '\')">👥 Beneficiaries (' + p.beneficiaryCount + ')</button>';
+                    if (p.beneficiaryFileUrl && auth && p.status === 'finance_approved')
+                        docs += '<button class="action-btn" onclick="app.downloadFile(\'' + p.beneficiaryFileUrl + '\', \'' + (p.beneficiaryFileName || 'beneficiaries') + '\')">📎 Download Beneficiaries</button>';
+                    if (cn.procurementInvoiceUrl)
+                        docs += '<button class="action-btn" onclick="app.downloadFile(\'' + cn.procurementInvoiceUrl + '\', \'' + (cn.procurementInvoiceName || 'invoice') + '\')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button>';
+                    parts.push({ key: 'pay:' + p.refNumber,
+                        t: '<b>Payment ' + p.refNumber + '</b> · ' + escHtml(p.staffName || '') + ' · <b>' + money(p.amount) + '</b> · ' + escHtml(p.paymentMethod || '')
+                         + (p.requestDate ? ' · requested ' + new Date(p.requestDate).toLocaleDateString() : '')
+                         + (p.justification ? '<div style="margin-top:6px;white-space:pre-wrap;font-size:12px;color:#4B5563;">' + escHtml(p.justification) + '</div>' : ''),
+                        d: docs, b: this._renderFinancePaymentActions(p) });
+                });
+                const payRefs = pays.map(p => p.refNumber);
+                (this.data.retirements || []).filter(r => payRefs.includes(r.paymentRef) && this._financeStageForCurrentStatus(r.status) === myStage).forEach(r => {
+                    let docs = '';
+                    if (r.receiptFileUrl) docs += '<button class="action-btn" onclick="app.downloadFile(\'' + r.receiptFileUrl + '\', \'' + (r.receiptFileName || 'receipt') + '\')" style="border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button>';
+                    if (r.invoiceFileUrl) docs += '<button class="action-btn" onclick="app.downloadFile(\'' + r.invoiceFileUrl + '\', \'' + (r.invoiceFileName || 'invoice') + '\')" style="border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button>';
+                    parts.push({ key: 'ret:' + r.refNumber,
+                        t: '<b>Retirement ' + r.refNumber + '</b> · ' + escHtml(r.staffName || '') + ' · payment ' + r.paymentRef + ' · spent <b>' + money(r.actualSpent) + '</b> · returned ' + money(r.amountReturned)
+                         + (r.submittedDate ? ' · submitted ' + new Date(r.submittedDate).toLocaleDateString() : ''),
+                        d: docs, b: this._renderFinanceRetirementActions(r) });
+                });
+                return parts;
+            },
+            _cnDecisionPanel(cn) {
+                const parts = this._cnDecisionParts(cn).concat(this._cnFinanceParts(cn));
+                if (!parts.length) return '';
+                // Every decision button remembers what was decided, so that once it
+                // is done the next item waiting for this user opens straight away.
+                const mark = (html, key) => String(html).split('onclick="app.').join('onclick="app._markNext(\'' + key + '\');app.');
+                const others = this._itemsWaitingForMe().filter(r => r !== cn.refNumber).length;
+                return '<div class="form-group full-width" style="background:#F0FDF4;border:2px solid #285B3C;border-radius:12px;padding:16px 20px;">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
+                    + '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#285B3C;">✍️ Your decision</div>'
+                    + (others ? '<button type="button" class="action-btn" onclick="app._openNextFrom(\'' + cn.refNumber + '\')" style="font-size:12px;">Skip to next (' + others + ' more waiting) ›</button>' : '')
+                    + '</div>'
+                    + parts.map(p => '<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed #A7F3D0;"><div style="font-size:13px;color:#374151;margin-bottom:8px;">' + p.t + '</div>'
+                        + (p.d ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' + p.d + '</div>' : '')
+                        + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;">' + mark(p.b, p.key) + '</div></div>').join('')
+                    + '<div style="font-size:11px;color:#6B7280;">After you decide, the next item waiting for you opens automatically.</div>'
+                    + '</div>';
+            },
+            // ── "Move to the next" ──
+            _markNext(key) { this._nextMode = { key: key, at: Date.now() }; },
+            // Concept notes with anything waiting for the current user, in the
+            // order the approvals page lists them.
+            _itemsWaitingForMe() {
+                return (this.data.conceptNotes || []).filter(c => {
+                    try { return this._cnDecisionParts(c).length || this._cnFinanceParts(c).length; } catch (e) { return false; }
+                }).map(c => c.refNumber);
+            },
+            _stillWaitingOnMe(key) {
+                const [kind, ref] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+                const myStage = this.getFinanceStage(this.currentUser);
+                if (kind === 'cn') { const c = (this.data.conceptNotes || []).find(x => x.refNumber === ref); return !!(c && this._cnDecisionParts(c).length); }
+                if (kind === 'pay') { const p = (this.data.payments || []).find(x => x.refNumber === ref); return !!(p && myStage && this._financeStageForCurrentStatus(p.status) === myStage); }
+                if (kind === 'ret') { const r = (this.data.retirements || []).find(x => x.refNumber === ref); return !!(r && myStage && this._financeStageForCurrentStatus(r.status) === myStage); }
+                return false;
+            },
+            _cnRefForKey(key) {
+                const kind = key.slice(0, key.indexOf(':')), ref = key.slice(key.indexOf(':') + 1);
+                if (kind === 'cn') return ref;
+                if (kind === 'pay') { const p = (this.data.payments || []).find(x => x.refNumber === ref); return p && p.conceptNoteRef; }
+                if (kind === 'ret') { const r = (this.data.retirements || []).find(x => x.refNumber === ref); const p = r && (this.data.payments || []).find(x => x.refNumber === r.paymentRef); return p && p.conceptNoteRef; }
+                return null;
+            },
+            // Called by showView('approvals') after a decision. Returns the concept
+            // note to open next, or null to show the approvals page as usual
+            // (nothing left, or the decision was cancelled and is still pending).
+            _nextAfter(key) {
+                if (this._stillWaitingOnMe(key)) return null;
+                const list = this._itemsWaitingForMe();
+                if (!list.length) return null;
+                const same = this._cnRefForKey(key);
+                return list.includes(same) ? same : list[0];
+            },
+            async _openWithBanner(ref, text) {
+                document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
+                const nb = document.querySelector('.nav button[data-view="approvals"]'); if (nb) nb.classList.add('active');
+                await this.viewConceptNoteDetails(ref);
+                const content = document.getElementById('mainContent');
+                if (content && text) {
+                    const d = document.createElement('div');
+                    d.id = 'nextItemBanner';
+                    d.style.cssText = 'background:#E8F5E9;border:1px solid #A7F3D0;color:#1B5E20;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:600;';
+                    d.textContent = text;
+                    content.insertBefore(d, content.firstChild);
+                }
+                window.scrollTo && window.scrollTo(0, 0);
+            },
+            _openNextFrom(ref) {
+                const list = this._itemsWaitingForMe();
+                const i = list.indexOf(ref);
+                const rest = list.slice(i + 1).concat(list.slice(0, Math.max(i, 0))).filter(r => r !== ref);
+                if (!rest.length) { this._nextMode = null; this.showView('approvals'); return; }
+                this._openWithBanner(rest[0], 'Next waiting for you (' + rest.length + ' left, including this one).');
+            },
             _procReturnButtons(cn) {
                 if (cn.poNumber) return '<div style="font-size:11px;color:#6B7280;max-width:200px;margin-top:6px;">PO raised: to return or refer this note, cancel the PO first.</div>';
                 return '<button class="action-btn" onclick="app.procurementReturnCN(\'' + cn.refNumber + '\')" style="border-color:#B45309;color:#B45309;margin-top:6px;">↩ Return to staff</button><br>'
@@ -5264,10 +5421,12 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                                 <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:10px;">📋 Signing Progress — Loading…</div>
                             </div>
                         </div>` : ''}
+                        ${cn.budgetOwnerNote ? `<div class="form-group full-width"><label style="color: var(--success);">Approval Note</label><textarea rows="2" readonly style="border-color: var(--success);">${escHtml(cn.budgetOwnerNote)}</textarea></div>` : ''}
+                        ${this._cnDecisionPanel(cn)}
                         <div class="btn-group full-width" style="flex-wrap:wrap;gap:8px;">
                             ${(this.data.roles[this.currentUser] || 'staff') === 'staff'
                                 ? `<button class="btn btn-primary" onclick="app.showView('dashboard')">← Back to Dashboard</button>`
-                                : `<button class="btn btn-primary" onclick="app.showView('approvals')">← Back to Approvals</button>`
+                                : `<button class="btn btn-primary" onclick="app._nextMode=null;app.showView('approvals')">← Back to Approvals</button>`
                             }
                             ${(() => {
                                 const myRole = this.data.roles[this.currentUser] || 'staff';
@@ -6420,6 +6579,17 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     const { data: ret = [] } = await supabaseClient.from('retirements').select('*').in('paymentRef', paymentRefs);
                     retirements = ret || [];
                 }
+                // Beneficiary lists of multi-person payments. The database's own
+                // access rules decide who can read them; anyone else gets the count only.
+                const benefPays = (payments || []).filter(p => Number(p.beneficiaryCount) > 0 || p.beneficiaryFileUrl);
+                let benefRows = [];
+                if (benefPays.length) {
+                    try {
+                        const { data: bl } = await supabaseClient.from('payment_beneficiaries').select('*')
+                            .in('payment_ref', benefPays.map(p => p.refNumber)).order('line_no');
+                        benefRows = bl || [];
+                    } catch (e) { benefRows = []; }
+                }
 
                 // Fetch ALL signatures: by CN ref, payment refs, and by PO/GRR docRef
                 const docRefs = [cn.refNumber, ...(cn.poNumber ? [cn.poNumber] : []), ...(cn.grrNumber ? [cn.grrNumber] : []), ...paymentRefs];
@@ -6604,6 +6774,24 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${escHtml(p.rejectionReason||'—')}${p.rejectedBy?'<br><span style="font-size:10px;color:#777;">by '+p.rejectedBy+(p.rejectedDate?' — '+fmtD(p.rejectedDate):'')+'</span>':''}</td>
                 </tr>`).join('');
 
+                const benefHtml = benefPays.map(p => {
+                    const rows = benefRows.filter(b => b.payment_ref === p.refNumber);
+                    const expected = Number(p.beneficiaryCount) || 0;
+                    const total = rows.reduce((t, b) => t + Number(b.amount || 0), 0);
+                    const head = `<h3 style="font-size:13px;margin:18px 0 4px;color:#285B3C;">${p.refNumber} · ${escHtml(p.staffName||'')} · ${money(p.amount)} · ${expected || rows.length} beneficiar${(expected || rows.length) === 1 ? 'y' : 'ies'}</h3>`
+                        + (rows[0] && (rows[0].meeting_title || rows[0].meeting_location) ? `<div style="font-size:12px;color:#555;">${escHtml(rows[0].meeting_title||'')}${rows[0].meeting_location ? ' · ' + escHtml(rows[0].meeting_location) : ''}</div>` : '')
+                        + (p.beneficiaryFileName ? `<div style="font-size:12px;color:#555;">Uploaded list: ${escHtml(p.beneficiaryFileName)}</div>` : '');
+                    if (!rows.length) return head + `<p style="color:#999;">${expected ? 'The list is held in FMS and is not available with your access.' : 'Beneficiary list uploaded as a file (see above).'}</p>`;
+                    const checks = [];
+                    if (expected && rows.length !== expected) checks.push(`${rows.length} names listed but the payment says ${expected}`);
+                    if (Math.round(total) !== Math.round(Number(p.amount || 0))) checks.push(`list total ${money(total)} does not match the payment ${money(p.amount)}`);
+                    return head
+                        + `<table><thead><tr><th>S/N</th><th>Name</th><th>Gender</th><th>Organization</th><th>Designation</th><th>Phone</th><th>Bank</th><th>Account No.</th><th>Amount</th></tr></thead><tbody>`
+                        + rows.map(b => `<tr><td>${b.line_no ?? ''}</td><td>${escHtml(b.full_name||'')}</td><td>${escHtml(b.gender||'')}</td><td>${escHtml(b.organization||'')}</td><td>${escHtml(b.designation||'')}</td><td>${escHtml(b.phone||'')}</td><td>${escHtml(b.bank_name||'')}</td><td>${escHtml(b.account_number||'')}</td><td style="font-weight:600;">${money(b.amount)}</td></tr>`).join('')
+                        + `<tr><td colspan="8" style="font-weight:700;text-align:right;">Total</td><td style="font-weight:700;">${money(total)}</td></tr></tbody></table>`
+                        + (checks.length ? `<div style="margin-top:6px;color:#B71C1C;font-size:12px;font-weight:600;">⚠ ${checks.join('; ')}</div>` : '');
+                }).join('');
+
                 const retRows = retirements.map(r => {
                     const linkedPay = (payments||[]).find(p => p.refNumber === r.paymentRef);
                     const advanced  = linkedPay ? Number(linkedPay.amount||0) : null;
@@ -6701,6 +6889,7 @@ ${exceptionSection}
                 ${procSection}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Reviewed By</th><th>Approved By</th><th>Authorised / Paid By</th><th>Bank Reconciliation</th><th>Justification</th><th>Rejection Reason</th></tr></thead><tbody>${payRows}</tbody></table>`}
+${benefPays.length ? '<h2>PAYMENT BENEFICIARIES</h2>' + benefHtml : ''}
 <h2>RETIREMENT HISTORY</h2>
 ${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<table><thead><tr><th>Ref</th><th>Payment Ref</th><th>Staff</th><th>Advanced</th><th>Spent</th><th>Returned</th><th>Variance</th><th>Expenditure Details</th><th>Status</th><th>Submitted</th><th>Reviewed By</th><th>Approved By</th><th>Authorised By</th><th>Rejection Reason</th><th>Receipt</th><th>Invoice</th></tr></thead><tbody>${retRows}</tbody></table>
 ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">Retirement Finance Signatures</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">${retSigBlocks}</div>` : ''}`}
