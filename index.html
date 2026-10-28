@@ -6375,6 +6375,29 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
          // hadn't reached payment yet was invisible. It now lists every approved
          // note and shows the stage it has reached, with payment and retirement
          // attached where they exist.
+         // Reads named columns of a table in batches of 500 (up to 5,000 rows).
+         // A column that does not exist in this database is dropped and the read
+         // retried, so the report never fails over one missing field.
+         async _fetchReportRows(table, cols, orderCol, ascending) {
+    let use = cols.slice(); const out = []; const size = 500;
+    for (let from = 0; from < 5000; from += size) {
+        let res, tries = 0;
+        while (true) {
+            let q = supabaseClient.from(table).select(use.join(','));
+            if (orderCol && use.includes(orderCol)) q = q.order(orderCol, { ascending: !!ascending, nullsFirst: false });
+            if (use.includes('refNumber')) q = q.order('refNumber', { ascending: true });
+            res = await q.range(from, from + size - 1);
+            const m = res.error && /column\s+"?(?:[a-z_]+\.)?"?([A-Za-z_]+)"?\s+does not exist/i.exec(res.error.message || '');
+            if (m && use.includes(m[1]) && ++tries < 15) { use = use.filter(c => c !== m[1]); continue; }
+            break;
+        }
+        if (res.error) return { data: null, error: res.error };
+        out.push(...(res.data || []));
+        if (!res.data || res.data.length < size) break;
+    }
+    return { data: out, error: null };
+         },
+
          async exportPaymentsReport() {
     const fmt = (d) => d ? new Date(d).toLocaleString('en-NG', {
         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -6389,10 +6412,15 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
     try {
         // Fetch fresh — the local cache is scoped to the current user's role and
         // would otherwise omit notes they aren't personally involved in.
+        // Only the columns this report uses, in batches. Reading every column
+        // pulled the signature images too, and the query timed out as notes grew.
         const [cnRes, payRes, retRes] = await Promise.all([
-            supabaseClient.from('concept_notes').select('*').order('submittedDate', { ascending: false }).limit(5000),
-            supabaseClient.from('payments').select('*').limit(5000),
-            supabaseClient.from('retirements').select('*').limit(5000)
+            this._fetchReportRows('concept_notes', ['refNumber','status','currentApprover','projectCode','staffName','activityTitle','estimatedCost',
+                'requiresProcurement','travelRequired','securityStatus','securityRiskLevel','securityClearedBy','approvedBy','approvedDate',
+                'budgetOwnerApprovedBy','budgetOwnerSignedAt','poNumber','poGeneratedAt','grrNumber','actualProcurementCost','procurementVariance','submittedDate'],
+                'submittedDate', false),
+            this._fetchReportRows('payments', ['refNumber','conceptNoteRef','projectCode','amount','status','reviewedBy','financeApprovedBy','processedBy','paidDate','requestDate'], 'requestDate', false),
+            this._fetchReportRows('retirements', ['refNumber','paymentRef','staffName','status','actualSpent','amountReturned','submittedDate','approvedBy','approvedDate','rejectedDate','rejectionReason'], 'submittedDate', false)
         ]);
         // Surface errors — previously a failed query silently became an empty
         // list, which looked identical to "no records in this period".
