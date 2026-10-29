@@ -877,6 +877,7 @@
             },
 
             async loadData() {
+                await this._loadPoRounds();
                 try {
                     // Signature images are left out of list loads (they were ~27 MB of
                     // every login). Screens that show a signature fetch the record fresh.
@@ -2319,7 +2320,7 @@
                     }
                     // At or above ₦500,000 the quotation analysis is mandatory —
                     // procurement cannot enter a PO directly.
-                    const mustAnalyse = Number(cn.estimatedCost || 0) >= 500000
+                    const mustAnalyse = this._procBase(cn) >= 500000
                                         && cn.quoteExceptionStatus !== 'approved';
                     let out = '<button class="action-btn approve" onclick="app.showQuotationAnalysis(\'' + cn.refNumber + '\')" style="margin-bottom:6px;">📊 Analyse Quotations &amp; Create PO</button><br>';
                     if (mustAnalyse) {
@@ -2698,10 +2699,15 @@
             // Money on a concept note that belongs to Procurement: the PO total, or what
             // vendors have actually been paid if that is more. Staff can request the rest.
             _cnPOReserved(cn) {
-                const vendorPaid = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.payMode === 'vendors' && p.status !== 'rejected').reduce((s, p) => s + Number(p.amount || 0), 0);
+                const vp = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.payMode === 'vendors' && p.status !== 'rejected');
+                const rounds = this._poRoundsOf(cn.refNumber);
+                const since = rounds.length ? Math.max(...rounds.map(r => new Date(r.archived_at).getTime())) : null;
+                const isPrev = p => since !== null && (p.requestDate ? new Date(p.requestDate).getTime() : 0) <= since;
+                const sum = a => a.reduce((s, p) => s + Number(p.amount || 0), 0);
+                const vendorPrev = sum(vp.filter(isPrev)), vendorPaid = sum(vp.filter(p => !isPrev(p)));
                 let po = 0;
-                if (cn.poNumber) { try { po = (JSON.parse(cn.vendorsJson || '[]') || []).reduce((s, v) => s + Number(v.amount || 0) * Number(v.qty || 1), 0); } catch(e) {} }
-                return Math.max(po, vendorPaid);
+                if (cn.poNumber) { try { let v = JSON.parse(cn.vendorsJson || '[]'); if (typeof v === 'string') v = JSON.parse(v); po = (v || []).reduce((s, x) => s + Number(x.amount || 0) * Number(x.qty || 1), 0); } catch(e) {} }
+                return vendorPrev + Math.max(po, vendorPaid);
             },
             _cnFree(cn) {
                 const staffUsed = this.data.payments.filter(p => p.conceptNoteRef === cn.refNumber && p.payMode !== 'vendors' && p.status !== 'rejected').reduce((s, p) => s + Number(p.amount || 0), 0);
@@ -2765,21 +2771,24 @@
                 alert(`Sent to Procurement. ₦${amount.toLocaleString()} is held on ${cnRef} until they decide.`);
                 this.showView('payment');
             },
-            async _decideProcReq(id, decision) {
+            async _decideProcReq(id, decision, existingPo) {
                 let note = '';
                 if (decision === 'release') {
                     note = prompt('Release back to the staff member. They will request payment as normal.\n\nReason (shown to them):');
                     if (note === null) return; if (!note.trim()) { alert('A reason is required.'); return; }
                 } else if (decision === 'accept') {
-                    if (!confirm('Procurement will buy these items.\n\nThe concept note moves to your queue to raise a PO. The PO total cannot be more than the amount held.')) return;
+                    if (!confirm(existingPo
+                        ? 'Procurement will buy these items on a NEW PO.\n\nThe current PO (' + existingPo + ') is finished and will be saved as an earlier round, with its GRR, vendors and signatures. The concept note then moves to your queue for a new PO: quotations, signatures, GRR and vendor payment again.\n\nThe new PO cannot be more than the amount held.'
+                        : 'Procurement will buy these items.\n\nThe concept note moves to your queue to raise a PO. The PO total cannot be more than the amount held.')) return;
                     note = prompt('Note to the staff member (optional):') || '';
                 } else if (decision === 'cancel') {
                     if (!confirm('Cancel this request to Procurement? The held amount is freed.')) return;
                 }
-                const { error } = await supabaseClient.rpc('decide_procurement_request', { p_id: id, p_decision: decision, p_note: note });
+                const { data: outcome, error } = await supabaseClient.rpc('decide_procurement_request', { p_id: id, p_decision: decision, p_note: note });
                 if (error) { alert('Could not save: ' + error.message); return; }
-                await this._logAudit('procurement_requests', String(id), 'procurement_request_' + decision, note || '');
-                alert(decision === 'accept' ? 'Accepted. The concept note is now in your Procurement queue.' : decision === 'release' ? 'Released back to the staff member.' : 'Request cancelled.');
+                await this._logAudit('procurement_requests', String(id), 'procurement_request_' + decision, (outcome === 'accepted_new_po' ? 'New PO round started; earlier PO ' + (existingPo || '') + ' saved. ' : '') + (note || ''));
+                alert(outcome === 'accepted_new_po' ? 'Accepted. PO ' + (existingPo || '') + ' is saved as an earlier round, and the concept note is in your Procurement queue for a new PO.'
+                    : decision === 'accept' ? 'Accepted. The concept note is now in your Procurement queue.' : decision === 'release' ? 'Released back to the staff member.' : 'Request cancelled.');
                 if (decision === 'accept' && typeof this.loadData === 'function') { try { await this.loadData(); } catch (e) {} }
                 this.showView(decision === 'cancel' ? 'payment' : 'approvals');
             },
@@ -2787,7 +2796,7 @@
                 try {
                     const { data: reqs, error } = await supabaseClient.from('procurement_requests').select('*').eq('status', 'pending').order('created_at', { ascending: true });
                     if (error || !reqs || !reqs.length) return '';
-                    const { data: cns } = await supabaseClient.from('concept_notes').select('refNumber,activityTitle,projectCode,estimatedCost,poNumber').in('refNumber', [...new Set(reqs.map(r => r.concept_note_ref))]);
+                    const { data: cns } = await supabaseClient.from('concept_notes').select('refNumber,activityTitle,projectCode,estimatedCost,poNumber,grrNumber').in('refNumber', [...new Set(reqs.map(r => r.concept_note_ref))]);
                     const cm = {}; (cns || []).forEach(c => cm[c.refNumber] = c);
                     return `<div style="background:#FFF8E1;border:2px solid #F59E0B;border-radius:12px;padding:20px;margin-bottom:28px;">
                         <h3 style="font-family:'Plus Jakarta Sans', sans-serif;margin-bottom:6px;color:#92400E;">🛒 Staff requests for Procurement to buy (${reqs.length})</h3>
@@ -2797,7 +2806,7 @@
                             <td><a href="#" onclick="app.viewConceptNoteDetails('${r.concept_note_ref}');return false;">${r.concept_note_ref}</a><div style="font-size:11px;color:#777;">${escHtml(c.activityTitle || '')} · ${escHtml(c.projectCode || '')}</div></td>
                             <td>${escHtml(r.staff_name)}</td><td>${escHtml(r.items)}${r.justification ? `<div style="font-size:11px;color:#777;">${escHtml(r.justification)}</div>` : ''}</td>
                             <td style="font-weight:700;">₦${Number(r.amount).toLocaleString()}</td><td>${new Date(r.created_at).toLocaleDateString('en-NG')}</td>
-                            <td>${c.poNumber ? `<div style="font-size:11px;color:#B45309;max-width:200px;margin-bottom:6px;">Already has PO ${escHtml(c.poNumber)}: ask for a new concept note, or release.</div>` : `<button class="action-btn approve" onclick="app._decideProcReq(${r.id},'accept')" style="margin-bottom:6px;">🛒 Procurement will buy</button>`}
+                            <td>${c.poNumber ? `<div style="font-size:11px;color:#5B21B6;max-width:220px;margin-bottom:6px;">Has PO ${escHtml(c.poNumber)}. ${c.grrNumber ? 'Once its vendor is paid, you can start a new PO for these items.' : 'Its goods have not been received yet: finish it first, or release.'}</div><button class="action-btn approve" onclick="app._decideProcReq(${r.id},'accept','${escHtml(c.poNumber)}')" style="margin-bottom:6px;">🛒 Procurement will buy: new PO</button>` : `<button class="action-btn approve" onclick="app._decideProcReq(${r.id},'accept')" style="margin-bottom:6px;">🛒 Procurement will buy</button>`}
                                 <button class="action-btn" onclick="app._decideProcReq(${r.id},'release')" style="border-color:#1B4D8E;color:#1B4D8E;">↩ Release to staff</button></td></tr>`; }).join('')}
                         </tbody></table></div></div>`;
                 } catch (e) { return ''; }
@@ -4089,7 +4098,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
 
                         <div class="btn-group full-width">
                             <button type="submit" class="btn btn-primary" id="qaSubmitBtn">📊 Run Analysis &amp; Select Vendor →</button>
-                            ${Number(cn.estimatedCost||0) >= 500000 ? '' : `<button type="button" class="btn btn-secondary" onclick="app.showPOCreationForm('${refNumber}')">Skip — Enter PO Directly</button>`}
+                            ${app._procBase(cn) >= 500000 ? '' : `<button type="button" class="btn btn-secondary" onclick="app.showPOCreationForm('${refNumber}')">Skip — Enter PO Directly</button>`}
                             <button type="button" class="btn btn-secondary" onclick="app.showView('approvals')">Cancel</button>
                         </div>
                     </form>`;
@@ -4533,9 +4542,9 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 if (!cn) return;
                 // Backstop: direct PO entry is not permitted at or above ₦500,000
                 // unless a quotation analysis has already been recorded.
-                if (Number(cn.estimatedCost || 0) >= 500000 && !cn.quotationAnalysisJson
+                if (this._procBase(cn) >= 500000 && !cn.quotationAnalysisJson
                     && cn.quoteExceptionStatus !== 'approved') {
-                    alert('This procurement is ₦' + Number(cn.estimatedCost).toLocaleString() + ', which is at or above the ₦500,000 threshold.\n\nA quotation analysis with at least 3 quotes is required before a PO can be raised.');
+                    alert('This procurement is ₦' + this._procBase(cn).toLocaleString() + ', which is at or above the ₦500,000 threshold.\n\nA quotation analysis with at least 3 quotes is required before a PO can be raised.');
                     this.showQuotationAnalysis(refNumber);
                     return;
                 }
@@ -5382,6 +5391,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     .from('concept_notes').select('*').eq('refNumber', refNumber).single();
                 if (cnErr || !freshCN) { alert('Concept note not found.'); return; }
                 const cn = freshCN;
+                await this._loadPoRounds(refNumber);
                 // Update local cache so other parts of the app see the fresh data too
                 const cacheIdx = this.data.conceptNotes.findIndex(c => c.refNumber === refNumber);
                 if (cacheIdx !== -1) this.data.conceptNotes[cacheIdx] = cn;
@@ -5414,6 +5424,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                                 ${cn.quotationAnalysisJson ? `<button type="button" class="btn btn-secondary" onclick="app._downloadQuotationAnalysis('${cn.refNumber}')" style="border-color:#1B4D8E;color:#1B4D8E;">📊 Download Quotation Analysis</button>` : ''}
                             </div>
                         </div>` : ''}
+                        ${this._poRoundsHtml(cn.refNumber)}
                         <div id="cnLinkedDocs_${cn.refNumber}" style="display:none;"></div>
                         ${cn.requiresProcurement === 'yes' && (cn.poNumber || cn.grrNumber) ? `
                         <div id="cnSigningStatus_${cn.refNumber}" class="form-group full-width">
@@ -5510,9 +5521,9 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             .order('signedAt', { ascending: true });
                         const allSigs = sigs || [];
                         const { data: onlineSigs } = await supabaseClient.from('document_signatures')
-                            .select('signerName,signerRole,pageContext,signedAt,docType')
+                            .select('signerName,signerRole,pageContext,signedAt,docType,docRef')
                             .eq('relatedRef', cn.refNumber).eq('pageContext', 'vendor_po_online');
-                        (onlineSigs || []).forEach(s => allSigs.push(s));
+                        (onlineSigs || []).filter(s => !this._isOldRoundRef(cn, s.docRef)).forEach(s => allSigs.push(s));
                         const poSteps = [
                             { ctx: 'procurement_po',  label: 'Procurement raises PO' },
                             { ctx: 'staff_po',        label: 'Staff signs PO' },
@@ -6630,7 +6641,35 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 // Merge deduplicated by id
                 const sigMap = new Map();
                 [...(docSigsRaw||[]), ...(docSigsByDocRef||[])].forEach(s => sigMap.set(s.id, s));
-                const docSigs = Array.from(sigMap.values()).sort((a,b) => new Date(a.signedAt)-new Date(b.signedAt));
+                await this._loadPoRounds(cn.refNumber);
+                const poRounds = this._poRoundsOf(cn.refNumber);
+                const roundSnap = {};
+                if (poRounds.length) {
+                    try {
+                        const { data: snaps } = await supabaseClient.from('cn_po_rounds').select('round_no,snapshot').eq('concept_note_ref', cn.refNumber);
+                        (snaps || []).forEach(x => { roundSnap[x.round_no] = x.snapshot || {}; });
+                    } catch (e) {}
+                }
+                const allDocSigs = Array.from(sigMap.values()).sort((a,b) => new Date(a.signedAt)-new Date(b.signedAt));
+                const docSigs = allDocSigs.filter(s => !this._isOldRoundRef(cn, s.docRef));
+                const sigLabel = { procurement_po: 'Procurement signs PO', staff_po: 'Staff signs PO', budget_owner_po: 'Budget Owner / ED authorises PO', finance_sign: 'Finance confirms',
+                    vendor_po_online: 'Online purchase (no vendor signature)', vendor_on_device: 'Vendor signs', vendor_remote: 'Vendor signs (link)', procurement_received: 'Procurement: goods received', staff_grr_verify: 'Staff verifies GRR' };
+                const roundsHtml = () => poRounds.length ? '<h2>EARLIER PURCHASE ORDERS ON THIS NOTE</h2>' + poRounds.map(r => {
+                    const own = allDocSigs.filter(s => [r.po_number, r.grr_number].some(b => b && (s.docRef === b || String(s.docRef).startsWith(b + '-V'))));
+                    const sn = roundSnap[r.round_no] || {};
+                    let vl = []; try { vl = typeof sn.vendorsJson === 'string' ? JSON.parse(sn.vendorsJson) : (sn.vendorsJson || []); if (typeof vl === 'string') vl = JSON.parse(vl); } catch (e) { vl = []; }
+                    const vendorTable = Array.isArray(vl) && vl.length ? '<table><thead><tr><th>Vendor</th><th>Phone</th><th>Unit price</th><th>Qty</th><th>Total</th></tr></thead><tbody>'
+                        + vl.map(v => '<tr><td>' + escHtml(v.name || '—') + '</td><td>' + escHtml(v.phone || '—') + '</td><td>' + money(v.amount) + '</td><td>' + (v.qty || 1) + '</td><td>' + money(Number(v.amount || 0) * Number(v.qty || 1)) + '</td></tr>').join('') + '</tbody></table>' : '';
+                    return '<h3 style="font-size:13px;margin:18px 0 4px;color:#285B3C;">Round ' + r.round_no + ': ' + escHtml(r.po_number || '') + (r.grr_number ? ' · ' + escHtml(r.grr_number) : '') + '</h3>'
+                        + '<div style="font-size:12px;color:#555;">Vendor(s): ' + escHtml(r.vendors || '—') + ' · PO total ' + money(r.po_total) + ' · vendor paid ' + money(r.vendor_paid) + ' · closed ' + fmtD(r.archived_at) + (r.archived_by ? ' by ' + escHtml(r.archived_by) : '') + '</div>'
+                        + '<div style="font-size:12px;color:#555;">PO raised ' + (sn.poGeneratedAt ? fmtD(sn.poGeneratedAt) : '—') + ' · goods received ' + (sn.procurementComplete ? fmtD(sn.procurementComplete) : (sn.grrGeneratedAt ? fmtD(sn.grrGeneratedAt) : '—'))
+                            + (sn.actualProcurementCost != null ? ' · actual cost ' + money(sn.actualProcurementCost) : '') + (sn.vendorInvoiceNo ? ' · invoice ' + escHtml(sn.vendorInvoiceNo) : '') + (sn.vendorItemsSupplied ? ' · items: ' + escHtml(sn.vendorItemsSupplied) : '') + '</div>'
+                        + (sn.quoteExceptionStatus === 'approved' ? '<div style="font-size:12px;color:#555;">3-quote exception approved by ' + escHtml(sn.quoteExceptionApprovedBy || '') + (sn.quoteExceptionReason ? ': ' + escHtml(sn.quoteExceptionReason) : '') + '</div>' : '')
+                        + qaFor(sn) + vendorTable
+                        + (own.length ? '<table><thead><tr><th>Document</th><th>Step</th><th>Signed by</th><th>Date</th></tr></thead><tbody>'
+                            + own.map(s => '<tr><td>' + escHtml(s.docRef) + '</td><td>' + escHtml(sigLabel[s.pageContext] || s.pageContext || s.signerRole || '') + '</td><td>' + escHtml(s.signerName || '') + '</td><td>' + fmt(s.signedAt) + '</td></tr>').join('') + '</tbody></table>'
+                            : '<p style="color:#999;">No signatures recorded for this round.</p>');
+                }).join('') : '';
 
                 const fmt  = d => d ? new Date(d).toLocaleString('en-NG') : 'N/A';
                 const fmtD = d => d ? new Date(d).toLocaleDateString('en-NG', { day:'numeric', month:'long', year:'numeric' }) : 'N/A';
@@ -6721,7 +6760,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 <p style="color:#E65100;font-size:12px;font-style:italic;">Security clearance not yet issued.</p>`}`;
                 })();
 
-                const qaSection = (() => {
+                const qaFor = (cn) => {
                     if (!cn.quotationAnalysisJson) return '';
                     let qa; try { qa = JSON.parse(cn.quotationAnalysisJson); } catch(e) { return ''; }
                     if (!qa || !Array.isArray(qa.vendors) || qa.vendors.length === 0) return '';
@@ -6749,7 +6788,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 </tr>`).join('')}
                 </tbody></table>
                 <p style="font-size:11px;color:#777;margin-top:8px;font-style:italic;">Vendor selected automatically by highest weighted composite score (Price ${qa.weights?.price??40}% · Quality ${qa.weights?.quality??30}% · Delivery ${qa.weights?.delivery??15}% · Warranty ${qa.weights?.warranty??10}% · Financial ${qa.weights?.financial??5}%). Not manually overridden.</p>`;
-                })();
+                };
+                const qaSection = qaFor(cn);
 
                 const procSection = cn.requiresProcurement === 'yes' ? `
                 ${qaSection}
@@ -6767,7 +6807,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">PO Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
                     ${sigBlock('1. Staff (Requester)', poStaffSig, cn.staffName, null)}
-                    ${sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.budgetOwnerApprovedBy || cn.approvedBy, cn.budgetOwnerSignedAt)}
+                    ${poRounds.length ? sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, null, null) : sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.budgetOwnerApprovedBy || cn.approvedBy, cn.budgetOwnerSignedAt)}
                     ${sigBlock('3. Finance', poFinSig, null, null)}
                 </div>
                 <h2 style="font-size:14px;border-bottom:2px solid #285B3C;padding-bottom:6px;margin-top:8px;color:#285B3C;">GRR — Goods/Services Receiving Report</h2>
@@ -6915,6 +6955,7 @@ ${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">
 ${exceptionSection}
                 ${travelSection}
                 ${procSection}
+${roundsHtml()}
 <h2>PAYMENT HISTORY</h2>
 ${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Reviewed By</th><th>Approved By</th><th>Authorised / Paid By</th><th>Bank Reconciliation</th><th>Justification</th><th>Rejection Reason</th></tr></thead><tbody>${payRows}</tbody></table>`}
 ${benefPays.length ? '<h2>PAYMENT BENEFICIARIES</h2>' + benefHtml : ''}
@@ -6956,7 +6997,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         pick.className = 'vendor-sign-overlay';
                         document.body.appendChild(pick);
                     }
-                    const baseG = cn.grrNumber || ('GRR-' + refNumber);
+                    const baseG = cn.grrNumber || app._stubRef('GRR', refNumber);
                     pick.innerHTML = `
                         <div class="vendor-sign-header" style="background:#285B3C;">
                             <div style="font-size:20px;">📦</div>
@@ -6995,7 +7036,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     document.body.appendChild(overlay);
                 }
 
-                const _baseGrr = cn.grrNumber || ('GRR-' + refNumber);
+                const _baseGrr = cn.grrNumber || app._stubRef('GRR', refNumber);
                 // With several vendors each gets their own GRR number, so the
                 // document a vendor signs covers only their own delivery.
                 const grrNum = (_pickVendors.length > 1) ? (_baseGrr + '-V' + (_gvi+1)) : _baseGrr;
@@ -7121,7 +7162,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const btn = document.querySelector('#vendorSignOverlay .btn.btn-primary');
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
                 try {
-                    const _bg = cn.grrNumber || ('GRR-' + refNumber);
+                    const _bg = cn.grrNumber || app._stubRef('GRR', refNumber);
                     const grrNum = (_pickVendors.length > 1) ? (_bg + '-V' + (_gvi+1)) : _bg;
                     const { error: sigErr } = await supabaseClient.from('document_signatures').insert([{
                         docRef: grrNum, docType: 'grr', relatedRef: refNumber,
@@ -7181,7 +7222,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
                 const tokenPayload = {
                     token, cnRef: refNumber,
-                    grrNumber: cn.grrNumber || ('GRR-' + refNumber),
+                    grrNumber: cn.grrNumber || app._stubRef('GRR', refNumber),
                     activityTitle: cn.activityTitle,
                     projectCode: cn.projectCode,
                     estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
@@ -7267,7 +7308,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                             <p style="color:#555;font-size:13px;margin-bottom:20px;">This procurement has ${_poVendors.length} vendors. Each vendor signs their own PO. Select which vendor is signing now:</p>
                             <div style="display:flex;flex-direction:column;gap:12px;">
                                 ${_poVendors.map((v,i) => {
-                                    const vpNum = (cn.poNumber || ('PO-'+refNumber)) + '-V' + (i+1);
+                                    const vpNum = (cn.poNumber || app._stubRef('PO', refNumber)) + '-V' + (i+1);
                                     return `<button onclick="document.getElementById('poSignOverlay').classList.remove('open');app.vendorSignPO('${refNumber}',${i})"
                                         style="background:#EEF2FF;border:2px solid #C7D2FE;border-radius:10px;padding:16px 20px;text-align:left;cursor:pointer;transition:all .2s;"
                                         onmouseover="this.style.borderColor='#1B4D8E';this.style.background='#E0E7FF'"
@@ -7295,7 +7336,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const vi = vendorIndex !== undefined ? vendorIndex : 0;
                 const v  = _poVendors.length > 0 ? _poVendors[vi] : null;
 
-                const basePoNum   = cn.poNumber || ('PO-' + refNumber);
+                const basePoNum   = cn.poNumber || app._stubRef('PO', refNumber);
                 const vendorPoNum = _poVendors.length > 1 ? (basePoNum + '-V' + (vi+1)) : basePoNum;
                 const vendorTotal = v ? (Number(v.amount||0) * (v.qty||1))
                                       : Number(cn.actualProcurementCost || cn.estimatedCost);
@@ -7415,7 +7456,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
                 const vi = vendorIndex !== undefined && vendorIndex !== null ? vendorIndex : 0;
                 const v = vendors[vi] || null;
-                const basePoNum = cn.poNumber || ('PO-' + refNumber);
+                const basePoNum = cn.poNumber || app._stubRef('PO', refNumber);
                 const vendorPoNum = vendors.length > 1 ? (basePoNum + '-V' + (vi + 1)) : basePoNum;
                 let overlay = document.getElementById('poSignOverlay');
                 if (!overlay) { overlay = document.createElement('div'); overlay.id = 'poSignOverlay'; overlay.className = 'po-sign-overlay'; document.body.appendChild(overlay); }
@@ -7463,7 +7504,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 if (!ok)   { alert('Tick the confirmation box.'); return; }
                 let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
                 const vi = vendorIndex || 0;
-                const basePoNum = cn.poNumber || ('PO-' + refNumber);
+                const basePoNum = cn.poNumber || app._stubRef('PO', refNumber);
                 const vendorPoNum = vendors.length > 1 ? (basePoNum + '-V' + (vi + 1)) : basePoNum;
                 const signerName = (vendors[vi] && vendors[vi].name) || site;
                 const btn = document.getElementById('onlineSaveBtn');
@@ -7509,6 +7550,54 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             // pays on the website and attaches the e-receipt (which also stands in for
             // the vendor's signature). At receipt those vendors need no bank details
             // and are not paid again.
+            // ── More than one PO on a concept note (fms_second_po.sql) ──
+            // A finished PO is saved as a round; the note then starts a new PO.
+            // Signatures of earlier rounds carry their own PO/GRR numbers, so they
+            // are kept out of the current PO's screens by number.
+            async _loadPoRounds(cnRef) {
+                try {
+                    const cols = 'concept_note_ref,round_no,po_number,grr_number,po_total,vendor_paid,vendors,archived_at,archived_by';
+                    const run = c => { let q = supabaseClient.from('cn_po_rounds').select(c).order('round_no'); if (cnRef) q = q.eq('concept_note_ref', cnRef); return q; };
+                    let { data, error } = await run(cols + ',next_po_cap');
+                    if (error) ({ data, error } = await run(cols));
+                    if (error) { if (!cnRef) this.data.poRounds = {}; return; }
+                    const m = cnRef ? (this.data.poRounds || {}) : {};
+                    if (cnRef) m[cnRef] = [];
+                    (data || []).forEach(r => { (m[r.concept_note_ref] = m[r.concept_note_ref] || []).push(r); });
+                    this.data.poRounds = m;
+                } catch (e) { if (!cnRef) this.data.poRounds = {}; }
+            },
+            _poRoundsOf(cnRef) { return ((this.data.poRounds || {})[cnRef]) || []; },
+            _isOldRoundRef(cnOrRef, docRef) {
+                const rounds = this._poRoundsOf(typeof cnOrRef === 'string' ? cnOrRef : cnOrRef && cnOrRef.refNumber);
+                if (!rounds.length || !docRef) return false;
+                const ref = typeof cnOrRef === 'string' ? cnOrRef : cnOrRef.refNumber;
+                const stubs = r => ['PO', 'GRR'].map(x => x + '-' + ref + (r.round_no > 1 ? '-R' + r.round_no : ''));
+                return rounds.some(r => [r.po_number, r.grr_number, ...stubs(r)].some(b => b && (docRef === b || String(docRef).startsWith(b + '-V'))));
+            },
+            // Stand-in PO/GRR number used before the real one exists; on a later
+            // round it carries the round, so it never matches an earlier round's.
+            _stubRef(prefix, refNumber) {
+                const n = this._poRoundsOf(refNumber).length;
+                return prefix + '-' + refNumber + (n ? '-R' + (n + 1) : '');
+            },
+            // The amount the three-quote rule is judged on: the whole note for its
+            // first PO; for a later PO, what the staff member sent to Procurement.
+            _procBase(cn) {
+                const rounds = this._poRoundsOf(cn.refNumber);
+                const last = rounds[rounds.length - 1];
+                return (last && last.next_po_cap != null) ? Number(last.next_po_cap) : Number(cn.estimatedCost || 0);
+            },
+            _poRoundsHtml(cnRef) {
+                const rounds = this._poRoundsOf(cnRef);
+                if (!rounds.length) return '';
+                return '<div class="form-group full-width" style="background:#F5F3FF;border:1px solid #C4B5FD;border-radius:10px;padding:14px 18px;">'
+                    + '<label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#5B21B6;display:block;margin-bottom:8px;">Earlier purchase orders on this note</label>'
+                    + rounds.map(r => '<div style="font-size:13px;color:#374151;margin-bottom:4px;"><b>Round ' + r.round_no + ':</b> ' + escHtml(r.po_number || '—') + (r.grr_number ? ' · ' + escHtml(r.grr_number) : '')
+                        + (r.vendors ? ' · ' + escHtml(r.vendors) : '') + ' · PO ₦' + Number(r.po_total || 0).toLocaleString() + ', vendor paid ₦' + Number(r.vendor_paid || 0).toLocaleString()
+                        + ' · closed ' + new Date(r.archived_at).toLocaleDateString('en-NG') + '</div>').join('')
+                    + '<div style="font-size:11px;color:#6B7280;margin-top:6px;">The PO and GRR shown above are for the current round. Earlier rounds, with their signatures, are in the full dossier.</div></div>';
+            },
             _hasPrepaid(cn) {
                 let v = []; try { if (cn.vendorsJson) v = JSON.parse(cn.vendorsJson); } catch(e) {}
                 return v.some(x => x.prepaidRef);
@@ -7517,7 +7606,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const { data: cn } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single();
                 if (!cn || !cn.poNumber) { alert('Create the PO first.'); return; }
                 const { data: bo } = await supabaseClient.from('document_signatures').select('id').eq('docRef', cn.poNumber).eq('pageContext', 'budget_owner_po');
-                if (!(bo && bo.length) && !cn.budgetOwnerSignedAt) { alert('The PO must be authorised by the Budget Owner (or ED) before anything is paid.'); return; }
+                if (!(bo && bo.length) && (!cn.budgetOwnerSignedAt || this._poRoundsOf(cn.refNumber).length)) { alert('The PO must be authorised by the Budget Owner (or ED) before anything is paid.'); return; }
                 let vendors = []; try { if (cn.vendorsJson) vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
                 let rounds = []; try { if (cn.receivedJson) rounds = JSON.parse(cn.receivedJson); } catch(e) {}
                 const received = i => rounds.reduce((s, r) => s + (r.lines || []).filter(l => l.vendorIndex === i).reduce((a, l) => a + (Number(l.qtyReceived) || 0), 0), 0);
@@ -7645,7 +7734,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const btn = document.querySelector('#poSignOverlay .btn.btn-primary');
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
                 try {
-                    const basePoNum = cn.poNumber || ('PO-' + refNumber);
+                    const basePoNum = cn.poNumber || app._stubRef('PO', refNumber);
                     // Determine the correct PO number for this specific vendor
                     let _vendors = [];
                     try { if (cn.vendorsJson) _vendors = JSON.parse(cn.vendorsJson); } catch(e) {}
@@ -7685,7 +7774,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const vi = (vendorIndex !== undefined && _vendors.length > 1) ? vendorIndex : null;
                 const v  = vi !== null ? _vendors[vi] : (_vendors[0] || null);
 
-                const basePoNum   = cn.poNumber || ('PO-' + refNumber);
+                const basePoNum   = cn.poNumber || app._stubRef('PO', refNumber);
                 const vendorPoNum = vi !== null ? (basePoNum + '-V' + (vi+1)) : basePoNum;
                 const vendorTotal = v
                     ? (Number(v.amount||0) * (v.qty||1))
@@ -8130,7 +8219,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     return;
                 }
 
-                const basePoNum   = cn.poNumber || ('PO-' + refNumber);
+                const basePoNum   = cn.poNumber || app._stubRef('PO', refNumber);
                 const grandTotal  = vendors.reduce((s,v) => s + (Number(v.amount||0) * (v.qty||1)), 0);
                 const issueDate   = new Date(cn.poGeneratedAt || Date.now())
                                         .toLocaleDateString('en-NG',{day:'numeric',month:'long',year:'numeric'});
@@ -8151,10 +8240,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     .eq('relatedRef', refNumber);
                 const _sigMap = new Map();
                 [...(sigsByDocRef||[]), ...(sigsByRelated||[])].forEach(s => _sigMap.set(s.id, s));
-                const allSigs = Array.from(_sigMap.values());
+                const allSigs = Array.from(_sigMap.values()).filter(s => !this._isOldRoundRef(cn, s.docRef));
 
                 // ── BO sig may live on the CN row if captured during approval ──
-                const boSigFromCN = cn.budgetOwnerSignatureData
+                const boSigFromCN = cn.budgetOwnerSignatureData && !this._poRoundsOf(cn.refNumber).length
                     ? { signatureData: cn.budgetOwnerSignatureData,
                         signerName: cn.budgetOwnerApprovedBy || cn.approvedBy,
                         signedAt:   cn.budgetOwnerSignedAt }
@@ -8335,7 +8424,7 @@ ${vendors.length > 1 ? `
 
                 // Use the same key formula that on-device and remote signing use when saving:
                 // cn.grrNumber if set, else 'GRR-' + refNumber (no -DRAFT suffix)
-                const grrNum = cn.grrNumber || ('GRR-' + refNumber);
+                const grrNum = cn.grrNumber || app._stubRef('GRR', refNumber);
 
                 // Fetch all signatures for this GRR — cast a wide net using both
                 // the resolved grrNum AND relatedRef=refNumber, then deduplicate
@@ -8353,14 +8442,14 @@ ${vendors.length > 1 ? `
                 const allSigs = [...(sigsByDoc || []), ...(sigsByRef || [])].filter(s => {
                     if (seen.has(s.id)) return false;
                     seen.add(s.id);
-                    return true;
+                    return !this._isOldRoundRef(cn, s.docRef);
                 });
 
                 // Online purchases are recorded once, on the PO; the GRR vendor box uses the same record.
                 try {
                     const { data: onlineSigs } = await supabaseClient.from('document_signatures').select('*')
                         .eq('relatedRef', refNumber).eq('pageContext', 'vendor_po_online');
-                    (onlineSigs || []).forEach(s => { if (!seen.has(s.id)) { seen.add(s.id); allSigs.push(s); } });
+                    (onlineSigs || []).forEach(s => { if (!seen.has(s.id) && !this._isOldRoundRef(cn, s.docRef)) { seen.add(s.id); allSigs.push(s); } });
                 } catch(e) {}
                 const procSig  = allSigs.find(s => s.pageContext === 'procurement_received');
                 const staffSig = allSigs.find(s => s.pageContext === 'staff_grr_verify');
@@ -8831,8 +8920,9 @@ ${vendors.length > 1 ? `
                     cn = data; this.data.conceptNotes.push(cn);
                 }
                 if (!cn.grrNumber) { alert('GRR has not been generated yet. Confirm receipt first.'); return; }
-                const { data: existing } = await supabaseClient.from('document_signatures')
-                    .select('id').eq('relatedRef', cnRef).eq('pageContext', 'procurement_received');
+                const { data: existingAll } = await supabaseClient.from('document_signatures')
+                    .select('id,docRef').eq('relatedRef', cnRef).eq('pageContext', 'procurement_received');
+                const existing = (existingAll || []).filter(s => !this._isOldRoundRef(cnRef, s.docRef));
                 if (existing && existing.length > 0) { alert('Receipt has already been signed for on this GRR.'); return; }
                 let pay = this.data.payments.find(p => p.conceptNoteRef === cnRef);
                 if (!pay) {
