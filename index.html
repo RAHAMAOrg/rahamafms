@@ -1114,6 +1114,15 @@
                     alert(`Only ${this._financeOfficerForStage(stage)} (Finance ${stage}) can ${this._financeStageLabel(stage).toLowerCase()} this payment.`);
                     return;
                 }
+                if (payment.payMode === 'vendors' && payment.paymentMethod !== 'card_online' && payment.conceptNoteRef) {
+                    const { data: gap, error: gapErr } = await supabaseClient.rpc('grr_vendor_gap', { p_cn: payment.conceptNoteRef });
+                    if (!gapErr && gap) {
+                        for (const pu of Object.entries(this.data.roles || {}).filter(([, r]) => r === 'procurement').map(([n]) => n))
+                            await this.createNotification(pu, `Finance cannot move vendor payment ${refNumber} (${payment.conceptNoteRef}, ₦${Number(payment.amount || 0).toLocaleString()}). ${gap} Open "Vendor signatures needed" on your dashboard and get the signatures.`, 'danger', payment.conceptNoteRef);
+                        alert('This vendor payment cannot move forward yet.\n\n' + gap + '\n\nProcurement has been notified to get the vendor signature(s). The payment stays in your queue; nothing needs to be rejected.');
+                        return;
+                    }
+                }
                 if (stage === 'authorizer') {
                     if (payment.payMode === 'vendors' && payment.paymentScheduleJson) {
                         // Procurement payments settle several vendors from one authorisation —
@@ -1493,7 +1502,7 @@
                 const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
                 content.innerHTML = `
                     <div class="header"><h2>Dashboard</h2><p>${greeting}, ${this.currentUser.split(' ')[0]} • <span style="color: var(--success);">● System Online</span></p></div>
-                    ${this._returnedCNBanner()}${this._procRetDueBox()}
+                    ${this._returnedCNBanner()}${this._grrSignBox()}${this._procRetDueBox()}
                     ${this.data.notifications.length > 0 ? `<div style="margin-bottom: 24px;">${this.data.notifications.map(n => `<div class="alert-badge ${n.type === 'danger' ? 'danger' : n.type === 'success' ? '' : 'warning'}" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="app.dismissNotification(${n.id}, '${n.refNumber}')"><span>${n.type === 'danger' ? '❌' : n.type === 'success' ? '✅' : 'ℹ️'} ${n.message}</span><span style="display:flex;gap:8px;align-items:center;margin-left:16px;flex-shrink:0;">${n.refNumber && String(n.refNumber).startsWith('CN') ? `<button onclick="event.stopPropagation();app.viewConceptNoteDetails('${n.refNumber}')" style="padding:4px 10px;background:rgba(255,255,255,.7);border:1px solid rgba(0,0,0,.15);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Open →</button>` : ''}<span style="font-size: 11px; opacity: 0.7;">Tap to dismiss</span></span></div>`).join('')}</div>` : ''}
                     ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `<div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;"><h2 style="font-size: 28px; margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Welcome to RAHAMA FMS! 🎉</h2><p style="font-size: 16px; opacity: 0.95; max-width: 600px; margin: 0 auto 24px;">You're all set to start managing your financial workflows. Create your first concept note to get started.</p><button onclick="app.showView('conceptNote')" class="btn" style="background: white; color: var(--primary); padding: 16px 32px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">Create Your First Concept Note →</button></div>` : ''}
                     ${isLocked ? `<div class="alert-badge danger">⚠️ Your account is locked: ${unretiredPayments.length >= 2 ? `${unretiredPayments.length} unretired advances` : `Retirement overdue by ${Math.floor((Date.now() - new Date(overdueRetirements[0].paidDate)) / (1000 * 60 * 60 * 24))} days`}</div>` : ''}
@@ -3476,7 +3485,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     }
                 } catch (e) { console.error('History load error:', e); }
                 
-                const procReqHtml = role === 'procurement' ? await this._procReqApprovalsHtml() : '';
+                const procReqHtml = role === 'procurement' ? (await this._procReqApprovalsHtml()) + this._grrSignBox() : '';
                 content.innerHTML = `
                     <div class="header"><h2>My Approvals</h2><p>Items requiring your review and approval</p></div>
                     ${procReqHtml}
@@ -3874,6 +3883,40 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
             },
             // Retirements Procurement owes: due 14 days after payment, escalated at 30.
             // Shown to Procurement, Budget Owner, ED and Finance (view procurement_retirements_due).
+            // Vendor payments Finance cannot move because a vendor has not signed the GRR.
+            // Procurement no longer sees these notes in its queue, so this is where it
+            // goes back to collect the signatures (fms_grr_vendor_gate.sql).
+            _grrSignBox() {
+                if (!['procurement','finance','finance_manager','GrantsCompliance','budgetOwner','ed'].includes(this.getUserRole())) return '';
+                setTimeout(() => this._loadGrrSign(), 0);
+                return '<div class="grrSignBox"></div>';
+            },
+            async _loadGrrSign() {
+                const els = document.querySelectorAll('.grrSignBox'); if (!els.length) return;
+                try {
+                    const { data, error } = await supabaseClient.rpc('vendor_payments_awaiting_grr');
+                    const rows = error ? [] : (data || []);
+                    const isProc = this.getUserRole() === 'procurement';
+                    const html = !rows.length ? '' : `<div style="background:#FFF7ED;border:2px solid #FB923C;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+                        <div style="font-weight:700;color:#9A3412;margin-bottom:4px;">✍️ Vendor signatures needed: ${rows.length} payment${rows.length > 1 ? 's' : ''} held by Finance</div>
+                        <div style="font-size:12px;color:#9A3412;margin-bottom:10px;">Finance cannot move these vendor payments until each vendor signs their own GRR. ${isProc ? 'Open each one and get the missing signatures (on this device, or send the vendor their own link). Nothing needs to be rejected.' : 'Procurement has been asked to collect the signatures.'}</div>
+                        <div class="table-container"><table><thead><tr><th>Payment</th><th>Concept note</th><th>Activity</th><th>Amount</th><th>Waiting for</th><th></th></tr></thead><tbody>
+                        ${rows.map(r => `<tr><td>${escHtml(r.payment_ref)}</td><td><a href="#" onclick="app.viewConceptNoteDetails('${escHtml(r.concept_note_ref || '')}');return false;">${escHtml(r.concept_note_ref || '')}</a></td>
+                            <td>${escHtml(r.activity || '')}<div style="font-size:11px;color:#777;">${escHtml(r.project_code || '')}</div></td><td>₦${Number(r.amount || 0).toLocaleString()}</td>
+                            <td style="font-size:12px;color:#9A3412;max-width:260px;">${escHtml(r.waiting_for || '')}</td>
+                            <td>${isProc ? `<button class="action-btn approve" onclick="app._openGrrSign('${escHtml(r.concept_note_ref || '')}')">✍️ Get vendor signatures</button>` : ''}</td></tr>`).join('')}
+                        </tbody></table></div></div>`;
+                    els.forEach(el => { el.innerHTML = html; });
+                } catch (e) { els.forEach(el => { el.innerHTML = ''; }); }
+            },
+            async _openGrrSign(cnRef) {
+                const { data: cn } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', cnRef).single();
+                if (!cn) { alert('Concept note not found.'); return; }
+                const i = this.data.conceptNotes.findIndex(c => c.refNumber === cnRef);
+                if (i !== -1) this.data.conceptNotes[i] = cn; else this.data.conceptNotes.push(cn);
+                await this._loadPoRounds(cnRef);
+                await this.vendorSignGRR(cnRef);
+            },
             _procRetDueBox() {
                 if (!['procurement','budgetOwner','ed','finance','finance_manager'].includes(this.getUserRole())) return '';
                 setTimeout(() => this._loadProcRetDue(), 0);
@@ -5281,6 +5324,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         // clean on the corrected GRR.
                         await supabaseClient.from('document_signatures')
                             .delete().eq('docRef', grrNumber);
+                        await supabaseClient.from('document_signatures')
+                            .delete().like('docRef', grrNumber + '-V%').eq('docType', 'grr');
                     }
 
                     const newRound = {
@@ -5514,9 +5559,10 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     const statusEl = document.getElementById('cnSigningStatus_' + cn.refNumber);
                     if (!statusEl) return;
                     try {
-                        const docRefs = [cn.poNumber, cn.grrNumber].filter(Boolean);
+                        let _sv = []; try { _sv = JSON.parse(cn.vendorsJson || '[]'); if (typeof _sv === 'string') _sv = JSON.parse(_sv); } catch (e) { _sv = []; }
+                        const docRefs = [cn.poNumber, cn.grrNumber, ...(cn.grrNumber && Array.isArray(_sv) && _sv.length > 1 ? _sv.map((_, i) => cn.grrNumber + '-V' + (i + 1)) : [])].filter(Boolean);
                         const { data: sigs } = await supabaseClient.from('document_signatures')
-                            .select('signerName,signerRole,pageContext,signedAt,docType')
+                            .select('signerName,signerRole,pageContext,signedAt,docType,docRef')
                             .in('docRef', docRefs)
                             .order('signedAt', { ascending: true });
                         const allSigs = sigs || [];
@@ -5549,7 +5595,12 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             if (s.docType === 'purchase_order') poSigs.push(s);
                             if (s.docType === 'grr') grrSigs.push(s);
                         });
-                        statusEl.innerHTML = `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => renderStep(s, grrSigs)).join('')}</div></div></div>`;
+                        statusEl.innerHTML = `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => s.ctx === 'vendor_on_device' ? (() => {
+                            const st = this._vendorGrrStatus(cn, allSigs);
+                            return st.rows.map((r, i) => r.online && !r.sig ? renderStep({ ctx: '__online', label: 'Vendor: ' + escHtml(r.name) + ' (online purchase, e-receipt)' }, [{ pageContext: '__online', signerName: 'Online', signedAt: new Date().toISOString() }])
+                                : renderStep({ ctx: '__v' + i, label: (st.multi ? 'Vendor signs own GRR: ' + escHtml(r.name) : 'Vendor signs GRR') + (r.count > 1 ? ' (signed ' + r.count + ' times)' : '') }, r.sig ? [{ ...r.sig, pageContext: '__v' + i }] : [])).join('')
+                                + (st.unattributed.length ? '<div style="font-size:11px;color:#B45309;background:#FFF7ED;border-radius:6px;padding:6px 8px;margin:6px 0;">⚠ Signed on the combined GRR, not linked to any vendor: ' + st.unattributed.map(x => escHtml(x.signerName) + ' (' + new Date(x.signedAt).toLocaleDateString('en-NG') + ')').join(', ') + '. Send each vendor their own signing link.</div>' : '');
+                        })() : renderStep(s, grrSigs)).join('')}</div></div></div>`;
                         statusEl.insertAdjacentHTML('beforeend', this._onlineReceiptsHtml(cn));
                     } catch(e) { if (statusEl) statusEl.innerHTML = ''; console.warn('Signing status load error:', e); }
                 })();
@@ -6677,6 +6728,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
 
                 const poSigs   = docSigs.filter(s => s.docType === 'purchase_order');
                 const grrSigs  = docSigs.filter(s => s.docType === 'grr');
+                const _vgs = this._vendorGrrStatus(cn, docSigs);
                 const _grrVendorSigs = grrSigs.filter(s => s.signerRole === 'vendor');
                 const vendorSigs   = _grrVendorSigs.length ? _grrVendorSigs : docSigs.filter(s => s.pageContext === 'vendor_po_online');
                 const vendorSig    = vendorSigs[0] || null; // kept for compat
@@ -6820,11 +6872,14 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 <div style="display:flex;gap:10px;flex-wrap:wrap;">
                     ${sigBlock('1. Procurement (Received)', grrProcSig, cn.approvedBy && cn.requiresProcurement === 'yes' ? cn.approvedBy : null, cn.procurementComplete||null)}
                     ${sigBlock('2. Programme Staff (Verified)', grrStaffSig, cn.staffName, null)}
-                    ${vendorSigs.length > 0
-                        ? vendorSigs.map((vs, i) => sigBlock(vendorSigs.length > 1 ? `3.${i+1} Vendor — ${vs.signerName}` : '3. Vendor', vs, vs.signerName, vs.signedAt)).join('')
-                        : sigBlock('3. Vendor', null, cn.grrVendorName, cn.grrVendorSignedAt)}
-                    ${sigBlock(`${vendorSigs.length > 1 ? vendorSigs.length + 3 : 4}. Finance`, grrFinSig, null, null)}
-                </div>${this._onlineReceiptsHtml(cn, true)}` : '';
+                    ${_vgs.multi
+                        ? _vgs.rows.map((r, i) => sigBlock(`3.${i+1} Vendor — ${escHtml(r.name)}${r.online ? ' (online purchase)' : ''}${r.count > 1 ? ' · signed ' + r.count + ' times' : ''}`, r.sig, r.online && !r.sig ? 'Online purchase: e-receipt' : null, null)).join('')
+                        : (vendorSigs.length > 0
+                            ? sigBlock('3. Vendor' + (vendorSigs.length > 1 ? ' · signed ' + vendorSigs.length + ' times' : ''), vendorSigs[vendorSigs.length - 1], vendorSigs[vendorSigs.length - 1].signerName, vendorSigs[vendorSigs.length - 1].signedAt)
+                            : sigBlock('3. Vendor', null, cn.grrVendorName, cn.grrVendorSignedAt))}
+                    ${sigBlock(`${_vgs.multi ? _vgs.rows.length + 3 : 4}. Finance`, grrFinSig, null, null)}
+                </div>
+                ${_vgs.unattributed.length ? '<div style="margin-top:8px;font-size:12px;color:#B45309;"><b>Not linked to any vendor:</b> ' + _vgs.unattributed.map(x => escHtml(x.signerName) + ' signed the combined GRR on ' + fmtD(x.signedAt)).join('; ') + '. Each vendor must sign their own GRR.</div>' : ''}${this._onlineReceiptsHtml(cn, true)}` : '';
 
                 const payRows = payments.map(p => `<tr>
                     <td>${p.refNumber}</td><td>${p.staffName}</td>
@@ -7222,7 +7277,9 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(); // 48h
                 const tokenPayload = {
                     token, cnRef: refNumber,
-                    grrNumber: cn.grrNumber || app._stubRef('GRR', refNumber),
+                    // Each vendor's link carries their own GRR copy (…-V1, -V2) so the
+                    // signature lands on the document Finance prints for that vendor.
+                    grrNumber: (cn.grrNumber || app._stubRef('GRR', refNumber)) + (_gvIdx !== null ? '-V' + (_gvIdx + 1) : ''),
                     activityTitle: cn.activityTitle,
                     projectCode: cn.projectCode,
                     estimatedCost: cn.actualProcurementCost || cn.estimatedCost,
@@ -7597,6 +7654,32 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         + (r.vendors ? ' · ' + escHtml(r.vendors) : '') + ' · PO ₦' + Number(r.po_total || 0).toLocaleString() + ', vendor paid ₦' + Number(r.vendor_paid || 0).toLocaleString()
                         + ' · closed ' + new Date(r.archived_at).toLocaleDateString('en-NG') + '</div>').join('')
                     + '<div style="font-size:11px;color:#6B7280;margin-top:6px;">The PO and GRR shown above are for the current round. Earlier rounds, with their signatures, are in the full dossier.</div></div>';
+            },
+            // Who has signed the GRR, per vendor. With several vendors each signs
+            // their own copy (GRR-…-V1, -V2…); a signature on the combined GRR
+            // counts for a vendor only if it was signed in that vendor's name.
+            _vendorGrrStatus(cn, sigs) {
+                const grr = cn.grrNumber || '';
+                let v = []; try { v = JSON.parse(cn.vendorsJson || '[]'); if (typeof v === 'string') v = JSON.parse(v); } catch (e) { v = []; }
+                if (!Array.isArray(v)) v = [];
+                const isV = s => s.signerRole === 'vendor' || ['vendor_on_device', 'vendor_remote'].includes(s.pageContext);
+                const onl = x => !!(x && (x.online || x.payOnline || x.prepaidRef));
+                const norm = x => String(x || '').trim().toLowerCase();
+                const vs = (sigs || []).filter(isV).sort((a, b) => new Date(a.signedAt) - new Date(b.signedAt));
+                const onlineSig = (sigs || []).find(s => s.pageContext === 'vendor_po_online') || null;
+                if (v.length <= 1) {
+                    const own = vs.filter(s => s.docRef === grr || !s.docRef);
+                    return { multi: false, unattributed: [], rows: [{ name: (v[0] && v[0].name) || 'Vendor', online: onl(v[0]) || (!own.length && !!onlineSig),
+                        sig: own[own.length - 1] || (onl(v[0]) ? onlineSig : null), count: own.length }] };
+                }
+                const used = new Set();
+                const rows = v.map((x, i) => {
+                    const ref = grr + '-V' + (i + 1);
+                    const mine = vs.filter(s => s.docRef === ref || (s.docRef === grr && norm(s.signerName) === norm(x.name)));
+                    mine.forEach(s => used.add(s));
+                    return { name: x.name || ('Vendor ' + (i + 1)), online: onl(x), sig: mine[mine.length - 1] || null, count: mine.length };
+                });
+                return { multi: true, rows, unattributed: vs.filter(s => s.docRef === grr && !used.has(s)) };
             },
             _hasPrepaid(cn) {
                 let v = []; try { if (cn.vendorsJson) v = JSON.parse(cn.vendorsJson); } catch(e) {}
