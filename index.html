@@ -5611,7 +5611,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             const st = this._vendorGrrStatus(cn, allSigs);
                             return st.rows.map((r, i) => r.na && !r.sig ? '' : r.online && !r.sig ? renderStep({ ctx: '__online', label: 'Vendor: ' + escHtml(r.name) + ' (online purchase, e-receipt)' }, [{ pageContext: '__online', signerName: 'Online', signedAt: new Date().toISOString() }])
                                 : renderStep({ ctx: '__v' + i, label: (st.multi ? 'Vendor signs own GRR: ' + escHtml(r.name) : 'Vendor signs GRR') + (r.count > 1 ? ' (signed ' + r.count + ' times)' : '') }, r.sig ? [{ ...r.sig, pageContext: '__v' + i }] : [])
-                                  + (r.link ? '<div style="font-size:10px;color:#7B7B7B;margin:-2px 0 6px 22px;">Signed on the combined GRR; linked to ' + escHtml(r.name) + ' by ' + escHtml(r.link.linked_by || '') + ' on ' + new Date(r.link.linked_at).toLocaleDateString('en-NG')
+                                  + (r.link && r.link.linked_by !== 'Automatic name match' ? '<div style="font-size:10px;color:#7B7B7B;margin:-2px 0 6px 22px;">Signed on the combined GRR; linked to ' + escHtml(r.name) + ' by ' + escHtml(r.link.linked_by || '') + ' on ' + new Date(r.link.linked_at).toLocaleDateString('en-NG')
                                       + ((this.getUserRole() === 'ed' || r.link.linked_by === this.currentUser) ? ' · <a href="#" onclick="event.preventDefault();app.unlinkGrrSignature(\'' + cn.refNumber + '\',\'' + r.link.signature_id + '\')" style="color:#B91C1C;">remove link</a>' : '') + '</div>' : '')).join('')
                                 + this._grrUnlinkedHtml(cn, st);
                         })() : renderStep(s, grrSigs)).join('')}</div></div></div>`;
@@ -6888,7 +6888,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     ${sigBlock('1. Procurement (Received)', grrProcSig, cn.approvedBy && cn.requiresProcurement === 'yes' ? cn.approvedBy : null, cn.procurementComplete||null)}
                     ${sigBlock('2. Programme Staff (Verified)', grrStaffSig, cn.staffName, null)}
                     ${_vgs.multi
-                        ? _vgs.rows.map((r, i) => r.na && !r.sig ? '' : sigBlock(`3.${i+1} Vendor — ${escHtml(r.name)}${r.online ? ' (online purchase)' : ''}${r.count > 1 ? ' · signed ' + r.count + ' times' : ''}${r.link ? ' · signed on combined GRR, linked by ' + escHtml(r.link.linked_by || '') + ' ' + fmtD(r.link.linked_at) : ''}`, r.sig, r.online && !r.sig ? 'Online purchase: e-receipt' : null, null)).join('')
+                        ? _vgs.rows.map((r, i) => r.na && !r.sig ? '' : sigBlock(`3.${i+1} Vendor — ${escHtml(r.name)}${r.online ? ' (online purchase)' : ''}${r.count > 1 ? ' · signed ' + r.count + ' times' : ''}${r.link && r.link.linked_by !== 'Automatic name match' ? ' · signed on combined GRR, linked by ' + escHtml(r.link.linked_by || '') + ' ' + fmtD(r.link.linked_at) : ''}`, r.sig, r.online && !r.sig ? 'Online purchase: e-receipt' : null, null)).join('')
                         : (vendorSigs.length > 0
                             ? sigBlock('3. Vendor' + (vendorSigs.length > 1 ? ' · signed ' + vendorSigs.length + ' times' : ''), vendorSigs[vendorSigs.length - 1], vendorSigs[vendorSigs.length - 1].signerName, vendorSigs[vendorSigs.length - 1].signedAt)
                             : sigBlock('3. Vendor', null, cn.grrVendorName, cn.grrVendorSignedAt))}
