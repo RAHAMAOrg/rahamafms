@@ -3148,6 +3148,15 @@
                       <h3 style="margin:0;font-family:'Plus Jakarta Sans',sans-serif;">Beneficiaries (attendance)</h3>
                       <button type="button" id="benefClose" style="background:none;border:0;font-size:22px;cursor:pointer;">✕</button>
                     </div>
+                    <div style="background:#EEF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 12px;margin-top:10px;">
+                      <div style="font-weight:700;font-size:13px;color:#1E3A8A;">📂 Use a saved list</div>
+                      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+                        <select id="bfSaved" style="${inp}flex:1;min-width:220px;width:auto;"><option value="">Loading your lists…</option></select>
+                        <button type="button" id="bfLoad" class="btn btn-secondary" style="white-space:nowrap;">Add to this list</button>
+                        <button type="button" id="bfDelSaved" class="btn btn-secondary" title="Delete this saved list" style="display:none;color:#B91C1C;">🗑</button>
+                      </div>
+                      <div id="bfSavedMsg" style="font-size:12px;color:#1E3A8A;margin-top:6px;">Pick one of your saved lists or an earlier batch request. You can change amounts, remove people and add new ones before you click Done.</div>
+                    </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">
                       <div><label style="${lbl}">Title of the Meeting</label><input id="bfTitle" style="${inp}"></div>
                       <div><label style="${lbl}">Location of the Meeting</label><input id="bfLocation" style="${inp}"></div>
@@ -3172,6 +3181,7 @@
                     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;" id="bfTable"></table></div>
                     <div style="display:flex;gap:8px;margin-top:14px;">
                       <button type="button" id="bfDone" class="btn btn-primary" style="flex:2;">Done</button>
+                      <button type="button" id="bfSave" class="btn btn-secondary" style="flex:1.4;">💾 Save list for next time</button>
                       <button type="button" id="bfClear" class="btn btn-secondary" style="flex:1;">Clear all</button>
                     </div>
                   </div>`;
@@ -3180,16 +3190,75 @@
                 $('bfTitle').value = d.title; $('bfLocation').value = d.location;
                 $('bfTitle').oninput = e => { d.title = e.target.value; };
                 $('bfLocation').oninput = e => { d.location = e.target.value; };
-                const render = () => {
+                const totals = () => {
                     const total = d.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
                     const payAmt = parseFloat(document.getElementById('amount')?.value || '0') || 0;
                     const diff = Math.round((payAmt - total) * 100) / 100;
                     $('bfTotals').innerHTML = `${d.rows.length} beneficiaries · Total ₦${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` +
                         (payAmt ? (diff === 0 ? ` <span style="color:#047857;">✓ matches payment amount</span>` : ` <span style="color:#B91C1C;">· payment amount is ₦${payAmt.toLocaleString()} (difference ₦${diff.toLocaleString()})</span>`) : ` <span style="color:#6B7280;">· enter the payment amount on the form to compare</span>`);
-                    $('bfTable').innerHTML = d.rows.length ? `<tr style="background:#E8F5E9;text-align:left;"><th style="padding:6px;">S/N</th><th>Name</th><th>Gender</th><th>Designation</th><th>Phone</th><th>Bank</th><th>Account No</th><th style="text-align:right;">Amount</th><th></th></tr>` +
-                        d.rows.map((r, i) => `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${i + 1}</td><td>${escHtml(r.full_name)}</td><td>${escHtml(r.gender)}</td><td>${escHtml(r.designation || '')}</td><td>${escHtml(r.phone || '')}</td><td>${escHtml(r.bank_name)}</td><td>${escHtml(r.account_number)}</td><td style="text-align:right;">${Number(r.amount).toLocaleString()}</td><td><button type="button" data-i="${i}" class="bfDel" style="background:none;border:0;color:#B91C1C;cursor:pointer;">✕</button></td></tr>`).join('') : '';
-                    ov.querySelectorAll('.bfDel').forEach(b => b.onclick = () => { d.rows.splice(Number(b.dataset.i), 1); render(); });
                 };
+                const render = () => {
+                    totals();
+                    $('bfTable').innerHTML = d.rows.length ? `<tr style="background:#E8F5E9;text-align:left;"><th style="padding:6px;">S/N</th><th>Name</th><th style="text-align:right;">Amount (₦)</th><th>Gender</th><th>Designation</th><th>Phone</th><th>Bank</th><th>Account No</th><th></th></tr>` +
+                        d.rows.map((r, i) => `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px;">${i + 1}</td><td>${escHtml(r.full_name)}</td><td style="text-align:right;"><input type="number" min="0" step="0.01" class="bfAmtEdit" data-i="${i}" value="${r.amount == null || isNaN(r.amount) ? '' : Number(r.amount)}" style="width:96px;padding:4px 6px;border:1px solid ${r.amount > 0 ? '#D1D5DB' : '#DC2626'};border-radius:5px;text-align:right;font-size:12px;"></td><td>${escHtml(r.gender)}</td><td>${escHtml(r.designation || '')}</td><td>${escHtml(r.phone || '')}</td><td>${escHtml(r.bank_name)}</td><td>${escHtml(r.account_number)}</td><td><button type="button" data-i="${i}" class="bfDel" style="background:none;border:0;color:#B91C1C;cursor:pointer;">✕</button></td></tr>`).join('') : '';
+                    ov.querySelectorAll('.bfDel').forEach(b => b.onclick = () => { d.rows.splice(Number(b.dataset.i), 1); render(); });
+                    ov.querySelectorAll('.bfAmtEdit').forEach(el => el.oninput = () => {
+                        const v = parseFloat(el.value); d.rows[Number(el.dataset.i)].amount = v > 0 ? v : null;
+                        el.style.borderColor = v > 0 ? '#D1D5DB' : '#DC2626'; totals();
+                    });
+                };
+                // Saved lists and earlier batch requests
+                let saved = [], past = [];
+                const fillSaved = async () => {
+                    const sel = $('bfSaved'); if (!sel) return;
+                    try {
+                        const [a, b] = await Promise.all([supabaseClient.rpc('my_beneficiary_lists'), supabaseClient.rpc('my_recent_beneficiary_batches')]);
+                        saved = (a && !a.error && a.data) || []; past = (b && !b.error && b.data) || [];
+                    } catch (e) { saved = []; past = []; }
+                    const money = n => '₦' + Number(n || 0).toLocaleString();
+                    sel.innerHTML = (saved.length || past.length ? '<option value="">Choose a list…</option>' : '<option value="">No saved lists yet</option>')
+                        + (saved.length ? '<optgroup label="My saved lists">' + saved.map(l => `<option value="s:${l.id}">${escHtml(l.name)} · ${l.people} people · ${money(l.total)}</option>`).join('') + '</optgroup>' : '')
+                        + (past.length ? '<optgroup label="From my earlier batch requests">' + past.map(l => `<option value="p:${escHtml(l.payment_ref)}">${escHtml(l.payment_ref)} · ${escHtml(l.meeting_title || 'Batch payment')} · ${l.people} people · ${money(l.total)}</option>`).join('') + '</optgroup>' : '');
+                };
+                $('bfSaved').onchange = () => { $('bfDelSaved').style.display = $('bfSaved').value.startsWith('s:') ? '' : 'none'; };
+                $('bfLoad').onclick = () => {
+                    const v = $('bfSaved').value; if (!v) { $('bfSavedMsg').textContent = 'Choose a list first.'; return; }
+                    const src = v.startsWith('s:') ? saved.find(l => 's:' + l.id === v) : past.find(l => 'p:' + l.payment_ref === v);
+                    if (!src) return;
+                    let added = 0, skipped = 0;
+                    (src.rows || []).forEach(r => {
+                        if (d.rows.some(x => x.account_number === r.account_number && x.bank_name === r.bank_name)) { skipped++; return; }
+                        d.rows.push({ full_name: r.full_name || '', gender: r.gender || '', organization: r.organization || '', designation: r.designation || '',
+                            phone: r.phone || '', email: r.email || '', bank_name: r.bank_name || '', account_number: r.account_number || '',
+                            amount: Number(r.amount) > 0 ? Number(r.amount) : null });
+                        added++;
+                    });
+                    if (!d.title && src.meeting_title) { d.title = src.meeting_title; $('bfTitle').value = d.title; }
+                    if (!d.location && src.meeting_location) { d.location = src.meeting_location; $('bfLocation').value = d.location; }
+                    $('bfSavedMsg').textContent = `Added ${added} ${added === 1 ? 'person' : 'people'}` + (skipped ? `; ${skipped} already on the list were skipped` : '') + '. Check the amounts below before clicking Done.';
+                    if (v.startsWith('s:')) supabaseClient.rpc('touch_beneficiary_list', { p_id: Number(v.slice(2)) }).then(() => {}, () => {});
+                    render();
+                };
+                $('bfDelSaved').onclick = async () => {
+                    const v = $('bfSaved').value; if (!v.startsWith('s:')) return;
+                    const l = saved.find(x => 's:' + x.id === v);
+                    if (!confirm(`Delete the saved list "${l ? l.name : ''}"? This does not affect any payment already requested.`)) return;
+                    const { error } = await supabaseClient.rpc('delete_beneficiary_list', { p_id: Number(v.slice(2)) });
+                    if (error) { alert('Could not delete the list: ' + error.message); return; }
+                    $('bfSavedMsg').textContent = 'List deleted.'; $('bfDelSaved').style.display = 'none'; fillSaved();
+                };
+                $('bfSave').onclick = async () => {
+                    if (!d.rows.length) { alert('Add at least one beneficiary before saving the list.'); return; }
+                    const name = prompt('Name this list so you can find it next time (for example: Lead Mothers, Zango):', d.title || '');
+                    if (name === null) return;
+                    if (name.trim().length < 2) { alert('Give the list a name.'); return; }
+                    if (saved.some(l => l.name.toLowerCase() === name.trim().toLowerCase()) && !confirm(`You already have a list called "${name.trim()}". Replace it with this one?`)) return;
+                    const { error } = await supabaseClient.rpc('save_beneficiary_list', { p_name: name.trim(), p_title: d.title || '', p_location: d.location || '', p_rows: d.rows });
+                    if (error) { alert('Could not save the list: ' + error.message); return; }
+                    $('bfSavedMsg').textContent = `Saved as "${name.trim()}". Next time, pick it from this box.`;
+                    fillSaved();
+                };
+                fillSaved();
                 $('bfAdd').onclick = () => {
                     const r = {
                         full_name: $('bfName').value.trim(), gender: $('bfGender').value, organization: $('bfOrg').value.trim(),
@@ -3213,7 +3282,11 @@
                 };
                 $('bfClear').onclick = () => { if (d.rows.length && confirm('Remove all beneficiaries from this list?')) { d.rows = []; render(); } };
                 const close = () => { ov.remove(); this._benefSummaryUpdate(); };
-                $('bfDone').onclick = close; $('benefClose').onclick = close;
+                $('bfDone').onclick = () => {
+                    const bad = d.rows.filter(r => !(r.amount > 0) || !r.gender || !r.bank_name || !/^[0-9]{10}$/.test(r.account_number || ''));
+                    if (bad.length) { alert(`${bad.length} ${bad.length === 1 ? 'person needs' : 'people need'} an amount, gender, bank or valid account number: ${bad.slice(0, 5).map(r => r.full_name).join(', ')}${bad.length > 5 ? '…' : ''}`); return; }
+                    close();
+                }; $('benefClose').onclick = close;
                 render();
             },
 
@@ -3459,6 +3532,8 @@
                     return;
                 }
                 if (benefRows.length) {
+                    const badB = benefRows.filter(r => !(r.amount > 0) || !r.gender || !r.bank_name || !/^[0-9]{10}$/.test(r.account_number || ''));
+                    if (badB.length) { alert(`Open the beneficiary list and complete ${badB.length === 1 ? 'this person' : 'these people'} (amount, gender, bank or account number): ${badB.slice(0, 5).map(r => r.full_name).join(', ')}`); return; }
                     const bTotal = Math.round(benefRows.reduce((s, r) => s + Number(r.amount || 0), 0) * 100) / 100;
                     if (Math.abs(bTotal - amount) > 0.009) { alert(`The beneficiaries add up to ₦${bTotal.toLocaleString()}, but the payment amount is ₦${amount.toLocaleString()}.\n\nPlease correct the list or the amount before submitting.`); return; }
                 }
