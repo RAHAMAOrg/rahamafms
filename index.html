@@ -3894,10 +3894,25 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
             async _loadGrrSign() {
                 const els = document.querySelectorAll('.grrSignBox'); if (!els.length) return;
                 try {
-                    const { data, error } = await supabaseClient.rpc('vendor_payments_awaiting_grr');
+                    const [{ data, error }, out] = await Promise.all([
+                        supabaseClient.rpc('vendor_payments_awaiting_grr'),
+                        supabaseClient.rpc('grr_signatures_outstanding').then(r => r, () => ({ data: [] }))
+                    ]);
                     const rows = error ? [] : (data || []);
+                    const paidRows = (out && !out.error && out.data) || [];
                     const isProc = this.getUserRole() === 'procurement';
-                    const html = !rows.length ? '' : `<div style="background:#FFF7ED;border:2px solid #FB923C;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+                    const canLink = this._canLinkGrrSig();
+                    const paidHtml = !paidRows.length ? '' : `<details style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:12px 18px;margin-bottom:20px;">
+                        <summary style="cursor:pointer;font-weight:700;color:#92400E;">📂 Already paid, GRR still missing a vendor signature: ${paidRows.length} concept note${paidRows.length > 1 ? 's' : ''}</summary>
+                        <div style="font-size:12px;color:#92400E;margin:8px 0 10px;">${isProc ? 'Get the missing vendor signature, or open the note and link a signature already on the combined GRR to its vendor.' : canLink ? 'Open the note to link a signature already on the combined GRR to its vendor.' : 'Procurement is following these up.'}</div>
+                        <div class="table-container"><table><thead><tr><th>Concept note</th><th>Activity</th><th>Waiting for</th><th>Signed, not yet linked</th><th></th></tr></thead><tbody>
+                        ${paidRows.map(r => `<tr><td><a href="#" onclick="app.viewConceptNoteDetails('${escHtml(r.concept_note_ref || '')}');return false;">${escHtml(r.concept_note_ref || '')}</a><div style="font-size:11px;color:#777;">${escHtml(r.grr || '')}</div></td>
+                            <td>${escHtml(r.activity || '')}<div style="font-size:11px;color:#777;">${escHtml(r.project_code || '')}</div></td>
+                            <td style="font-size:12px;color:#92400E;max-width:260px;">${escHtml(String(r.waiting_for || '').replace(/\. Each vendor must sign.*$/, ''))}</td>
+                            <td style="font-size:12px;">${escHtml(r.unlinked_signers || '—')}</td>
+                            <td>${isProc ? `<button class="action-btn approve" onclick="app._openGrrSign('${escHtml(r.concept_note_ref || '')}')">✍️ Get vendor signatures</button>` : ''}</td></tr>`).join('')}
+                        </tbody></table></div></details>`;
+                    const html = !rows.length ? paidHtml : `<div style="background:#FFF7ED;border:2px solid #FB923C;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
                         <div style="font-weight:700;color:#9A3412;margin-bottom:4px;">✍️ Vendor signatures needed: ${rows.length} payment${rows.length > 1 ? 's' : ''} held by Finance</div>
                         <div style="font-size:12px;color:#9A3412;margin-bottom:10px;">Finance cannot move these vendor payments until each vendor signs their own GRR. ${isProc ? 'Open each one and get the missing signatures (on this device, or send the vendor their own link). Nothing needs to be rejected.' : 'Procurement has been asked to collect the signatures.'}</div>
                         <div class="table-container"><table><thead><tr><th>Payment</th><th>Concept note</th><th>Activity</th><th>Amount</th><th>Waiting for</th><th></th></tr></thead><tbody>
@@ -3905,7 +3920,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             <td>${escHtml(r.activity || '')}<div style="font-size:11px;color:#777;">${escHtml(r.project_code || '')}</div></td><td>₦${Number(r.amount || 0).toLocaleString()}</td>
                             <td style="font-size:12px;color:#9A3412;max-width:260px;">${escHtml(r.waiting_for || '')}</td>
                             <td>${isProc ? `<button class="action-btn approve" onclick="app._openGrrSign('${escHtml(r.concept_note_ref || '')}')">✍️ Get vendor signatures</button>` : ''}</td></tr>`).join('')}
-                        </tbody></table></div></div>`;
+                        </tbody></table></div></div>` + paidHtml;
                     els.forEach(el => { el.innerHTML = html; });
                 } catch (e) { els.forEach(el => { el.innerHTML = ''; }); }
             },
@@ -5609,8 +5624,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         });
                         statusEl.innerHTML = `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => s.ctx === 'vendor_on_device' ? (() => {
                             const st = this._vendorGrrStatus(cn, allSigs);
-                            return st.rows.map((r, i) => r.na && !r.sig ? '' : r.online && !r.sig ? renderStep({ ctx: '__online', label: 'Vendor: ' + escHtml(r.name) + ' (online purchase, e-receipt)' }, [{ pageContext: '__online', signerName: 'Online', signedAt: new Date().toISOString() }])
-                                : renderStep({ ctx: '__v' + i, label: (st.multi ? 'Vendor signs own GRR: ' + escHtml(r.name) : 'Vendor signs GRR') + (r.count > 1 ? ' (signed ' + r.count + ' times)' : '') }, r.sig ? [{ ...r.sig, pageContext: '__v' + i }] : [])
+                            return st.rows.map((r, i) => r.dup || (r.na && !r.sig) ? '' : r.online && !r.sig ? renderStep({ ctx: '__online', label: 'Vendor: ' + escHtml(r.name) + ' (online purchase, e-receipt)' }, [{ pageContext: '__online', signerName: 'Online', signedAt: new Date().toISOString() }])
+                                : renderStep({ ctx: '__v' + i, label: (st.multi ? 'Vendor signs own GRR: ' + escHtml(r.name) + (r.lines > 1 ? ' (' + r.lines + ' lines)' : '') : 'Vendor signs GRR') + (r.count > 1 ? ' (signed ' + r.count + ' times)' : '') }, r.sig ? [{ ...r.sig, pageContext: '__v' + i }] : [])
                                   + (r.link && r.link.linked_by !== 'Automatic name match' ? '<div style="font-size:10px;color:#7B7B7B;margin:-2px 0 6px 22px;">Signed on the combined GRR; linked to ' + escHtml(r.name) + ' by ' + escHtml(r.link.linked_by || '') + ' on ' + new Date(r.link.linked_at).toLocaleDateString('en-NG')
                                       + ((this.getUserRole() === 'ed' || r.link.linked_by === this.currentUser) ? ' · <a href="#" onclick="event.preventDefault();app.unlinkGrrSignature(\'' + cn.refNumber + '\',\'' + r.link.signature_id + '\')" style="color:#B91C1C;">remove link</a>' : '') + '</div>' : '')).join('')
                                 + this._grrUnlinkedHtml(cn, st);
@@ -6888,13 +6903,13 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     ${sigBlock('1. Procurement (Received)', grrProcSig, cn.approvedBy && cn.requiresProcurement === 'yes' ? cn.approvedBy : null, cn.procurementComplete||null)}
                     ${sigBlock('2. Programme Staff (Verified)', grrStaffSig, cn.staffName, null)}
                     ${_vgs.multi
-                        ? _vgs.rows.map((r, i) => r.na && !r.sig ? '' : sigBlock(`3.${i+1} Vendor — ${escHtml(r.name)}${r.online ? ' (online purchase)' : ''}${r.count > 1 ? ' · signed ' + r.count + ' times' : ''}${r.link && r.link.linked_by !== 'Automatic name match' ? ' · signed on combined GRR, linked by ' + escHtml(r.link.linked_by || '') + ' ' + fmtD(r.link.linked_at) : ''}`, r.sig, r.online && !r.sig ? 'Online purchase: e-receipt' : null, null)).join('')
+                        ? _vgs.rows.map((r, i) => r.dup || (r.na && !r.sig) ? '' : sigBlock(`3.${i+1} Vendor — ${escHtml(r.name)}${r.lines > 1 ? ' (' + r.lines + ' lines)' : ''}${r.online ? ' (online purchase)' : ''}${r.count > 1 ? ' · signed ' + r.count + ' times' : ''}${r.link && r.link.linked_by !== 'Automatic name match' ? ' · signed on combined GRR, linked by ' + escHtml(r.link.linked_by || '') + ' ' + fmtD(r.link.linked_at) : ''}`, r.sig, r.online && !r.sig ? 'Online purchase: e-receipt' : null, null)).join('')
                         : (vendorSigs.length > 0
                             ? sigBlock('3. Vendor' + (vendorSigs.length > 1 ? ' · signed ' + vendorSigs.length + ' times' : ''), vendorSigs[vendorSigs.length - 1], vendorSigs[vendorSigs.length - 1].signerName, vendorSigs[vendorSigs.length - 1].signedAt)
                             : sigBlock('3. Vendor', null, cn.grrVendorName, cn.grrVendorSignedAt))}
                     ${sigBlock(`${_vgs.multi ? _vgs.rows.length + 3 : 4}. Finance`, grrFinSig, null, null)}
                 </div>
-                ${_vgs.unattributed.length ? '<div style="margin-top:8px;font-size:12px;color:#B45309;"><b>Not linked to any vendor yet:</b> ' + _vgs.unattributed.map(x => escHtml(x.signerName) + ' signed the combined GRR on ' + fmtD(x.signedAt)).join('; ') + '. Procurement, the Finance Manager or the ED links each signature to its vendor on the concept note page.</div>' : ''}${this._onlineReceiptsHtml(cn, true)}` : '';
+                ${_vgs.unattributed.length && _vgs.rows.some(r => !r.sig && !r.online && !r.na && !r.dup) ? '<div style="margin-top:8px;font-size:12px;color:#B45309;"><b>Not linked to any vendor yet:</b> ' + _vgs.unattributed.map(x => escHtml(x.signerName) + ' signed the combined GRR on ' + fmtD(x.signedAt)).join('; ') + '. Procurement, the Finance Manager, the Budget Owner or the ED links each signature to its vendor on the concept note page.</div>' : ''}${this._onlineReceiptsHtml(cn, true)}` : '';
 
                 const payRows = payments.map(p => `<tr>
                     <td>${p.refNumber}</td><td>${p.staffName}</td>
@@ -7704,7 +7719,31 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     return { name: x.name || ('Vendor ' + (i + 1)), online: onl(x), sig: last, count: mine.length, link,
                              na: ['n/a', 'na', '-', 'nil', 'none'].includes(norm(x.name)) };
                 });
+                // The same vendor on several lines counts once: a signature on any of
+                // its lines covers them all, and only the first line is shown.
+                rows.forEach((r, i) => {
+                    const first = rows.findIndex((o, j) => j < i && this._vendorSame(o.name, r.name));
+                    if (first !== -1) { r.dup = true; rows[first].lines = (rows[first].lines || 1) + 1; }
+                });
+                rows.forEach((r, i) => {
+                    if (r.sig) return;
+                    const other = rows.find((o, j) => j !== i && o.sig && this._vendorSame(o.name, r.name));
+                    if (other) { r.sig = other.sig; r.link = other.link; r.count = other.count; }
+                });
                 return { multi: true, rows, unattributed: vs.filter(s => s.docRef === grr && !used.has(s)) };
+            },
+            // Same vendor written differently on two lines ("jameel" / "Jameel Agro Allied")
+            _vendorSame(a, b) {
+                const sq = x => String(x || '').toLowerCase().replace(/[^a-z]/g, '');
+                const gen = new Set(['ltd','limited','plc','nig','nigeria','company','and','the','for','enterprise','enterprises','service','services','global','general','integrated','intergrated','venture','ventures','investment','investments','multi','international','link','logistics','supply','supplies','contract','consult','consulting','station','state','store','shop','restaurant','resturant','bakery','hotel','suites','palace','guest','transport','radio','printers','printing','press','more','vehicle','office','program','programme','local','owner','key']);
+                const keys = x => [...new Set(String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ')
+                    .filter(w => w.length >= 3 && !gen.has(w))
+                    .map(w => w.length >= 5 ? (w[0] + w.slice(1).replace(/[aeiouy]/g, '')).replace(/(.)\1+/g, '$1') : w).filter(Boolean))];
+                if (!sq(a)) return false;
+                if (sq(a) === sq(b)) return true;
+                const ka = keys(a), kb = keys(b);
+                if (!ka.length || !kb.length) return false;
+                return ka.every(k => kb.includes(k)) || kb.every(k => ka.includes(k));
             },
             async _loadGrrLinks(ref) {
                 this._grrLinks = this._grrLinks || {};
@@ -7714,15 +7753,16 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 } catch (e) { this._grrLinks[ref] = []; }
                 return this._grrLinks[ref];
             },
-            _canLinkGrrSig() { return ['procurement', 'finance_manager', 'ed'].includes(this.getUserRole()); },
+            _canLinkGrrSig() { return ['procurement', 'finance_manager', 'budgetOwner', 'ed'].includes(this.getUserRole()); },
             // The box under the GRR signing steps: signatures on the combined GRR
             // not yet linked to a vendor, with a way to say which vendor each is for.
             _grrUnlinkedHtml(cn, st) {
-                if (!st.unattributed.length) return '';
-                const open = st.rows.map((r, i) => ({ r, i })).filter(x => !x.r.sig && !x.r.online && !x.r.na);
+                const open = st.rows.map((r, i) => ({ r, i })).filter(x => !x.r.sig && !x.r.online && !x.r.na && !x.r.dup);
+                // every vendor already signed: extra signatures on the combined GRR need nothing
+                if (!st.unattributed.length || !open.length) return '';
                 const canLink = this._canLinkGrrSig() && open.length;
                 return '<div style="font-size:11px;color:#B45309;background:#FFF7ED;border-radius:6px;padding:8px 10px;margin:6px 0;">'
-                    + '⚠ Signed on the combined GRR, not yet linked to a vendor' + (canLink ? '. Say which vendor each person signed for:' : ': ' + st.unattributed.map(x => escHtml(x.signerName) + ' (' + new Date(x.signedAt).toLocaleDateString('en-NG') + ')').join(', ') + '. Procurement, the Finance Manager or the ED can link each signature to its vendor, or send each vendor their own signing link.')
+                    + '⚠ Signed on the combined GRR, not yet linked to a vendor' + (canLink ? '. Say which vendor each person signed for:' : ': ' + st.unattributed.map(x => escHtml(x.signerName) + ' (' + new Date(x.signedAt).toLocaleDateString('en-NG') + ')').join(', ') + '. Procurement, the Finance Manager, the Budget Owner or the ED can link each signature to its vendor, or send each vendor their own signing link.')
                     + (canLink ? st.unattributed.map(x => '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;">'
                         + '<span style="color:#333;"><b>' + escHtml(x.signerName) + '</b> · ' + new Date(x.signedAt).toLocaleDateString('en-NG') + '</span>'
                         + '<select id="grrLinkSel_' + x.id + '" style="font-size:11px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:6px;"><option value="">Signed for…</option>'
@@ -8607,6 +8647,7 @@ ${vendors.length > 1 ? `
                     (onlineSigs || []).forEach(s => { if (!seen.has(s.id) && !this._isOldRoundRef(cn, s.docRef)) { seen.add(s.id); allSigs.push(s); } });
                 } catch(e) {}
                 const _grrLinks = (await this._loadGrrLinks(refNumber)) || [];
+                const _vst = vendors.length > 1 ? this._vendorGrrStatus(cn, allSigs) : null;
                 const procSig  = allSigs.find(s => s.pageContext === 'procurement_received');
                 const staffSig = allSigs.find(s => s.pageContext === 'staff_grr_verify');
                 const finSig   = allSigs.find(s => s.pageContext === 'finance_sign');
@@ -8687,6 +8728,7 @@ ${vendors.length > 1 ? `
                     ? (allSigs.find(s => s.signerRole==='vendor' && s.docRef===vGrrNum)
                        || allSigs.find(s => s.signerRole==='vendor' && (s.signerName||'').trim().toLowerCase()===String(_gv2.name||'').trim().toLowerCase())
                        || (_lk ? allSigs.find(s => String(s.id) === String(_lk.signature_id)) : null)
+                       || (_vst && _vst.rows[gi] ? _vst.rows[gi].sig : null)
                        || null)
                     : (allVendorSigs[0] || null);
 
