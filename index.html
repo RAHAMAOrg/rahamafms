@@ -9462,7 +9462,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             _qty(n) { return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); },
             _srStatus(s) {
                 return ({ pending: ['Waiting for approval', '#FFF8E1', '#B45309'], approved: ['Approved: with Procurement', '#E3F2FD', '#1B4D8E'], released: ['Released: confirm receipt', '#EDE7F6', '#4527A0'],
-                    received: ['Received: upload evidence of use', '#FFF4E5', '#92400E'], evidence_review: ['Evidence sent: being checked', '#E3F2FD', '#1B4D8E'],
+                    received: ['Received: upload evidence of use', '#FFF4E5', '#92400E'], evidence_review: ['Evidence sent: with Procurement', '#E3F2FD', '#1B4D8E'],
                     closed: ['Closed', '#E8F5E9', '#1B5E20'], rejected: ['Declined', '#FFEBEE', '#B91C1C'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] })[s] || [s, '#F3F4F6', '#6B7280'];
             },
             _srChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309'] : this._srStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
@@ -9473,7 +9473,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     || (r.status === 'approved' && role === 'procurement')
                     || (r.status === 'released' && r.requested_by === this.currentUser)
                     || (r.status === 'received' && r.requested_by === this.currentUser)
-                    || (r.status === 'evidence_review' && role === r.approver && r.requested_by !== this.currentUser);
+                    || (r.status === 'evidence_review' && role === (r.evidence_reviewer || 'procurement') && r.requested_by !== this.currentUser);
             },
             // Evidence of use: the staff member uploads; the approver accepts (closes) or sends back
             uploadStoreEvidence(ref) {
@@ -9488,7 +9488,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         const { error } = await supabaseClient.rpc('submit_store_evidence', { p_ref: ref, p_url: up.url, p_name: up.fileName, p_note: note });
                         if (error) throw error;
                         await this._logAudit('store_requests', ref, 'store_evidence_submitted', up.fileName);
-                        alert('Evidence uploaded. It goes to the approver to check.');
+                        alert('Evidence uploaded. Procurement will check it.');
                         await this.renderStore(document.getElementById('mainContent'), 'requests');
                     } catch (e) { alert('Could not upload the evidence: ' + (e.message || e)); }
                 };
@@ -9560,7 +9560,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                 ${r.requested_by === this.currentUser && r.status === 'received' ? `<button class="action-btn approve" onclick="app.uploadStoreEvidence('${escHtml(r.ref)}')">📎 Upload evidence of use</button>` : ''}
                                 ${r.evidence_return_note && r.status === 'received' ? `<div style="font-size:11px;color:#B91C1C;max-width:240px;white-space:normal;">Sent back by ${escHtml(r.evidence_reviewed_by || '')}: "${escHtml(r.evidence_return_note)}"</div>` : ''}
                                 ${r.evidence_url ? `<button class="action-btn view" onclick="app.downloadFile('${escHtml(r.evidence_url)}','${escHtml(r.evidence_name || 'evidence')}')">📄 Evidence</button>` : ''}
-                                ${r.status === 'evidence_review' && role === r.approver && r.requested_by !== this.currentUser ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">✓ Accept and close</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
+                                ${r.status === 'evidence_review' && role === (r.evidence_reviewer || 'procurement') && r.requested_by !== this.currentUser ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">✓ Accept and close</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
                                 ${r.evidence_note ? `<div style="font-size:11px;color:#555;max-width:240px;white-space:normal;">${escHtml(r.evidence_note)}</div>` : ''}
                                 ${r.approved_by ? `<div style="font-size:10px;color:#777;">Approved by ${escHtml(r.approved_by)}</div>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8">No requests yet.</td></tr>'}
                         </tbody></table></div>`;
