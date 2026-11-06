@@ -8995,7 +8995,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 if (hdr && hdr.parentNode) hdr.parentNode.insertBefore(div, hdr.nextSibling); else main.prepend(div);
             },
             // ─────────────────────────── Fleet management ───────────────────────────
-            _fleetManager() { return this.getUserRole() === 'budgetOwner'; },
+            _fleetManager() { return ['budgetOwner', 'procurement'].includes(this.getUserRole()); },   // vehicles, drivers, maintenance
+            _fleetAccountEditor() { return this.getUserRole() === 'budgetOwner'; },                     // RAHAMA's receiving account
             _fleetOverseer() { return ['procurement', 'ed', 'budgetOwner', 'finance', 'finance_manager', 'GrantsCompliance'].includes(this.getUserRole()); },
             _frStatus(s) {
                 return ({ pending: ['Waiting for approval', '#FFF8E1', '#B45309'], approved: ['Approved: waiting for a vehicle', '#E3F2FD', '#1B4D8E'],
@@ -9049,7 +9050,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     try { const { data: fs } = await supabaseClient.from('fleet_settings').select('key,value'); (fs || []).forEach(x => { acct[x.key] = x.value; }); } catch (e) {}
                     body = `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:13px;">
                         <b>Vehicle charges are paid to:</b> ${escHtml(acct.pay_account_name || '—')} · ${escHtml(acct.pay_bank || '')} · ${escHtml(acct.pay_account_number || '')}
-                        ${mgr ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;">Change</summary><div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-top:8px;align-items:end;">
+                        ${this._fleetAccountEditor() ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:12px;">Change</summary><div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;margin-top:8px;align-items:end;">
                             ${this._fIn('faName', 'Account name', acct.pay_account_name)}${this._fIn('faBank', 'Bank', acct.pay_bank)}${this._fIn('faNum', 'Account number', acct.pay_account_number)}
                             <button class="btn btn-primary" style="margin-bottom:10px;" onclick="app.saveFleetAccount()">Save</button></div></details>` : ''}</div>
                         ${mgr ? `<button class="btn btn-primary" style="margin-bottom:14px;" onclick="app.openFleetVehicleForm()">➕ Add vehicle</button>` : ''}
