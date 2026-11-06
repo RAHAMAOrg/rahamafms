@@ -1754,7 +1754,7 @@
                     setTimeout(async () => {
                         const el = document.getElementById('pillVendorSig'); if (!el) return;
                         try {
-                            const [a, b] = await Promise.all([supabaseClient.rpc('vendor_payments_awaiting_grr'), supabaseClient.rpc('grr_signatures_outstanding').then(r => r, () => ({ data: [] }))]);
+                            const [a, b] = await Promise.all([this._rpcCached('vendor_payments_awaiting_grr'), this._rpcCached('grr_signatures_outstanding')]);
                             const n = (Array.isArray(a && a.data) ? a.data.length : 0) + (Array.isArray(b && b.data) ? b.data.length : 0);
                             if (n) { el.innerHTML = `${al} ${n} missing vendor signature${n > 1 ? 's' : ''}`; el.style.display = ''; }
                         } catch (e) {}
@@ -2065,6 +2065,7 @@
                 this._fleetModal('dsOverlay', `🔎 Results for “${escHtml(q)}” (${hits.length})`, `<div style="max-height:60vh;overflow:auto;">${inner}</div>`, "document.getElementById('dsOverlay').remove()", 'Close');
             },
             renderDashboard(content) {
+                this._rpcMemo = {};   // fresh vendor-signature counts on every dashboard visit
                 const role = this.getUserRole();
                 // Mobile quick-view for staff on small screens
                 if (role === 'staff' && window.innerWidth < 480) {
@@ -3982,60 +3983,51 @@
                 }
                 // Add after the existing variance_rejected fetch for procurement
 if (role === 'procurement') {
-    // Step 1: Find payments that Finance rejected for procurement CNs
-    // This catches historical cases where the CN was never updated with financeRejectionReason
-    const { data: rejectedPays } = await supabaseClient
-        .from('payments')
-        .select('conceptNoteRef, rejectionReason, rejectedDate, rejectedBy')
-        .eq('status', 'rejected')
-        .eq('retirementresponsibility', 'procurement')
-        .not('conceptNoteRef', 'is', null);
-
-  if (rejectedPays && rejectedPays.length > 0) {
-                        for (const rp of rejectedPays) {
-                            if (!rp.conceptNoteRef) continue;
-                            // ── FIX 2: skip if a live (pending or paid) payment already exists ──
-                            const { data: livePays } = await supabaseClient
-                                .from('payments')
-                                .select('refNumber, status')
-                                .eq('conceptNoteRef', rp.conceptNoteRef)
-                                .in('status', ['pending', 'paid']);
-                            if (livePays && livePays.length > 0) continue;
-                            // Only patch CNs where financeRejectionReason was never written
-                            await supabaseClient.from('concept_notes').update({
-                                currentApprover: 'procurement',
-                                financeRejectionReason: rp.rejectionReason || 'Rejected by Finance',
-                                financeRejectedAt: rp.rejectedDate || new Date().toISOString(),
-                                financeRejectedBy: rp.rejectedBy || 'Finance'
-                            }).eq('refNumber', rp.conceptNoteRef)
-                              .is('financeRejectionReason', null);
-                        }
-                    }
-
-    // Step 2: Fetch CNs where Finance rejected (now includes patched historical ones)
-    const { data: finRejected } = await supabaseClient
-        .from('concept_notes')
-        .select('*')
-        .eq('currentApprover', 'procurement')
-        .not('financeRejectionReason', 'is', null);
-    
+    // Faster load: the old version checked every historical rejected payment one
+    // by one on each visit and fetched full concept notes (with signature images).
+    // Now the one-off repair runs once per session in two queries, and the lists
+    // load in parallel without signature images.
+    if (!this._procRejRepairDone) {
+        this._procRejRepairDone = true;
+        try {
+            const { data: rejectedPays } = await supabaseClient
+                .from('payments')
+                .select('conceptNoteRef, rejectionReason, rejectedDate, rejectedBy')
+                .eq('status', 'rejected')
+                .eq('retirementresponsibility', 'procurement')
+                .not('conceptNoteRef', 'is', null);
+            const refs = [...new Set((rejectedPays || []).map(r => r.conceptNoteRef).filter(Boolean))];
+            if (refs.length) {
+                const [{ data: livePays }, { data: unpatched }] = await Promise.all([
+                    supabaseClient.from('payments').select('conceptNoteRef').in('conceptNoteRef', refs).in('status', ['pending', 'paid']),
+                    supabaseClient.from('concept_notes').select('refNumber').in('refNumber', refs).is('financeRejectionReason', null)
+                ]);
+                const live = new Set((livePays || []).map(x => x.conceptNoteRef));
+                const todo = new Set((unpatched || []).map(x => x.refNumber));
+                for (const rp of rejectedPays) {
+                    if (!todo.has(rp.conceptNoteRef) || live.has(rp.conceptNoteRef)) continue;
+                    todo.delete(rp.conceptNoteRef);
+                    await supabaseClient.from('concept_notes').update({
+                        currentApprover: 'procurement',
+                        financeRejectionReason: rp.rejectionReason || 'Rejected by Finance',
+                        financeRejectedAt: rp.rejectedDate || new Date().toISOString(),
+                        financeRejectedBy: rp.rejectedBy || 'Finance'
+                    }).eq('refNumber', rp.conceptNoteRef).is('financeRejectionReason', null);
+                }
+            }
+        } catch (e) { console.warn('Rejected-payment repair skipped', e); }
+    }
+    const [{ data: finRejected }, { data: allProcCNs }] = await Promise.all([
+        supabaseClient.from('concept_notes').select(cnCols)
+            .eq('currentApprover', 'procurement').not('financeRejectionReason', 'is', null),
+        supabaseClient.from('concept_notes').select(cnCols)
+            .eq('currentApprover', 'procurement').in('status', ['pending', 'approved', 'variance_rejected'])
+    ]);
     (finRejected || []).forEach(c => {
-        if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
-            this.data.conceptNotes.push(c);
-        else {
-            // Update existing cache entry so filter sees latest financeRejectionReason
-            const idx = this.data.conceptNotes.findIndex(x => x.refNumber === c.refNumber);
-            if (idx !== -1) this.data.conceptNotes[idx] = c;
-        }
+        const idx = this.data.conceptNotes.findIndex(x => x.refNumber === c.refNumber);
+        if (idx === -1) this.data.conceptNotes.push(c);
+        else this.data.conceptNotes[idx] = { ...this.data.conceptNotes[idx], ...c };
     });
-
-    // Step 3: Also catch anything routed to procurement that isn't pending
-    const { data: allProcCNs } = await supabaseClient
-        .from('concept_notes')
-        .select('*')
-        .eq('currentApprover', 'procurement')
-        .in('status', ['pending', 'approved', 'variance_rejected']);
-    
     (allProcCNs || []).forEach(c => {
         if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
             this.data.conceptNotes.push(c);
@@ -4575,6 +4567,15 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
             // Vendor payments Finance cannot move because a vendor has not signed the GRR.
             // Procurement no longer sees these notes in its queue, so this is where it
             // goes back to collect the signatures (fms_grr_vendor_gate.sql).
+            // Same answer for 60 s: the dashboard alert and the signature box both ask
+            _rpcCached(name) {
+                this._rpcMemo = this._rpcMemo || {};
+                const m = this._rpcMemo[name];
+                if (m && Date.now() - m.t < 60000) return m.p;
+                const p = Promise.resolve(supabaseClient.rpc(name)).then(r => r, e => { delete this._rpcMemo[name]; return { data: [], error: e }; });
+                this._rpcMemo[name] = { t: Date.now(), p };
+                return p;
+            },
             _grrSignBox() {
                 if (!['procurement','finance','finance_manager','GrantsCompliance','budgetOwner','ed'].includes(this.getUserRole())) return '';
                 setTimeout(() => this._loadGrrSign(), 0);
@@ -4584,8 +4585,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const els = document.querySelectorAll('.grrSignBox'); if (!els.length) return;
                 try {
                     const [{ data, error }, out] = await Promise.all([
-                        supabaseClient.rpc('vendor_payments_awaiting_grr'),
-                        supabaseClient.rpc('grr_signatures_outstanding').then(r => r, () => ({ data: [] }))
+                        this._rpcCached('vendor_payments_awaiting_grr'),
+                        this._rpcCached('grr_signatures_outstanding')
                     ]);
                     const rows = error ? [] : (data || []);
                     const paidRows = (out && !out.error && out.data) || [];
