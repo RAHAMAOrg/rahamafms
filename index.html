@@ -9462,7 +9462,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             _qty(n) { return Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }); },
             _srStatus(s) {
                 return ({ pending: ['Waiting for approval', '#FFF8E1', '#B45309'], approved: ['Approved: with Procurement', '#E3F2FD', '#1B4D8E'], released: ['Released: confirm receipt', '#EDE7F6', '#4527A0'],
-                    received: ['Received', '#E8F5E9', '#1B5E20'], rejected: ['Declined', '#FFEBEE', '#B91C1C'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] })[s] || [s, '#F3F4F6', '#6B7280'];
+                    received: ['Received: upload evidence of use', '#FFF4E5', '#92400E'], evidence_review: ['Evidence sent: being checked', '#E3F2FD', '#1B4D8E'],
+                    closed: ['Closed', '#E8F5E9', '#1B5E20'], rejected: ['Declined', '#FFEBEE', '#B91C1C'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] })[s] || [s, '#F3F4F6', '#6B7280'];
             },
             _srChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309'] : this._srStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
             // pending → approver (Budget Owner, or the ED for her own); approved → Procurement; released → the person who asked
@@ -9470,7 +9471,39 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const role = this.getUserRole();
                 return (r.status === 'pending' && role === r.approver && r.requested_by !== this.currentUser)
                     || (r.status === 'approved' && role === 'procurement')
-                    || (r.status === 'released' && r.requested_by === this.currentUser);
+                    || (r.status === 'released' && r.requested_by === this.currentUser)
+                    || (r.status === 'received' && r.requested_by === this.currentUser)
+                    || (r.status === 'evidence_review' && role === r.approver && r.requested_by !== this.currentUser);
+            },
+            // Evidence of use: the staff member uploads; the approver accepts (closes) or sends back
+            uploadStoreEvidence(ref) {
+                const inp = document.createElement('input');
+                inp.type = 'file'; inp.accept = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
+                inp.onchange = async () => {
+                    const file = inp.files && inp.files[0]; if (!file) return;
+                    const note = prompt('Evidence of use for ' + ref + '\n\nWhat does this file show? (for example: attendance sheet, 25 participants, 12 Nov, Zango)', '');
+                    if (note === null) return;
+                    try {
+                        const up = await this.uploadFile(file, 'store-evidence');
+                        const { error } = await supabaseClient.rpc('submit_store_evidence', { p_ref: ref, p_url: up.url, p_name: up.fileName, p_note: note });
+                        if (error) throw error;
+                        await this._logAudit('store_requests', ref, 'store_evidence_submitted', up.fileName);
+                        alert('Evidence uploaded. It goes to the approver to check.');
+                        await this.renderStore(document.getElementById('mainContent'), 'requests');
+                    } catch (e) { alert('Could not upload the evidence: ' + (e.message || e)); }
+                };
+                inp.click();
+            },
+            async reviewStoreEvidence(ref, decision) {
+                let note = '';
+                if (decision === 'return') { note = prompt('What is missing or wrong in the evidence?', ''); if (note === null) return; if (!note.trim()) { alert('Say what is missing.'); return; } }
+                else if (!confirm('Accept the evidence and close ' + ref + '?')) return;
+                try {
+                    const { error } = await supabaseClient.rpc('review_store_evidence', { p_ref: ref, p_decision: decision, p_note: note });
+                    if (error) throw error;
+                    await this._logAudit('store_requests', ref, 'store_evidence_' + decision, note);
+                    await this.renderStore(document.getElementById('mainContent'), 'requests');
+                } catch (e) { alert('Could not save: ' + (e.message || e)); }
             },
             async _loadStore() {
                 const over = this._storeOverseer();
@@ -9495,8 +9528,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const role = this.getUserRole();
                 const waiting = S.reqs.filter(r => this._srWaitsForMe(r));
                 let body = '';
+                const owing = S.reqs.find(r => r.requested_by === this.currentUser && r.status === 'received');
                 if (tab === 'stock') {
-                    body = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                    body = `${owing ? `<div class="alert-badge warning" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"><span>📎 Upload evidence of use for <b>${escHtml(owing.ref)}</b> (for example the attendance sheet) before asking the store for more items.${owing.evidence_return_note ? ' It was sent back: "' + escHtml(owing.evidence_return_note) + '"' : ''}</span><button class="btn btn-primary" style="font-size:12px;" onclick="app.uploadStoreEvidence('${escHtml(owing.ref)}')">Upload evidence</button></div>` : ''}
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
                         <select onchange="app._storeProject=this.value;app.renderStore(document.getElementById('mainContent'),'stock')" style="padding:8px;border:1px solid #ccc;border-radius:8px;font-size:13px;">
                         <option value="">All projects</option>${projects.map(p => `<option value="${escHtml(p)}" ${p === proj ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}</select></div>
                         <div class="table-container"><table><thead><tr><th>Project</th><th>Item</th><th>Category</th><th style="text-align:right;">In store</th>${over ? '<th style="text-align:right;">Received</th><th style="text-align:right;">Released</th><th style="text-align:right;">Corrections</th>' : ''}<th style="text-align:right;">Asked for</th><th style="text-align:right;">Can be requested</th><th></th></tr></thead><tbody>
@@ -9506,7 +9541,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                             ${over ? `<td style="text-align:right;">${this._qty(x.received)}</td><td style="text-align:right;">${this._qty(x.released)}</td><td style="text-align:right;color:${Number(x.adjusted) ? '#B45309' : 'inherit'};">${Number(x.adjusted) ? (Number(x.adjusted) > 0 ? '+' : '') + this._qty(x.adjusted) : '—'}</td>` : ''}
                             <td style="text-align:right;">${Number(x.pending_requests) ? this._qty(x.pending_requests) : '—'}</td>
                             <td style="text-align:right;font-weight:600;">${this._qty(x.available)}</td>
-                            <td style="white-space:nowrap;">${Number(x.available) > 0 ? `<button class="action-btn approve" onclick="app.openStoreRequestForm(${x.item_id})">Ask for items</button>` : ''}
+                            <td style="white-space:nowrap;">${Number(x.available) > 0 && !owing ? `<button class="action-btn approve" onclick="app.openStoreRequestForm(${x.item_id})">Ask for items</button>` : ''}
                                 ${isProc ? `<button class="action-btn view" onclick="app.storeAdjust(${x.item_id})">Correct count</button><button class="action-btn view" onclick="app.storeReorder(${x.item_id})">Reorder level</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="${over ? 10 : 7}">Nothing in the store yet.</td></tr>`}
                         </tbody></table></div>`;
                 } else if (tab === 'requests') {
@@ -9522,6 +9557,11 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                 <button class="action-btn approve" onclick="app.decideStoreRequest('${escHtml(r.ref)}','release',${r.id})">Release</button><button class="action-btn reject" onclick="app.decideStoreRequest('${escHtml(r.ref)}','reject')">Decline</button>` : ''}
                                 ${r.requested_by === this.currentUser && r.status === 'released' ? `<button class="action-btn approve" onclick="app.confirmStoreReceipt('${escHtml(r.ref)}')">✓ I received them</button>` : ''}
                                 ${r.requested_by === this.currentUser && ['pending', 'approved'].includes(r.status) ? `<button class="action-btn view" onclick="app.decideStoreRequest('${escHtml(r.ref)}','cancel')">Cancel</button>` : ''}
+                                ${r.requested_by === this.currentUser && r.status === 'received' ? `<button class="action-btn approve" onclick="app.uploadStoreEvidence('${escHtml(r.ref)}')">📎 Upload evidence of use</button>` : ''}
+                                ${r.evidence_return_note && r.status === 'received' ? `<div style="font-size:11px;color:#B91C1C;max-width:240px;white-space:normal;">Sent back by ${escHtml(r.evidence_reviewed_by || '')}: "${escHtml(r.evidence_return_note)}"</div>` : ''}
+                                ${r.evidence_url ? `<button class="action-btn view" onclick="app.downloadFile('${escHtml(r.evidence_url)}','${escHtml(r.evidence_name || 'evidence')}')">📄 Evidence</button>` : ''}
+                                ${r.status === 'evidence_review' && role === r.approver && r.requested_by !== this.currentUser ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">✓ Accept and close</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
+                                ${r.evidence_note ? `<div style="font-size:11px;color:#555;max-width:240px;white-space:normal;">${escHtml(r.evidence_note)}</div>` : ''}
                                 ${r.approved_by ? `<div style="font-size:10px;color:#777;">Approved by ${escHtml(r.approved_by)}</div>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8">No requests yet.</td></tr>'}
                         </tbody></table></div>`;
                 } else {
@@ -9691,6 +9731,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const { error } = await supabaseClient.rpc('confirm_store_receipt', { p_ref: ref });
                     if (error) throw error;
                     await this._logAudit('store_requests', ref, 'store_received_by_staff', '');
+                    alert('Receipt confirmed. After the activity, upload evidence of use (for example the attendance sheet) on this request. Until you do, you cannot ask the store for more items.');
                     await this.renderStore(document.getElementById('mainContent'), 'requests');
                 } catch (e) { alert('Could not confirm: ' + (e.message || e)); }
             },
