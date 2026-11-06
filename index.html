@@ -3675,15 +3675,27 @@
                             <div class="file-upload-area" id="retirementUploadArea" onclick="document.getElementById('retirementFile').click()"><p>📎 Click to upload receipt(s)</p><span class="form-hint">Proof of payment — PDF, JPG, PNG — Max 5MB</span></div>
                             <input type="file" id="retirementFile" accept=".pdf,.jpg,.jpeg,.png" required style="display:none" onchange="app.handleRetirementUpload(this)">
                         </div>
-                        <div class="form-group">
+                        ${userRole === 'procurement' ? `<div class="form-group">
                             <label>Upload Invoice</label>
                             <div class="file-upload-area" id="invoiceUploadArea" onclick="document.getElementById('invoiceFile').click()"><p>📄 Click to upload vendor invoice</p><span class="form-hint">Vendor's invoice for goods/services — PDF, JPG, PNG — Max 5MB</span></div>
                             <input type="file" id="invoiceFile" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="app.handleInvoiceUpload(this)">
-                        </div>
+                        </div>` : `<div class="form-group">
+                            <label>Upload Activity Report <span class="required">*</span></label>
+                            <div class="file-upload-area" id="activityReportUploadArea" onclick="document.getElementById('activityReportFile').click()"><p>📝 Click to upload the activity report</p><span class="form-hint">Report of the activity this advance paid for — PDF, Word, JPG, PNG — Max 5MB</span></div>
+                            <input type="file" id="activityReportFile" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="display:none" onchange="app.handleActivityReportUpload(this)">
+                        </div>`}
                         <div class="btn-group full-width"><button type="submit" class="btn btn-primary" id="submitRetirementBtn">Submit Retirement</button><button type="button" class="btn btn-secondary" onclick="app.showView('dashboard')">Cancel</button></div>
                     </form>`}`;
             },
             
+            handleActivityReportUpload(input) {
+                const area = document.getElementById('activityReportUploadArea');
+                const file = input.files[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) { alert('File too large — max 5MB'); input.value = ''; return; }
+                area.classList.add('has-file');
+                area.innerHTML = `<p>✓ ${escHtml(file.name)}</p><span class="form-hint">${(file.size/1024).toFixed(1)} KB — activity report ready to upload</span>`;
+            },
             handleInvoiceUpload(input) {
                 const area = document.getElementById('invoiceUploadArea');
                 const file = input.files[0];
@@ -3743,6 +3755,7 @@
                                 <div style="font-size: 11px; font-weight: 700; color: #059669; text-transform: uppercase; margin-bottom: 2px;">Activity</div>
                                 <div style="font-size: 14px; font-weight: 700; color: #047857;">${escHtml(cn ? cn.activityTitle : (payment.conceptNoteRef || '—'))}</div>
                                 <div style="font-size: 11px; color: #6B7280; margin-top: 2px;">ToR: ${payment.conceptNoteRef || '—'}</div>
+                                ${payment.conceptNoteRef ? `<button type="button" class="btn btn-secondary" style="margin-top:6px;font-size:12px;padding:5px 12px;" onclick="app.viewConceptNoteDetails('${escHtml(payment.conceptNoteRef)}')">📄 View concept note</button>` : ''}
                             </div>
                             <div>
                                 <div style="font-size: 11px; font-weight: 700; color: #059669; text-transform: uppercase; margin-bottom: 2px;">${isProcurement ? 'Estimated Budget' : 'Advance Given'}</div>
@@ -3885,7 +3898,10 @@
                 }
                 const file = document.getElementById('retirementFile').files[0];
                 const invoiceFile = document.getElementById('invoiceFile')?.files[0];
-                let receiptFileData = null, invoiceFileData = null;
+                const actReportInput = document.getElementById('activityReportFile');
+                const actReportFile = actReportInput?.files[0];
+                if (actReportInput && !actReportFile) { alert('Upload the activity report. It is required for every retirement.'); return; }
+                let receiptFileData = null, invoiceFileData = null, actReportData = null;
                 // Lock the button BEFORE uploading. Without this, a second tap on a
                 // slow connection re-uploads the same files and creates duplicates.
                 const retBtn = document.getElementById('submitRetirementBtn');
@@ -3896,6 +3912,7 @@
                 try {
                     if (file) receiptFileData = await this.uploadFile(file, 'retirements');
                     if (invoiceFile) invoiceFileData = await this.uploadFile(invoiceFile, 'retirements');
+                    if (actReportFile) actReportData = await this.uploadFile(actReportFile, 'retirements');
                 } catch (upErr) {
                     if (retBtn) { retBtn.disabled = false; retBtn.textContent = 'Submit Retirement'; }
                     alert('Error uploading file: ' + upErr.message);
@@ -3914,6 +3931,7 @@
         receiptFileName: receiptFileData?.fileName,
         invoiceFileUrl: invoiceFileData?.url,
         invoiceFileName: invoiceFileData?.fileName,
+        ...(actReportData ? { activityReportFileUrl: actReportData.url, activityReportFileName: actReportData.fileName } : {}),
         status: 'pending',
         submittedDate: new Date().toISOString(),
         rejectionReason: null,
@@ -4139,8 +4157,22 @@ if (role === 'procurement') {
                         }
                     }
                     if (role === 'procurement') {
-                        const { data: completed } = await supabaseClient.from('concept_notes').select(cnCols).eq('approvedBy', this.currentUser).not('procurementComplete', 'is', null).order('procurementComplete', { ascending: false }).limit(50);
-                        historyCNs = completed || [];
+                        // Notes Procurement worked on: POs and GRRs they signed, and notes they returned or referred.
+                        // (The old query looked for notes "approved by" Procurement, which never happens.)
+                        const me = this.currentUser;
+                        const [sigRes, retRes, refRes] = await Promise.all([
+                            supabaseClient.from('document_signatures').select('relatedRef,signedAt').eq('signerName', me)
+                                .in('pageContext', ['procurement_po', 'procurement_received']).order('signedAt', { ascending: false }).limit(400),
+                            supabaseClient.from('concept_notes').select(cnCols).eq('returnedBy', me).order('returnedAt', { ascending: false }).limit(50).then(r => r, () => ({ data: [] })),
+                            supabaseClient.from('concept_notes').select(cnCols).eq('referredBy', me).order('referredAt', { ascending: false }).limit(50).then(r => r, () => ({ data: [] }))
+                        ]);
+                        const refs = [...new Set((sigRes.data || []).map(x => x.relatedRef).filter(r => r && String(r).startsWith('CN')))].slice(0, 150);
+                        let signed = [];
+                        if (refs.length) { const { data } = await supabaseClient.from('concept_notes').select(cnCols).in('refNumber', refs); signed = data || []; }
+                        const seenP = new Set();
+                        [...signed, ...(retRes.data || []), ...(refRes.data || [])].forEach(cn => { if (!seenP.has(cn.refNumber)) { seenP.add(cn.refNumber); historyCNs.push(cn); } });
+                        const lastP = cn => new Date(cn.procurementComplete || cn.grrGeneratedAt || cn.poGeneratedAt || cn.returnedAt || cn.referredAt || cn.submittedDate || 0);
+                        historyCNs.sort((a, b) => lastP(b) - lastP(a));
                     }
                     if (['finance','finance_manager','GrantsCompliance'].includes(role)) {
                         const { data: processedPay } = await supabaseClient.from('payments').select(payCols).eq('processedBy', this.currentUser).order('paidDate', { ascending: false }).limit(50);
@@ -4231,8 +4263,14 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     ${securityQueue.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">🛡️ Travel Awaiting Security Clearance (${securityQueue.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Destination</th><th>Dates</th><th>Travellers</th><th>Actions</th></tr></thead><tbody>${securityQueue.map(cn => { let t={}; try { if (cn.travelDetailsJson) t = JSON.parse(cn.travelDetailsJson); } catch(e){} return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${escHtml(t.destination||'—')}</td><td style="font-size:12px;">${t.departDate||'—'} → ${t.returnDate||'—'}</td><td style="text-align:center;">${t.travellers||'—'}</td><td><button class="action-btn approve" onclick="app.showSecurityReview('${cn.refNumber}')" style="min-width:150px;">🛡️ Review &amp; Clear</button></td></tr>`; }).join('')}</tbody></table></div>` : ''}
                     ${pendingConceptNotes.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Concept Notes (${pendingConceptNotes.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingConceptNotes.map(cn => `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}${cn.referredReason && cn.currentApprover !== 'procurement' ? '<div style="margin-top:6px;background:#FFF3E0;border:1px solid #FFB74D;border-radius:6px;padding:6px 8px;font-size:11px;color:#E65100;"><b>Referred back by Procurement</b> (' + escHtml(cn.referredBy || '') + '): ' + escHtml(cn.referredReason) + '</div>' : ''}${cn.returnCount && cn.currentApprover !== 'procurement' ? '<div style="margin-top:6px;background:#EFF6FF;border:1px solid #93C5FD;border-radius:6px;padding:6px 8px;font-size:11px;color:#1E40AF;"><b>Corrected and resubmitted' + (cn.returnCount > 1 ? ' (' + cn.returnCount + 'x)' : '') + '</b> after Procurement returned it' + (cn.returnReason ? ': "' + escHtml(cn.returnReason) + '"' : '') + '. Check the changes, then approve to send it back to Procurement.</div>' : ''}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td>${new Date(cn.submittedDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:120px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Details</button><br>${role === 'budgetOwner' && cn.staffName !== this.currentUser ? `${app._renderBOApproveButtons(cn)}` : role === 'ed' ? `<button class="action-btn approve" onclick="app.approveConceptNote('${cn.refNumber}', 'ed_approve')">✓ ${cn.boPreApprovedAt ? 'Counter-Sign & Approve' : 'Approve'}${cn.requiresProcurement === 'yes' ? ' → Procurement' : ''}</button>${cn.boPreApprovedAt ? `<div style="font-size:11px;color:#059669;margin-top:4px;">✓ BO pre-approved on ${new Date(cn.boPreApprovedAt).toLocaleDateString('en-NG')}</div>` : ''}` : role === 'procurement' ? app._renderProcurementActions(cn) + app._procReturnButtons(cn) : ''}${role !== 'procurement' ? '<button class="action-btn reject" onclick="app.rejectConceptNote(\'' + cn.refNumber + '\')">✗ Reject</button>' : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}
                     ${pendingPayments.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Payment Requests (${pendingPayments.length})</h3><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Type</th><th>Justification</th><th>Requested</th><th>Actions</th></tr></thead><tbody>${pendingPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.staffName}</td><td>₦${p.amount.toLocaleString()}</td><td>${p.paymentMethod}</td><td style="max-width:260px;white-space:pre-wrap;font-size:12px;line-height:1.5;">${p.justification ? escHtml(p.justification) : '<span style="color:var(--text-muted);">— none given</span>'}</td><td>${new Date(p.requestDate).toLocaleDateString()}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📄 View Concept Note</button><br>${Number(p.beneficiaryCount) > 0 ? ((p.status === 'finance_approved' && app.getFinanceStage(app.currentUser) === 'authorizer') ? `<button class="action-btn" onclick="app.viewPaymentBeneficiaries('${p.refNumber}')">👥 Beneficiaries (${p.beneficiaryCount})</button><br>` : `<span style="font-size:11px;color:var(--text-muted);">🔒 ${p.beneficiaryCount} beneficiaries: authorizer only</span><br>`) : ''}${p.beneficiaryFileUrl ? ((p.status === 'finance_approved' && app.getFinanceStage(app.currentUser) === 'authorizer') ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')">📎 Download Beneficiaries</button><br>` : `<span style="font-size:11px;color:var(--text-muted);">🔒 Beneficiary list: authorizer only</span><br>`) : ''}${(() => { const lc = app.data.conceptNotes.find(c => c.refNumber === p.conceptNoteRef); return lc && lc.procurementInvoiceUrl ? `<button class="action-btn" onclick="app.downloadFile('${lc.procurementInvoiceUrl}','${lc.procurementInvoiceName||'invoice'}')" style="border-color:#0D47A1;color:#0D47A1;">🧾 Procurement Invoice</button><br>` : ''; })()}${app._renderFinancePaymentActions(p)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br>${app._renderFinanceRetirementActions(r)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-                    ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All concept notes you have previously approved, rejected, or forwarded</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : cn.boPreApprovedAt && cn.budgetOwnerApprovedBy === this.currentUser ? { label: 'Pre-approved → ED', date: cn.boPreApprovedAt, cls: 'status-pending' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
+                    ${pendingRetirements.length > 0 ? `<h3 style="margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Retirement Submissions (${pendingRetirements.length})</h3><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Payment Ref</th><th>Spent</th><th>Returned</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${pendingRetirements.map(r => `<tr><td>${r.refNumber}</td><td>${r.staffName}</td><td>${r.paymentRef}</td><td>₦${r.actualSpent.toLocaleString()}</td><td>₦${r.amountReturned.toLocaleString()}</td><td>${new Date(r.submittedDate).toLocaleDateString()}</td><td>${r.receiptFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.receiptFileUrl}', '${r.receiptFileName}')" style="min-width:150px;margin-bottom:8px;border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button><br>` : ''}${r.invoiceFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.invoiceFileUrl}', '${r.invoiceFileName}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button><br>` : ''}${r.activityReportFileUrl ? `<button class="action-btn" onclick="app.downloadFile('${r.activityReportFileUrl}', '${escHtml(r.activityReportFileName || 'activity-report')}')" style="min-width:150px;margin-bottom:8px;border-color:#047857;color:#047857;">📝 Activity Report</button><br>` : ''}<button class="action-btn" onclick="app.viewConceptNoteFromPayment('${r.paymentRef}')" style="min-width:150px;margin-bottom:8px;border-color:#7B1FA2;color:#7B1FA2;">📄 View Concept Note</button><br>${app._renderFinanceRetirementActions(r)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+                    ${historyCNs.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Concept Notes I Acted On</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">${role === 'procurement' ? 'Concept notes you raised a PO or GRR for, returned or referred' : 'All concept notes you have previously approved, rejected, or forwarded'}</p><div class="table-container"><table><thead><tr><th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th><th>Amount</th><th>Outcome</th><th>Date</th><th></th></tr></thead><tbody>${historyCNs.map(cn => { const outcome = role === 'procurement' ? (
+                        cn.returnedBy === this.currentUser && !cn.poNumber ? { label: 'Returned to staff', date: cn.returnedAt, cls: 'status-rejected' }
+                        : cn.referredBy === this.currentUser && !cn.poNumber ? { label: 'Referred to Budget Owner', date: cn.referredAt, cls: 'status-pending' }
+                        : cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' }
+                        : cn.grrNumber ? { label: 'Goods received (GRR)', date: cn.grrGeneratedAt || cn.poGeneratedAt, cls: 'status-approved' }
+                        : cn.poNumber ? { label: 'PO raised', date: cn.poGeneratedAt, cls: 'status-pending' }
+                        : { label: cn.status || '—', date: cn.submittedDate, cls: 'status-pending' }) : cn.rejectedBy === this.currentUser ? { label: 'Rejected', date: cn.rejectedDate, cls: 'status-rejected' } : cn.approvedBy === this.currentUser && cn.procurementComplete ? { label: 'Sent to Finance', date: cn.procurementComplete, cls: 'status-approved' } : cn.approvedBy === this.currentUser ? { label: 'Approved', date: cn.approvedDate, cls: 'status-approved' } : cn.boPreApprovedAt && cn.budgetOwnerApprovedBy === this.currentUser ? { label: 'Pre-approved → ED', date: cn.boPreApprovedAt, cls: 'status-pending' } : { label: 'Forwarded to ED', date: cn.forwardedToED, cls: 'status-pending' }; return `<tr><td>${cn.refNumber}</td><td>${cn.staffName}</td><td>${escHtml(cn.activityTitle)}</td><td>${cn.projectCode}</td><td>₦${cn.estimatedCost.toLocaleString()}</td><td><span class="status-badge ${outcome.cls}">${outcome.label}</span></td><td>${outcome.date ? new Date(outcome.date).toLocaleDateString() : '-'}</td><td><button class="action-btn" onclick="app.viewConceptNoteDetails('${cn.refNumber}')" style="min-width:100px;border-color:var(--primary);color:var(--primary);">📄 View</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
                     ${historyPayments.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Payments I Processed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All payments you have previously processed or rejected. You can review and download the dossier for any of these.</p><div class="table-container"><table><thead><tr><th>Payment Ref</th><th>CN Ref</th><th>Staff</th><th>Amount</th><th>Project</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyPayments.map(p => `<tr><td>${p.refNumber}</td><td>${p.conceptNoteRef||'—'}</td><td>${p.staffName}</td><td>₦${Number(p.amount).toLocaleString()}</td><td>${p.projectCode||'—'}</td><td><span class="status-badge ${p.status==='paid'?'status-approved':'status-rejected'}">${p.status==='paid'?'Processed':'Rejected'}</span></td><td>${p.status==='paid'?(p.paidDate?new Date(p.paidDate).toLocaleDateString():'-'):(p.rejectedDate?new Date(p.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${p.conceptNoteRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${p.conceptNoteRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${p.conceptNoteRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}${(p.status==='paid' && Number(p.beneficiaryCount) > 0) ? `<button class="action-btn" onclick="app.viewPaymentBeneficiaries('${p.refNumber}')" style="min-width:90px;">👥 Beneficiaries (${p.beneficiaryCount})</button>` : ''}${(p.status==='paid' && p.beneficiaryFileUrl) ? `<button class="action-btn" onclick="app.downloadFile('${p.beneficiaryFileUrl}', '${p.beneficiaryFileName}')" style="min-width:90px;">📎 Beneficiaries</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
                     ${historyRetirements.length > 0 ? `<div style="margin-top: 48px; border-top: 2px solid var(--border); padding-top: 32px;"><h3 style="margin-bottom: 6px; font-family: 'Plus Jakarta Sans', sans-serif;">📋 History — Retirements I Reviewed</h3><p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">All retirements you have previously approved or rejected.</p><div class="table-container" style="margin-bottom: 32px;"><table><thead><tr><th>Retirement Ref</th><th>Payment Ref</th><th>Staff</th><th>Amount Spent</th><th>Outcome</th><th>Date</th><th>Actions</th></tr></thead><tbody>${historyRetirements.map(r => { const linkedCN = app.data.conceptNotes.find(c => app.data.payments.find(p => p.refNumber===r.paymentRef && p.conceptNoteRef===c.refNumber)); const cnRef = linkedCN?.refNumber; return `<tr><td>${r.refNumber}</td><td>${r.paymentRef}</td><td>${r.staffName}</td><td>₦${Number(r.actualSpent||0).toLocaleString()}</td><td><span class="status-badge ${r.status==='approved'?'status-approved':'status-rejected'}">${r.status==='approved'?'Approved':'Rejected'}</span></td><td>${r.status==='approved'?(r.approvedDate?new Date(r.approvedDate).toLocaleDateString():'-'):(r.rejectedDate?new Date(r.rejectedDate).toLocaleDateString():'-')}</td><td style="display:flex;flex-direction:column;gap:6px;">${cnRef?`<button class="action-btn" onclick="app.viewConceptNoteDetails('${cnRef}')" style="min-width:90px;border-color:var(--primary);color:var(--primary);">📄 View CN</button><button class="action-btn" onclick="app.downloadConceptNoteFile('${cnRef}')" style="min-width:90px;border-color:#7B1FA2;color:#7B1FA2;">⬇ Dossier</button>`:'—'}</td></tr>`; }).join('')}</tbody></table></div></div>` : ''}`;
 
@@ -4452,6 +4490,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 (this.data.retirements || []).filter(r => payRefs.includes(r.paymentRef) && this._financeStageForCurrentStatus(r.status) === myStage).forEach(r => {
                     let docs = '';
                     if (r.receiptFileUrl) docs += '<button class="action-btn" onclick="app.downloadFile(\'' + r.receiptFileUrl + '\', \'' + (r.receiptFileName || 'receipt') + '\')" style="border-color:var(--primary);color:var(--primary);">📎 Download Receipt</button>';
+                    if (r.activityReportFileUrl) docs += '<button class="action-btn" onclick="app.downloadFile(\'' + r.activityReportFileUrl + '\', \'' + (r.activityReportFileName || 'activity-report') + '\')" style="border-color:#047857;color:#047857;">📝 Activity Report</button>';
                     if (r.invoiceFileUrl) docs += '<button class="action-btn" onclick="app.downloadFile(\'' + r.invoiceFileUrl + '\', \'' + (r.invoiceFileName || 'invoice') + '\')" style="border-color:#7B1FA2;color:#7B1FA2;">🧾 Download Invoice</button>';
                     parts.push({ key: 'ret:' + r.refNumber,
                         t: '<b>Retirement ' + r.refNumber + '</b> · ' + escHtml(r.staffName || '') + ' · payment ' + r.paymentRef + ' · spent <b>' + money(r.actualSpent) + '</b> · returned ' + money(r.amountReturned)
@@ -6262,17 +6301,18 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         const payRefs = (payResp.data || []).map(p => p.refNumber);
                         if (!payRefs.length) return;
                         const retResp = await supabaseClient.from('retirements')
-                            .select('refNumber,receiptFileUrl,receiptFileName,invoiceFileUrl,invoiceFileName')
+                            .select('*')
                             .in('paymentRef', payRefs);
                         const rets = retResp.data || [];
                         const el = document.getElementById('cnLinkedDocs_' + cn.refNumber);
-                        if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl)) return;
+                        if (!el || !rets.some(r => r.receiptFileUrl || r.invoiceFileUrl || r.activityReportFileUrl)) return;
                         el.style.display = 'block';
                         el.innerHTML = '<div class="form-group full-width" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:0;">' +
                             '<label style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:14px;display:block;">🧾 Retirement Documents</label>' +
                             '<div style="display:flex;flex-wrap:wrap;gap:10px;">' +
                             rets.map(function(r) {
                                 return (r.receiptFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.receiptFileUrl + '\',\'' + (r.receiptFileName || 'receipt') + '\')">📎 Receipt (' + r.refNumber + ')</button> ' : '') +
+                                       (r.activityReportFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.activityReportFileUrl + '\',\'' + (r.activityReportFileName || 'activity-report') + '\')">📝 Activity Report (' + r.refNumber + ')</button> ' : '') +
                                        (r.invoiceFileUrl ? '<button type="button" class="btn btn-secondary" onclick="app.downloadFile(\'' + r.invoiceFileUrl + '\',\'' + (r.invoiceFileName || 'invoice') + '\')">🧾 Invoice (' + r.refNumber + ')</button> ' : '');
                             }).join('') +
                             '</div></div>';
@@ -7386,6 +7426,32 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 window.URL.revokeObjectURL(url);
             },
 
+            // Budget lines as a table for the dossier: "n. [category] (BL code) item: ₦u × q qty × f freq = ₦t"
+            _dossierBudgetTable(cn) {
+                const text = String(cn.budgetBreakdown || '');
+                const num = v => parseFloat(String(v || '0').replace(/,/g, '')) || 0;
+                const money = v => '₦' + Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+                const RE = /^\s*\d+\.\s*(?:\[([^\]]+)\]\s*)?(?:\(([^)]+)\)\s*)?(.+?):\s*₦([\d,.]+)\s*×\s*([\d,.]+)(?:\s*qty)?(?:\s*×\s*([\d,.]+)(?:\s*freq)?)?\s*=\s*₦([\d,.]+)/;
+                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                const rows = lines.map(l => l.match(RE));
+                if (!rows.some(Boolean)) return `<pre style="margin-top:6px;font-family:inherit;font-size:12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:6px;padding:12px 14px;white-space:pre-wrap;color:#374151;">${escHtml(text)}</pre>`;
+                const hasCat = rows.some(m => m && m[1]), hasCode = rows.some(m => m && m[2]);
+                let total = 0, n = 0;
+                const body = lines.map((l, i) => {
+                    const m = rows[i];
+                    if (!m) return `<tr><td></td><td colspan="${5 + hasCat + hasCode}" style="color:#555;">${escHtml(l)}</td><td></td></tr>`;
+                    const t = num(m[7]); total += t; n++;
+                    return `<tr><td>${n}</td>${hasCat ? `<td>${escHtml(m[1] || '')}</td>` : ''}${hasCode ? `<td>${escHtml(m[2] || '')}</td>` : ''}<td>${escHtml(m[3])}</td>
+                        <td style="text-align:right;">${money(num(m[4]))}</td><td style="text-align:right;">${num(m[5]).toLocaleString()}</td><td style="text-align:right;">${num(m[6] || 1).toLocaleString()}</td><td style="text-align:right;font-weight:600;">${money(t)}</td></tr>`;
+                }).join('');
+                const approved = Number(cn.estimatedCost || 0);
+                return `<table style="margin-top:6px;">
+                    <thead><tr><th>#</th>${hasCat ? '<th>Category</th>' : ''}${hasCode ? '<th>Budget line</th>' : ''}<th>Item</th><th style="text-align:right;">Unit cost</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Freq.</th><th style="text-align:right;">Total</th></tr></thead>
+                    <tbody>${body}
+                    <tr><td colspan="${5 + hasCat + hasCode}" style="text-align:right;font-weight:700;background:#E8F5E9;">Total budget</td><td style="text-align:right;font-weight:700;background:#E8F5E9;">${money(total)}</td></tr>
+                    ${approved && Math.abs(approved - total) > 0.5 ? `<tr><td colspan="${5 + hasCat + hasCode}" style="text-align:right;color:#555;">Approved amount on the concept note</td><td style="text-align:right;font-weight:600;">${money(approved)}</td></tr>` : ''}
+                    </tbody></table>`;
+            },
             async downloadConceptNoteFile(refNumber) {
                 const { data: cnArr } = await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber);
                 const cn = cnArr && cnArr[0];
@@ -7635,21 +7701,18 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 </div>
                 ${_vgs.unattributed.length && _vgs.rows.some(r => !r.sig && !r.online && !r.na && !r.dup) ? '<div style="margin-top:8px;font-size:12px;color:#B45309;"><b>Not linked to any vendor yet:</b> ' + _vgs.unattributed.map(x => escHtml(x.signerName) + ' signed the combined GRR on ' + fmtD(x.signedAt)).join('; ') + '. Procurement, the Finance Manager, the Budget Owner or the ED links each signature to its vendor on the concept note page.</div>' : ''}${this._onlineReceiptsHtml(cn, true)}` : '';
 
-                const payRows = payments.map(p => `<tr>
-                    <td>${p.refNumber}</td><td>${p.staffName}</td>
-                    <td style="font-weight:600;color:#059669;">${money(p.amount)}</td>
-                    <td>${p.paymentMethod||'—'}</td>
-                    <td>${p.accountName||'—'}</td>
-                    <td>${p.accountNumber||'—'}${p.bankName?' · '+p.bankName:''}</td>
-                    <td><span style="background:${p.status==='paid'?'#E3F2FD':'#FFF3E0'};color:${p.status==='paid'?'#0D47A1':'#E65100'};padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">${p.status.toUpperCase()}</span></td>
-                    <td>${fmtD(p.requestDate)}</td>
-                    <td>${p.reviewedBy||'—'}${p.reviewedAt?'<br><span style="font-size:10px;color:#777;">'+fmtD(p.reviewedAt)+'</span>':''}</td>
-                    <td>${p.financeApprovedBy||'—'}${p.financeApprovedAt?'<br><span style="font-size:10px;color:#777;">'+fmtD(p.financeApprovedAt)+'</span>':''}</td>
-                    <td style="font-weight:600;">${p.processedBy||'—'}${p.paidDate?'<br><span style="font-size:10px;color:#777;">'+fmtD(p.paidDate)+'</span>':''}</td>
-                    <td>${p.bankReconciled ? '<span style="color:#1B5E20;font-weight:600;">✓ Reconciled</span>' + (p.reconciledBy?'<br><span style="font-size:10px;color:#777;">'+p.reconciledBy+'</span>':'') : '<span style="color:#999;">Pending</span>'}</td>
-                    <td style="max-width:220px;white-space:pre-wrap;font-size:11px;">${escHtml(p.justification||'—')}</td>
-                    <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${escHtml(p.rejectionReason||'—')}${p.rejectedBy?'<br><span style="font-size:10px;color:#777;">by '+p.rejectedBy+(p.rejectedDate?' — '+fmtD(p.rejectedDate):'')+'</span>':''}</td>
-                </tr>`).join('');
+                // One record block per payment (a wide table did not fit an A4 page)
+                const kv = (pairs) => pairs.map(([k, v], n) => (n % 2 === 0 ? '<tr>' : '') + `<td class="k">${k}</td><td>${v}</td>` + (n % 2 === 1 || n === pairs.length - 1 ? (n % 2 === 0 ? '<td class="k"></td><td></td></tr>' : '</tr>') : '')).join('');
+                const who = (n, d) => (n || '—') + (d ? ' <span style="font-size:10px;color:#777;">' + fmtD(d) + '</span>' : '');
+                const payRows = payments.map(p => `<table class="rec">
+                    <tr><th colspan="4">${p.refNumber} &nbsp;·&nbsp; ${money(p.amount)} &nbsp;<span style="background:${p.status==='paid'?'#E3F2FD':'#FFF3E0'};color:${p.status==='paid'?'#0D47A1':'#E65100'};padding:1px 8px;border-radius:8px;font-size:10px;">${(p.status||'').toUpperCase()}</span></th></tr>
+                    ${kv([['Staff', escHtml(p.staffName||'—')], ['Requested', fmtD(p.requestDate)],
+                          ['Method', escHtml(p.paymentMethod||'—')], ['Account', escHtml(p.accountName||'—') + '<br>' + escHtml(p.accountNumber||'') + (p.bankName ? ' · ' + escHtml(p.bankName) : '')],
+                          ['Reviewed by', who(p.reviewedBy, p.reviewedAt)], ['Approved by', who(p.financeApprovedBy, p.financeApprovedAt)],
+                          ['Authorised / paid by', who(p.processedBy, p.paidDate)], ['Bank reconciliation', p.bankReconciled ? '<span style="color:#1B5E20;font-weight:600;">✓ Reconciled</span>' + (p.reconciledBy ? ' (' + escHtml(p.reconciledBy) + ')' : '') : '<span style="color:#999;">Pending</span>']])}
+                    ${p.justification ? `<tr><td class="k">Justification</td><td colspan="3" style="white-space:pre-wrap;">${escHtml(p.justification)}</td></tr>` : ''}
+                    ${p.rejectionReason ? `<tr><td class="k">Rejection reason</td><td colspan="3" style="color:#B71C1C;white-space:pre-wrap;">${escHtml(p.rejectionReason)}${p.rejectedBy ? ' — ' + escHtml(p.rejectedBy) + (p.rejectedDate ? ', ' + fmtD(p.rejectedDate) : '') : ''}</td></tr>` : ''}
+                </table>`).join('');
 
                 const benefHtml = benefPays.map(p => {
                     const rows = benefRows.filter(b => b.payment_ref === p.refNumber);
@@ -7673,24 +7736,19 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     const linkedPay = (payments||[]).find(p => p.refNumber === r.paymentRef);
                     const advanced  = linkedPay ? Number(linkedPay.amount||0) : null;
                     const varianceR = advanced != null ? advanced - Number(r.actualSpent||0) : null;
-                    return `<tr>
-                    <td>${r.refNumber}</td>
-                    <td>${r.paymentRef||'—'}</td>
-                    <td>${r.staffName}</td>
-                    <td>${advanced != null ? money(advanced) : '—'}</td>
-                    <td style="font-weight:600;">${money(r.actualSpent)}</td>
-                    <td>${money(r.amountReturned)}</td>
-                    <td style="font-weight:700;color:${varianceR==null?'#111':varianceR>0?'#1B5E20':varianceR<0?'#B71C1C':'#777'};">${varianceR==null?'—':(varianceR>=0?'+':'-')+money(Math.abs(varianceR)).replace('₦','₦')}</td>
-                    <td style="max-width:260px;white-space:pre-wrap;font-size:11px;line-height:1.5;">${escHtml(r.expenditureDetails||'—')}</td>
-                    <td><span style="background:${r.status==='approved'?'#E8F5E9':r.status==='rejected'?'#FFEBEE':'#FFF3E0'};color:${r.status==='approved'?'#1B5E20':r.status==='rejected'?'#B71C1C':'#E65100'};padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">${r.status.toUpperCase()}</span></td>
-                    <td>${fmtD(r.submittedDate)}</td>
-                    <td>${r.reviewedBy||'—'}${r.reviewedAt?'<br><span style="font-size:10px;color:#777;">'+fmtD(r.reviewedAt)+'</span>':''}</td>
-                    <td>${r.financeApprovedBy||'—'}${r.financeApproved?'<br><span style="font-size:10px;color:#777;">'+fmtD(r.financeApproved)+'</span>':''}</td>
-                    <td style="font-weight:600;">${r.approvedBy||r.rejectedBy||'—'}${(r.approvedDate||r.rejectedDate)?'<br><span style="font-size:10px;color:#777;">'+fmtD(r.approvedDate||r.rejectedDate)+'</span>':''}</td>
-                    <td style="color:#B71C1C;max-width:160px;white-space:pre-wrap;font-size:11px;">${escHtml(r.rejectionReason||'—')}</td>
-                    <td>${r.receiptFileUrl?`<a href="${r.receiptFileUrl}" target="_blank">📎 Receipt</a>`:'—'}</td>
-                    <td>${r.invoiceFileUrl?`<a href="${r.invoiceFileUrl}" target="_blank">🧾 Invoice</a>`:'—'}</td>
-                </tr>`; }).join('');
+                    const docs = [r.receiptFileUrl ? `<a href="${r.receiptFileUrl}" target="_blank">📎 Receipt</a>` : '',
+                                  r.activityReportFileUrl ? `<a href="${r.activityReportFileUrl}" target="_blank">📝 Activity report</a>` : '',
+                                  r.invoiceFileUrl ? `<a href="${r.invoiceFileUrl}" target="_blank">🧾 Invoice</a>` : ''].filter(Boolean).join(' &nbsp; ') || '—';
+                    return `<table class="rec">
+                    <tr><th colspan="4">${r.refNumber} &nbsp;·&nbsp; for payment ${r.paymentRef||'—'} &nbsp;<span style="background:${r.status==='approved'?'#E8F5E9':r.status==='rejected'?'#FFEBEE':'#FFF3E0'};color:${r.status==='approved'?'#1B5E20':r.status==='rejected'?'#B71C1C':'#E65100'};padding:1px 8px;border-radius:8px;font-size:10px;">${(r.status||'').toUpperCase()}</span></th></tr>
+                    ${kv([['Staff', escHtml(r.staffName||'—')], ['Submitted', fmtD(r.submittedDate)],
+                          ['Advanced', advanced != null ? money(advanced) : '—'], ['Spent', '<b>' + money(r.actualSpent) + '</b>'],
+                          ['Returned', money(r.amountReturned)], ['Variance', `<b style="color:${varianceR==null?'#111':varianceR>0?'#1B5E20':varianceR<0?'#B71C1C':'#777'};">${varianceR==null?'—':(varianceR>=0?'+':'-')+money(Math.abs(varianceR))}</b>`],
+                          ['Reviewed by', who(r.reviewedBy, r.reviewedAt)], ['Approved by', who(r.financeApprovedBy, r.financeApproved)],
+                          ['Authorised by', who(r.approvedBy || r.rejectedBy, r.approvedDate || r.rejectedDate)], ['Documents', docs]])}
+                    <tr><td class="k">Expenditure details</td><td colspan="3" style="white-space:pre-wrap;line-height:1.5;">${escHtml(r.expenditureDetails||'—')}</td></tr>
+                    ${r.rejectionReason ? `<tr><td class="k">Rejection reason</td><td colspan="3" style="color:#B71C1C;white-space:pre-wrap;">${escHtml(r.rejectionReason)}</td></tr>` : ''}
+                </table>`; }).join('');
 
                 // Finance signature images captured during the sequential retirement sign-off
                 const retSigBlocks = retirements.filter(r => r.approversignaturedata).map(r => `
@@ -7715,6 +7773,10 @@ table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px;}
 th{background:#285B3C;color:#fff;padding:8px 10px;text-align:left;}
 td{padding:7px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;}
 tr:nth-child(even) td{background:#f9f9f9;}
+table.rec{margin-top:10px;table-layout:fixed;page-break-inside:avoid;}
+table.rec th{font-size:12px;}
+table.rec td{background:#fff !important;font-size:12px;word-wrap:break-word;}
+table.rec td.k{width:17%;color:#555;font-size:11px;font-weight:700;background:#F4F7F5 !important;}
 @media print{body{margin:16px;} @page{size:A4 landscape;margin:10mm;} table{font-size:9px;page-break-inside:auto;} th,td{padding:4px 6px;} tr{page-break-inside:avoid;}}
 </style></head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #285B3C;padding-bottom:14px;margin-bottom:20px;">
@@ -7750,7 +7812,7 @@ ${cn.staffSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">Staff 
   <div><div class="lbl">Objective</div><div style="margin-top:4px;line-height:1.6;">${escHtml(cn.objective||'—')}</div></div>
   <div><div class="lbl">Description</div><div style="margin-top:4px;line-height:1.6;">${escHtml(cn.description||'—')}</div></div>
 </div>
-${cn.budgetBreakdown ? `<div style="margin:10px 0 16px;"><div class="lbl">Budget Breakdown</div><pre style="margin-top:6px;font-family:inherit;font-size:12px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:6px;padding:12px 14px;white-space:pre-wrap;color:#374151;">${cn.budgetBreakdown}</pre></div>` : ''}
+${cn.budgetBreakdown ? `<div style="margin:10px 0 16px;"><div class="lbl">Budget Breakdown</div>${this._dossierBudgetTable(cn)}</div>` : ''}
 ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E3F2FD;color:#0D47A1;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;">📎 Budget Doc: <a href="${cn.budgetDocUrl}" target="_blank">${cn.budgetDocName||'Download'}</a></span></div>` : ''}
 <h2>APPROVAL HISTORY</h2>
 <div class="grid3">
@@ -7768,10 +7830,10 @@ ${exceptionSection}
                 ${procSection}
 ${roundsHtml()}
 <h2>PAYMENT HISTORY</h2>
-${payments.length===0?'<p style="color:#999;">No payment records.</p>':`<table><thead><tr><th>Ref</th><th>Staff</th><th>Amount</th><th>Method</th><th>Account Name</th><th>Account/Bank</th><th>Status</th><th>Requested</th><th>Reviewed By</th><th>Approved By</th><th>Authorised / Paid By</th><th>Bank Reconciliation</th><th>Justification</th><th>Rejection Reason</th></tr></thead><tbody>${payRows}</tbody></table>`}
+${payments.length===0?'<p style="color:#999;">No payment records.</p>':payRows}
 ${benefPays.length ? '<h2>PAYMENT BENEFICIARIES</h2>' + benefHtml : ''}
 <h2>RETIREMENT HISTORY</h2>
-${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`<table><thead><tr><th>Ref</th><th>Payment Ref</th><th>Staff</th><th>Advanced</th><th>Spent</th><th>Returned</th><th>Variance</th><th>Expenditure Details</th><th>Status</th><th>Submitted</th><th>Reviewed By</th><th>Approved By</th><th>Authorised By</th><th>Rejection Reason</th><th>Receipt</th><th>Invoice</th></tr></thead><tbody>${retRows}</tbody></table>
+${retirements.length===0?'<p style="color:#999;">No retirement records.</p>':`${retRows}
 ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">Retirement Finance Signatures</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">${retSigBlocks}</div>` : ''}`}
 <div style="margin-top:40px;border-top:1px solid #e0e0e0;padding-top:12px;font-size:11px;color:#999;">
   RAHAMA Financial Management System &mdash; Dossier for ${cn.refNumber} &mdash; Confidential
