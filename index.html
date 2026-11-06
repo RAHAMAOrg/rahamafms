@@ -1051,6 +1051,8 @@
                                 } else {
                                     delete this.data.financeStages[r.name];
                                 }
+                                this.data.procStages = this.data.procStages || {};
+                                if (r.role === 'procurement' && r.procurement_stage) this.data.procStages[r.name] = r.procurement_stage; else delete this.data.procStages[r.name];
                                 if (r.is_security_officer) {
                                     if (!this.data.securityOfficers.includes(r.name)) this.data.securityOfficers.push(r.name);
                                 } else {
@@ -4035,6 +4037,7 @@ if (role === 'procurement') {
             }
         } catch (e) { console.warn('Rejected-payment repair skipped', e); }
     }
+    // (variance_rejected notes routed to Procurement are already in the second list)
     const [{ data: finRejected }, { data: allProcCNs }] = await Promise.all([
         supabaseClient.from('concept_notes').select(cnCols)
             .eq('currentApprover', 'procurement').not('financeRejectionReason', 'is', null),
@@ -4051,15 +4054,7 @@ if (role === 'procurement') {
             this.data.conceptNotes.push(c);
     });
 }
-                // Also fetch variance_rejected CNs for procurement
-                if (role === 'procurement') {
-                    const { data: vrej } = await supabaseClient.from('concept_notes').select(cnCols)
-                        .in('status', ['variance_rejected']).eq('currentApprover', 'procurement');
-                    (vrej || []).forEach(c => {
-                        if (!this.data.conceptNotes.find(x => x.refNumber === c.refNumber))
-                            this.data.conceptNotes.push(c);
-                    });
-                }
+
               const pendingConceptNotes = this.data.conceptNotes.filter(cn => {
     if (role !== 'procurement') {
         const isFinanceRejected = cn.financeRejectionReason && cn.status === 'pending' && cn.currentApprover === 'procurement';
@@ -9066,13 +9061,13 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     excess_review: ['Excess waiting for approval', '#FFF3E0', '#E65100'], completed: ['Completed: charge to send', '#E3F2FD', '#1B4D8E'], charged: ['Charged to Finance', '#F1F8E9', '#33691E'],
                     rejected: ['Not approved', '#FFEBEE', '#B91C1C'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] })[s] || [s, '#F3F4F6', '#6B7280'];
             },
-            _frChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'procurement' ? 'With Procurement' : r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309']
+            _frChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'procurement' ? 'With ' + this._procStepLabel(r.proc_reviewed_by) : r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309']
                     : s === 'excess_review' && r ? [r.excess_approver === 'ed' ? 'Excess with ED (pre-signed by BO)' : 'Excess with Budget Owner', '#FFF3E0', '#E65100'] : this._frStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
             _dt(v) { return v ? new Date(v).toLocaleString('en-NG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; },
             // What is waiting for the person logged in
             _frWaitsForMe(r) {
                 const role = this.getUserRole();
-                if (r.status === 'pending') return role === r.approver && r.requested_by !== this.currentUser;
+                if (r.status === 'pending') return r.requested_by !== this.currentUser && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver);
                 if (r.status === 'excess_review') return role === r.excess_approver && r.requested_by !== this.currentUser;
                 if (role === 'procurement') return ['approved', 'returned', 'completed'].includes(r.status);
                 return false;
@@ -9216,8 +9211,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 let actions = '';
                 const { data: tlogs } = await supabaseClient.from('fleet_trip_logs').select('stage,reading,photo,logged_by,logged_at').eq('request_id', r.id).order('logged_at');
                 const logs = tlogs || [];
-                if (r.status === 'pending' && role === r.approver && !mine) actions += panel('Your decision', `<div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="app.decideVehicleRequest('${r.ref}','approve')">✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})</button>
+                const procReview = r.approver === 'procurement' && this._procTwoStep() && !r.proc_reviewed_by;
+                if (r.status === 'pending' && r.proc_reviewed_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B4D8E;">Reviewed by <b>${escHtml(r.proc_reviewed_by)}</b>${r.proc_review_note ? ': "' + escHtml(r.proc_review_note) + '"' : ''}${r.status === 'pending' ? ' · waiting for ' + escHtml(this._procNames('approver')) : ''}</div>`;
+                if (r.status === 'pending' && !mine && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver)) actions += panel(procReview ? 'Your review' : 'Your decision', `<div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="app.decideVehicleRequest('${r.ref}','approve'${procReview ? ",true" : ''})">${procReview ? '✓ Reviewed: send to ' + escHtml(this._procNames('approver')) : `✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})`}</button>
                     <button class="btn btn-secondary" style="color:#B91C1C;border-color:#B91C1C;" onclick="app.decideVehicleRequest('${r.ref}','reject')">✗ Not approved</button></div>`);
                 if (isProc && ['approved', 'assigned'].includes(r.status)) actions += panel(r.status === 'approved' ? '🚙 Assign a vehicle and driver' : '🚙 Change vehicle or driver', `
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -9279,11 +9276,12 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         <div id="frTripPick"><button class="btn btn-secondary" style="font-size:12px;" onclick="app._loadPortalTrips('${r.ref}')">Show my portal trips</button></div></div>` : ''}
                     ${actions}`;
             },
-            async decideVehicleRequest(ref, decision) {
+            async decideVehicleRequest(ref, decision, isReview) {
                 let note = '';
                 if (decision === 'reject') { note = prompt('Why is this request not approved?') || ''; if (!note.trim()) return; }
                 if (decision === 'cancel' && !confirm('Cancel this vehicle request?')) return;
-                if (decision === 'approve' && !confirm('Sign this request? Once it is fully approved, the amount is charged to the project.')) return;
+                if (decision === 'approve' && isReview) { note = prompt('Review note for the approver (optional)', ''); if (note === null) return; }
+                else if (decision === 'approve' && !confirm('Sign this request? Once it is fully approved, the amount is charged to the project.')) return;
                 try {
                     const { error } = await supabaseClient.rpc('decide_vehicle_request', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9527,15 +9525,30 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     received: ['Received: upload evidence of use', '#FFF4E5', '#92400E'], evidence_review: ['Evidence sent: with Procurement', '#E3F2FD', '#1B4D8E'],
                     closed: ['Closed', '#E8F5E9', '#1B5E20'], rejected: ['Declined', '#FFEBEE', '#B91C1C'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] })[s] || [s, '#F3F4F6', '#6B7280'];
             },
-            _srChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309'] : this._srStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
+            _srChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309']
+                : s === 'approved' && r && this._procTwoStep() ? ['Approved: with ' + this._procStepLabel(r.proc_reviewed_by), '#E3F2FD', '#1B4D8E']
+                : s === 'evidence_review' && r && this._procTwoStep() && (r.evidence_reviewer || 'procurement') === 'procurement' ? ['Evidence: with ' + this._procStepLabel(r.ev_proc_reviewed_by), '#E3F2FD', '#1B4D8E']
+                : this._srStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
+            // Two steps in Procurement (Fleet and Store only): reviewer, then approver
+            _procStage(name) { return (this.data.procStages || {})[name || this.currentUser] || null; },
+            _procTwoStep() { const v = Object.values(this.data.procStages || {}); return v.includes('reviewer') && v.includes('approver'); },
+            _procNames(stage) { return Object.entries(this.data.procStages || {}).filter(([, s]) => s === stage).map(([n]) => n).join(' or ') || 'Procurement'; },
+            // Is this Procurement step mine? reviewedBy = who has reviewed it so far (null = not yet)
+            _procStepMine(reviewedBy) {
+                if (this.getUserRole() !== 'procurement') return false;
+                if (!this._procTwoStep()) return true;
+                return this._procStage() === (reviewedBy ? 'approver' : 'reviewer');
+            },
+            _procStepLabel(reviewedBy) { return !this._procTwoStep() ? 'Procurement' : reviewedBy ? 'Procurement approver' : 'Procurement reviewer'; },
             // pending → approver (Budget Owner, or the ED for her own); approved → Procurement; released → the person who asked
             _srWaitsForMe(r) {
                 const role = this.getUserRole();
                 return (r.status === 'pending' && role === r.approver && r.requested_by !== this.currentUser)
-                    || (r.status === 'approved' && role === 'procurement')
+                    || (r.status === 'approved' && this._procStepMine(r.proc_reviewed_by))
                     || (r.status === 'released' && r.requested_by === this.currentUser)
                     || (r.status === 'received' && r.requested_by === this.currentUser)
-                    || (r.status === 'evidence_review' && role === (r.evidence_reviewer || 'procurement') && r.requested_by !== this.currentUser);
+                    || (r.status === 'evidence_review' && r.requested_by !== this.currentUser
+                        && ((r.evidence_reviewer || 'procurement') === 'procurement' ? this._procStepMine(r.ev_proc_reviewed_by) : role === r.evidence_reviewer));
             },
             // Evidence of use: the staff member uploads; the approver accepts (closes) or sends back
             uploadStoreEvidence(ref) {
@@ -9559,7 +9572,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             async reviewStoreEvidence(ref, decision) {
                 let note = '';
                 if (decision === 'return') { note = prompt('What is missing or wrong in the evidence?', ''); if (note === null) return; if (!note.trim()) { alert('Say what is missing.'); return; } }
-                else if (!confirm('Accept the evidence and close ' + ref + '?')) return;
+                else if (!confirm(this._procTwoStep() && this._procStage() === 'reviewer' ? 'Mark the evidence for ' + ref + ' as checked and send it to the approver?' : 'Accept the evidence and close ' + ref + '?')) return;
                 try {
                     const { error } = await supabaseClient.rpc('review_store_evidence', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9615,14 +9628,16 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                             <td style="font-size:12px;">${escHtml(r.purpose)}${r.cn_ref ? `<div style="color:#777;">${escHtml(r.cn_ref)}</div>` : ''}${r.decision_note ? `<div style="color:#555;">${escHtml(r.decided_by || '')}: "${escHtml(r.decision_note)}"</div>` : ''}</td>
                             <td>${this._srChip(r.status, r)}</td>
                             <td style="white-space:nowrap;">${r.status === 'pending' && role === r.approver && r.requested_by !== this.currentUser ? `<button class="action-btn approve" onclick="app.decideStoreRequest('${escHtml(r.ref)}','approve')">✓ Approve</button><button class="action-btn reject" onclick="app.decideStoreRequest('${escHtml(r.ref)}','reject')">Not approved</button>` : ''}
-                                ${isProc && r.status === 'approved' ? `<input id="srQty_${r.id}" type="number" min="0" step="any" value="${Math.min(Number(r.quantity), Math.max(0, Number(it.balance || 0) - Number(it.pending_requests || 0) + Number(r.quantity)))}" style="width:80px;padding:5px;border:1px solid #ccc;border-radius:6px;">
-                                <button class="action-btn approve" onclick="app.decideStoreRequest('${escHtml(r.ref)}','release',${r.id})">Release</button><button class="action-btn reject" onclick="app.decideStoreRequest('${escHtml(r.ref)}','reject')">Decline</button>` : ''}
+                                ${r.proc_reviewed_by && r.status === 'approved' ? `<div style="font-size:11px;color:#1B4D8E;white-space:normal;max-width:240px;">Reviewed by ${escHtml(r.proc_reviewed_by)}: ${this._qty(r.proc_review_qty)} ${escHtml(it.unit || '')}${r.proc_review_note ? ' · "' + escHtml(r.proc_review_note) + '"' : ''}</div>` : ''}
+                                ${r.status === 'approved' && this._procStepMine(r.proc_reviewed_by) ? `<input id="srQty_${r.id}" type="number" min="0" step="any" value="${r.proc_review_qty != null ? Number(r.proc_review_qty) : Math.min(Number(r.quantity), Math.max(0, Number(it.balance || 0) - Number(it.pending_requests || 0) + Number(r.quantity)))}" style="width:80px;padding:5px;border:1px solid #ccc;border-radius:6px;">
+                                <button class="action-btn approve" onclick="app.decideStoreRequest('${escHtml(r.ref)}','release',${r.id})">${this._procTwoStep() && !r.proc_reviewed_by ? '✓ Reviewed: send to approver' : 'Release'}</button><button class="action-btn reject" onclick="app.decideStoreRequest('${escHtml(r.ref)}','reject')">Decline</button>` : ''}
                                 ${r.requested_by === this.currentUser && r.status === 'released' ? `<button class="action-btn approve" onclick="app.confirmStoreReceipt('${escHtml(r.ref)}')">✓ I received them</button>` : ''}
                                 ${r.requested_by === this.currentUser && ['pending', 'approved'].includes(r.status) ? `<button class="action-btn view" onclick="app.decideStoreRequest('${escHtml(r.ref)}','cancel')">Cancel</button>` : ''}
                                 ${r.requested_by === this.currentUser && r.status === 'received' ? `<button class="action-btn approve" onclick="app.uploadStoreEvidence('${escHtml(r.ref)}')">📎 Upload evidence of use</button>` : ''}
                                 ${r.evidence_return_note && r.status === 'received' ? `<div style="font-size:11px;color:#B91C1C;max-width:240px;white-space:normal;">Sent back by ${escHtml(r.evidence_reviewed_by || '')}: "${escHtml(r.evidence_return_note)}"</div>` : ''}
                                 ${r.evidence_url ? `<button class="action-btn view" onclick="app.downloadFile('${escHtml(r.evidence_url)}','${escHtml(r.evidence_name || 'evidence')}')">📄 Evidence</button>` : ''}
-                                ${r.status === 'evidence_review' && role === (r.evidence_reviewer || 'procurement') && r.requested_by !== this.currentUser ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">✓ Accept and close</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
+                                ${r.ev_proc_reviewed_by && r.status === 'evidence_review' ? `<div style="font-size:11px;color:#1B4D8E;">Checked by ${escHtml(r.ev_proc_reviewed_by)}</div>` : ''}
+                                ${r.status === 'evidence_review' && r.requested_by !== this.currentUser && ((r.evidence_reviewer || 'procurement') === 'procurement' ? this._procStepMine(r.ev_proc_reviewed_by) : role === r.evidence_reviewer) ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">${(r.evidence_reviewer || 'procurement') === 'procurement' && this._procTwoStep() && !r.ev_proc_reviewed_by ? '✓ Checked: send to approver' : '✓ Accept and close'}</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
                                 ${r.evidence_note ? `<div style="font-size:11px;color:#555;max-width:240px;white-space:normal;">${escHtml(r.evidence_note)}</div>` : ''}
                                 ${r.approved_by ? `<div style="font-size:10px;color:#777;">Approved by ${escHtml(r.approved_by)}</div>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8">No requests yet.</td></tr>'}
                         </tbody></table></div>`;
@@ -9778,7 +9793,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 if (decision === 'approve' && !confirm('Approve this store request? Procurement will then release the items.')) return;
                 if (decision === 'release') {
                     qty = parseFloat(document.getElementById('srQty_' + id)?.value);
-                    if (!(qty > 0)) { alert('Enter the quantity to release.'); return; }
+                    if (!(qty > 0)) { alert('Enter the quantity' + (this._procTwoStep() && this._procStage() === 'reviewer' ? ' you propose to release.' : ' to release.')); return; }
                     note = prompt('Note for the record (optional)', '') || '';
                 }
                 try {
