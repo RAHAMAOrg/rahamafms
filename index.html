@@ -9269,9 +9269,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const { data: tlogs } = await supabaseClient.from('fleet_trip_logs').select('stage,reading,photo,logged_by,logged_at').eq('request_id', r.id).order('logged_at');
                 const logs = tlogs || [];
                 const procReview = r.approver === 'procurement' && this._procTwoStep() && !r.proc_reviewed_by;
+                if (r.proc_approved_by || r.bo_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B5E20;">${r.proc_approved_by ? `Checked by Procurement: <b>${escHtml(r.proc_approved_by)}</b>` : ''}${r.proc_approved_by && r.bo_by ? ' · ' : ''}${r.bo_by ? `Budget Owner ${r.approver === 'ed' && r.status === 'pending' ? 'pre-signed' : 'approved'}: <b>${escHtml(r.bo_by)}</b>` : ''}</div>`;
                 if (r.status === 'pending' && r.proc_reviewed_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B4D8E;">Reviewed by <b>${escHtml(r.proc_reviewed_by)}</b>${r.proc_review_note ? ': "' + escHtml(r.proc_review_note) + '"' : ''}${r.status === 'pending' ? ' · waiting for ' + escHtml(this._procNames('approver')) : ''}</div>`;
                 if (r.status === 'pending' && !mine && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver)) actions += panel(procReview ? 'Your review' : 'Your decision', `<div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="app.decideVehicleRequest('${r.ref}','approve'${procReview ? ",true" : ''})">${procReview ? '✓ Reviewed: send to ' + escHtml(this._procNames('approver')) : `✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})`}</button>
+                    <button class="btn btn-primary" onclick="app.decideVehicleRequest('${r.ref}','approve'${procReview ? ",true" : ''})">${procReview ? '✓ Reviewed: send to ' + escHtml(this._procNames('approver')) : r.approver === 'procurement' ? '✓ Checked: send to the Budget Owner' : `✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})`}</button>
                     <button class="btn btn-secondary" style="color:#B91C1C;border-color:#B91C1C;" onclick="app.decideVehicleRequest('${r.ref}','reject')">✗ Not approved</button></div>`);
                 if (isProc && ['approved', 'assigned'].includes(r.status)) actions += panel(r.status === 'approved' ? '🚙 Assign a vehicle and driver' : '🚙 Change vehicle or driver', `
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -9338,7 +9339,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 if (decision === 'reject') { note = prompt('Why is this request not approved?') || ''; if (!note.trim()) return; }
                 if (decision === 'cancel' && !confirm('Cancel this vehicle request?')) return;
                 if (decision === 'approve' && isReview) { note = prompt('Review note for the approver (optional)', ''); if (note === null) return; }
-                else if (decision === 'approve' && !confirm('Sign this request? Once it is fully approved, the amount is charged to the project.')) return;
+                else if (decision === 'approve' && !confirm(this.getUserRole() === 'procurement' ? 'Send this request to the Budget Owner? The Budget Owner approves the spend before it is charged to the project.' : 'Approve this spend? The amount is then held on the project and Procurement assigns a vehicle.')) return;
                 try {
                     const { error } = await supabaseClient.rpc('decide_vehicle_request', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9584,6 +9585,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             },
             _srChip(s, r) { const [t, bg, fg] = s === 'pending' && r ? [r.approver === 'ed' ? 'With ED' : 'With Budget Owner', '#FFF8E1', '#B45309']
                 : s === 'approved' && r && this._procTwoStep() ? ['Approved: with ' + this._procStepLabel(r.proc_reviewed_by), '#E3F2FD', '#1B4D8E']
+                : s === 'evidence_review' && r && ['budgetOwner', 'ed'].includes(r.evidence_reviewer) && r.ev_proc_approved_by ? ['Evidence: with ' + (r.evidence_reviewer === 'ed' ? 'the ED' : 'the Program lead') + ' to concur', '#EDE7F6', '#4527A0']
                 : s === 'evidence_review' && r && this._procTwoStep() && (r.evidence_reviewer || 'procurement') === 'procurement' ? ['Evidence: with ' + this._procStepLabel(r.ev_proc_reviewed_by), '#E3F2FD', '#1B4D8E']
                 : this._srStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
             // Two steps in Procurement (Fleet and Store only): reviewer, then approver
@@ -9629,7 +9631,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             async reviewStoreEvidence(ref, decision) {
                 let note = '';
                 if (decision === 'return') { note = prompt('What is missing or wrong in the evidence?', ''); if (note === null) return; if (!note.trim()) { alert('Say what is missing.'); return; } }
-                else if (!confirm(this._procTwoStep() && this._procStage() === 'reviewer' ? 'Mark the evidence for ' + ref + ' as checked and send it to the approver?' : 'Accept the evidence and close ' + ref + '?')) return;
+                else if (!confirm(this.getUserRole() === 'procurement' ? (this._procTwoStep() && this._procStage() === 'reviewer' ? 'Mark the evidence for ' + ref + ' as checked and send it to the approver?' : 'Accept the evidence for ' + ref + ' and send it to the Program lead to concur?') : 'Concur with the evidence and close ' + ref + '?')) return;
                 try {
                     const { error } = await supabaseClient.rpc('review_store_evidence', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9693,8 +9695,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                 ${r.requested_by === this.currentUser && r.status === 'received' ? `<button class="action-btn approve" onclick="app.uploadStoreEvidence('${escHtml(r.ref)}')">📎 Upload evidence of use</button>` : ''}
                                 ${r.evidence_return_note && r.status === 'received' ? `<div style="font-size:11px;color:#B91C1C;max-width:240px;white-space:normal;">Sent back by ${escHtml(r.evidence_reviewed_by || '')}: "${escHtml(r.evidence_return_note)}"</div>` : ''}
                                 ${r.evidence_url ? `<button class="action-btn view" onclick="app.downloadFile('${escHtml(r.evidence_url)}','${escHtml(r.evidence_name || 'evidence')}')">📄 Evidence</button>` : ''}
-                                ${r.ev_proc_reviewed_by && r.status === 'evidence_review' ? `<div style="font-size:11px;color:#1B4D8E;">Checked by ${escHtml(r.ev_proc_reviewed_by)}</div>` : ''}
-                                ${r.status === 'evidence_review' && r.requested_by !== this.currentUser && ((r.evidence_reviewer || 'procurement') === 'procurement' ? this._procStepMine(r.ev_proc_reviewed_by) : role === r.evidence_reviewer) ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">${(r.evidence_reviewer || 'procurement') === 'procurement' && this._procTwoStep() && !r.ev_proc_reviewed_by ? '✓ Checked: send to approver' : '✓ Accept and close'}</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
+                                ${r.ev_proc_reviewed_by && r.status === 'evidence_review' ? `<div style="font-size:11px;color:#1B4D8E;">Checked by ${escHtml(r.ev_proc_reviewed_by)}</div>` : ''}${r.ev_proc_approved_by ? `<div style="font-size:11px;color:#1B4D8E;">Accepted by Procurement: ${escHtml(r.ev_proc_approved_by)}</div>` : ''}${r.ev_concur_by ? `<div style="font-size:11px;color:#1B5E20;">Concurred: ${escHtml(r.ev_concur_by)}</div>` : ''}
+                                ${r.status === 'evidence_review' && r.requested_by !== this.currentUser && ((r.evidence_reviewer || 'procurement') === 'procurement' ? this._procStepMine(r.ev_proc_reviewed_by) : role === r.evidence_reviewer) ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">${(r.evidence_reviewer || 'procurement') === 'procurement' && this._procTwoStep() && !r.ev_proc_reviewed_by ? '✓ Checked: send to approver' : (r.evidence_reviewer || 'procurement') === 'procurement' ? '✓ Accept: send to the Program lead' : r.ev_proc_approved_by ? '✓ Concur and close' : '✓ Accept and close'}</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
                                 ${r.evidence_note ? `<div style="font-size:11px;color:#555;max-width:240px;white-space:normal;">${escHtml(r.evidence_note)}</div>` : ''}
                                 ${r.approved_by ? `<div style="font-size:10px;color:#777;">Approved by ${escHtml(r.approved_by)}</div>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8">No requests yet.</td></tr>'}
                         </tbody></table></div>`;
