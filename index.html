@@ -7576,6 +7576,47 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         }
                     } catch (e) { ppSection = ''; }
                 }
+                // Vehicle request behind this note, and store items used for this activity: every signed step
+                let reqSection = '';
+                try {
+                    const [{ data: frs }, { data: srs }] = await Promise.all([
+                        supabaseClient.from('fleet_requests').select('*').eq('cn_ref', cn.refNumber),
+                        supabaseClient.from('store_requests').select('*').eq('cn_ref', cn.refNumber)]);
+                    const fr = frs || [], sr = (srs || []).filter(x => !['rejected', 'cancelled'].includes(x.status));
+                    const refs = [...fr, ...sr].map(x => x.ref);
+                    if (refs.length) {
+                        let sigs = [];
+                        const q = await supabaseClient.from('document_signatures').select('docRef,pageContext,signerName,signerRole,signedAt,signatureData,usedAt')
+                            .in('docRef', refs).not('usedAt', 'is', null).order('signedAt');
+                        if (!q.error) sigs = q.data || [];
+                        let items = {};
+                        if (sr.length) { const { data: its } = await supabaseClient.from('store_items').select('id,name,unit').in('id', [...new Set(sr.map(x => x.item_id))]); (its || []).forEach(i => { items[i.id] = i; }); }
+                        const D = d => d ? new Date(d).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                        const N = n => '\u20a6' + Number(n || 0).toLocaleString();
+                        const LBL = { vr_request: 'Requested by', vr_proc_review: 'Procurement: reviewed', vr_proc_approve: 'Procurement: checked, vehicle and driver assigned',
+                            vr_bo: 'Budget Owner: approved', vr_ed: 'Executive Director: approved', vr_reject: 'Not approved', vr_trip_cost: 'Procurement: actual trip cost',
+                            vr_excess_bo: 'Budget Owner: excess cost approved', vr_excess_ed: 'Executive Director: excess cost approved', vr_excess_reject: 'Excess cost not approved',
+                            sr_request: 'Requested by', sr_bo: 'Budget Owner: approved', sr_ed: 'Executive Director: approved', sr_proc_review: 'Procurement: reviewed',
+                            sr_proc_release: 'Procurement: released', sr_reject: 'Declined', sr_received: 'Requester: items received', sr_ev_submit: 'Requester: evidence of use',
+                            sr_ev_proc_review: 'Procurement: evidence checked', sr_ev_proc_accept: 'Procurement: evidence accepted', sr_ev_concur: 'Program lead: concurred', sr_ev_return: 'Evidence sent back' };
+                        const boxes = ref => {
+                            const own = sigs.filter(x => x.docRef === ref);
+                            if (!own.length) return '<p style="font-size:12px;color:#777;margin:4px 0 12px;">Done before signatures were required on these steps; see the approval trail on the request.</p>';
+                            return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0 16px;">' + own.map((x, i) => {
+                                let lbl = LBL[x.pageContext] || x.pageContext;
+                                const later = own.slice(i + 1).map(y => y.pageContext);
+                                if (x.pageContext === 'vr_bo' && later.includes('vr_ed')) lbl = 'Budget Owner: pre-approved (above limit)';
+                                if (x.pageContext === 'vr_excess_bo' && later.includes('vr_excess_ed')) lbl = 'Budget Owner: excess pre-approved';
+                                if (x.pageContext === 'sr_ev_concur' && x.signerRole === 'ed') lbl = 'Executive Director: concurred';
+                                return `<div style="border:1px solid #ddd;border-radius:6px;padding:8px 10px;"><div class="lbl">${escHtml(lbl)}</div><div style="font-weight:700;font-size:12px;margin-top:3px;">${escHtml(x.signerName || '')}</div>`
+                                    + (x.signatureData ? `<img src="${x.signatureData}" style="height:44px;max-width:100%;display:block;margin-top:3px;border-bottom:1px solid #333;">` : '')
+                                    + `<div style="font-size:10px;color:#777;margin-top:3px;">${D(x.signedAt)}</div></div>`;
+                            }).join('') + '</div>';
+                        };
+                        if (fr.length) reqSection += '<h2>VEHICLE REQUEST: SIGNED APPROVALS</h2>' + fr.map(r => `<p style="font-size:12px;margin:8px 0 2px;"><b>${escHtml(r.ref)}</b> · ${escHtml(r.purpose || '')}${r.destination ? ' (' + escHtml(r.destination) + ')' : ''} · ${D(r.depart_at)} to ${D(r.return_at)} · requested ${N(r.amount)}${r.actual_cost != null ? ' · actual ' + N(r.actual_cost) : ''}${r.charge_amount != null ? ' · charged ' + N(r.charge_amount) : ''}</p>` + boxes(r.ref)).join('');
+                        if (sr.length) reqSection += '<h2>STORE ITEMS USED FOR THIS ACTIVITY: SIGNED APPROVALS</h2>' + sr.map(r => { const it = items[r.item_id] || {}; return `<p style="font-size:12px;margin:8px 0 2px;"><b>${escHtml(r.ref)}</b> · ${Number(r.released_qty ?? r.quantity).toLocaleString()} ${escHtml(it.unit || '')} of ${escHtml(it.name || 'item')} · ${escHtml(r.purpose || '')} · requested by ${escHtml(r.requested_by)} · ${escHtml(r.status)}${r.evidence_url ? ` · <a href="${escHtml(r.evidence_url)}">evidence of use</a>` : ''}</p>` + boxes(r.ref); }).join('');
+                    }
+                } catch (e) { reqSection = ''; }
                 const roundsHtml = () => poRounds.length ? '<h2>EARLIER PURCHASE ORDERS ON THIS NOTE</h2>' + poRounds.map(r => {
                     const own = allDocSigs.filter(s => [r.po_number, r.grr_number].some(b => b && (s.docRef === b || String(s.docRef).startsWith(b + '-V'))));
                     const sn = roundSnap[r.round_no] || {};
@@ -7877,6 +7918,7 @@ ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E
 </div>
 ${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
 ${ppSection}
+${reqSection}
 ${exceptionSection}
                 ${travelSection}
                 ${procSection}
@@ -9245,6 +9287,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     p_return: this._fVal('frReturn') ? new Date(this._fVal('frReturn')).toISOString() : null,
                     p_passengers: parseInt(this._fVal('frPax')) || null, p_amount: parseFloat(this._fVal('frAmount')), p_cost_note: this._fVal('frCostNote') };
                 if (!p.p_project || !p.p_purpose || !p.p_depart || !p.p_return || isNaN(p.p_amount)) { alert('Fill in the project, purpose, times and amount.'); return; }
+                if (!await this._signStep('pending:vr', 'vr_request', 'Requester Signature', `request a vehicle for ${p.p_purpose} (${p.p_project}), to be charged ${this._money(p.p_amount)}.`)) return;
                 try {
                     const { data, error } = await supabaseClient.rpc('request_vehicle', p);
                     if (error) throw error;
@@ -9272,9 +9315,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 if (r.proc_approved_by || r.bo_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B5E20;">${r.proc_approved_by ? `Checked by Procurement: <b>${escHtml(r.proc_approved_by)}</b>` : ''}${r.proc_approved_by && r.bo_by ? ' · ' : ''}${r.bo_by ? `Budget Owner ${r.approver === 'ed' && r.status === 'pending' ? 'pre-signed' : 'approved'}: <b>${escHtml(r.bo_by)}</b>` : ''}</div>`;
                 if (r.status === 'pending' && r.proc_reviewed_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B4D8E;">Reviewed by <b>${escHtml(r.proc_reviewed_by)}</b>${r.proc_review_note ? ': "' + escHtml(r.proc_review_note) + '"' : ''}${r.status === 'pending' ? ' · waiting for ' + escHtml(this._procNames('approver')) : ''}</div>`;
                 if (r.status === 'pending' && !mine && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver)) actions += panel(procReview ? 'Your review' : 'Your decision', `<div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button class="btn btn-primary" onclick="app.decideVehicleRequest('${r.ref}','approve'${procReview ? ",true" : ''})">${procReview ? '✓ Reviewed: send to ' + escHtml(this._procNames('approver')) : r.approver === 'procurement' ? '✓ Checked: send to the Budget Owner' : `✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})`}</button>
+                    <button class="btn btn-primary" ${!procReview && r.approver === 'procurement' && !(r.vehicle_id && r.driver_id) ? 'disabled style="opacity:.55;cursor:not-allowed;"' : ''} onclick="app.decideVehicleRequest('${r.ref}','approve'${procReview ? ",true" : ''})">${procReview ? '✓ Reviewed: send to ' + escHtml(this._procNames('approver')) : r.approver === 'procurement' ? (r.vehicle_id && r.driver_id ? '✓ Checked: send to the Budget Owner' : 'Assign the vehicle and driver below first') : `✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})`}</button>
                     <button class="btn btn-secondary" style="color:#B91C1C;border-color:#B91C1C;" onclick="app.decideVehicleRequest('${r.ref}','reject')">✗ Not approved</button></div>`);
-                if (isProc && ['approved', 'assigned'].includes(r.status)) actions += panel(r.status === 'approved' ? '🚙 Assign a vehicle and driver' : '🚙 Change vehicle or driver', `
+                const preAssign = isProc && r.status === 'pending' && ((r.approver === 'procurement' && !procReview && this._procStepMine(r.proc_reviewed_by)) || (['budgetOwner', 'ed'].includes(r.approver) && r.proc_approved_by));
+                if (isProc && (preAssign || ['approved', 'assigned'].includes(r.status))) actions += panel(preAssign ? (r.vehicle_id ? '🚙 Vehicle and driver for the Budget Owner (change if needed)' : '🚙 Assign the vehicle and driver (the Budget Owner sees them before approving)') : r.status === 'approved' ? '🚙 Assign a vehicle and driver' : '🚙 Change vehicle or driver', `
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <select id="frVeh" style="padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Vehicle…</option>${freeV.map(x => `<option value="${x.id}" ${x.id === r.vehicle_id ? 'selected' : ''}>${escHtml(x.name)}${x.plate ? ' (' + escHtml(x.plate) + ')' : ''}</option>`).join('')}</select>
                     <select id="frDrv" style="padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Driver…</option>${freeD.map(x => `<option value="${x.id}" ${x.id === r.driver_id ? 'selected' : ''}>${escHtml(x.name)}</option>`).join('')}</select></div>
@@ -9334,12 +9378,32 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         <div id="frTripPick"><button class="btn btn-secondary" style="font-size:12px;" onclick="app._loadPortalTrips('${r.ref}')">Show my portal trips</button></div></div>` : ''}
                     ${actions}`;
             },
+            // Signature for a step on a vehicle (VR-) or store (SR-) request. Saved first;
+            // the database refuses the step without it, and only counts it if the step goes through.
+            async _signStep(ref, ctx, title, declaration) {
+                const sig = await this._showSignaturePad(title, `I, ${this.currentUser}, ${declaration}`);
+                if (!sig) return false;
+                const kind = ctx.startsWith('vr_') ? 'vehicle_request' : 'store_request';
+                const { error } = await supabaseClient.from('document_signatures').insert([{
+                    docRef: ref, docType: kind, relatedRef: ref, signerName: this.currentUser, signerRole: this.getUserRole(),
+                    signatureData: sig, signedAt: new Date().toISOString(), pageContext: ctx }]);
+                if (error) { alert('Could not save your signature: ' + error.message); return false; }
+                return true;
+            },
             async decideVehicleRequest(ref, decision, isReview) {
                 let note = '';
                 if (decision === 'reject') { note = prompt('Why is this request not approved?') || ''; if (!note.trim()) return; }
                 if (decision === 'cancel' && !confirm('Cancel this vehicle request?')) return;
                 if (decision === 'approve' && isReview) { note = prompt('Review note for the approver (optional)', ''); if (note === null) return; }
                 else if (decision === 'approve' && !confirm(this.getUserRole() === 'procurement' ? 'Send this request to the Budget Owner? The Budget Owner approves the spend before it is charged to the project.' : 'Approve this spend? The amount is then held on the project and Procurement assigns a vehicle.')) return;
+                if (decision !== 'cancel') {
+                    const role = this.getUserRole();
+                    const ctx = decision === 'reject' ? 'vr_reject' : role === 'procurement' ? (isReview ? 'vr_proc_review' : 'vr_proc_approve') : role === 'ed' ? 'vr_ed' : 'vr_bo';
+                    const what = { vr_reject: `do not approve vehicle request ${ref}.`, vr_proc_review: `have reviewed vehicle request ${ref}.`,
+                        vr_proc_approve: `have checked vehicle request ${ref}, assigned the vehicle and driver, and send it to the Budget Owner.`,
+                        vr_bo: `approve the spend on vehicle request ${ref} (pre-approval if above my limit).`, vr_ed: `approve vehicle request ${ref}.` }[ctx];
+                    if (!await this._signStep(ref, ctx, decision === 'reject' ? 'Signature: Not Approved' : 'Approval Signature', what)) return;
+                }
                 try {
                     const { error } = await supabaseClient.rpc('decide_vehicle_request', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9361,6 +9425,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const n = id => { const x = this._fVal(id); return x === '' ? null : parseFloat(x); };
                 const actual = n('frActual');
                 if (actual === null || isNaN(actual)) { alert('Enter the actual cost.'); return; }
+                if (!await this._signStep(ref, 'vr_trip_cost', 'Trip Cost Signature', `confirm the actual cost of trip ${ref} is ${this._money(actual)}.`)) return;
                 try {
                     const { data, error } = await supabaseClient.rpc('complete_vehicle_trip', { p_ref: ref, p_fuel_litres: n('frFuelL'), p_fuel_cost: n('frFuelC'), p_actual_cost: actual, p_notes: this._fVal('frTripNotes') });
                     if (error) throw error;
@@ -9373,6 +9438,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 let note = '';
                 if (decision === 'reject') { note = prompt('Why is the excess not approved? Only the amount requested will be charged.') || ''; if (!note.trim()) return; }
                 else if (!confirm('Approve the higher cost for this trip?')) return;
+                const xctx = decision === 'reject' ? 'vr_excess_reject' : this.getUserRole() === 'ed' ? 'vr_excess_ed' : 'vr_excess_bo';
+                if (!await this._signStep(ref, xctx, 'Excess Cost Signature', decision === 'reject' ? `do not approve the excess cost on ${ref}.` : `approve the excess cost on ${ref} (pre-approval if above my limit).`)) return;
                 try {
                     const { error } = await supabaseClient.rpc('decide_vehicle_excess', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9617,6 +9684,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const file = inp.files && inp.files[0]; if (!file) return;
                     const note = prompt('Evidence of use for ' + ref + '\n\nWhat does this file show? (for example: attendance sheet, 25 participants, 12 Nov, Zango)', '');
                     if (note === null) return;
+                    if (!await this._signStep(ref, 'sr_ev_submit', 'Evidence Signature', `confirm the items on ${ref} were used as shown in this evidence.`)) return;
                     try {
                         const up = await this.uploadFile(file, 'store-evidence');
                         const { error } = await supabaseClient.rpc('submit_store_evidence', { p_ref: ref, p_url: up.url, p_name: up.fileName, p_note: note });
@@ -9632,6 +9700,11 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 let note = '';
                 if (decision === 'return') { note = prompt('What is missing or wrong in the evidence?', ''); if (note === null) return; if (!note.trim()) { alert('Say what is missing.'); return; } }
                 else if (!confirm(this.getUserRole() === 'procurement' ? (this._procTwoStep() && this._procStage() === 'reviewer' ? 'Mark the evidence for ' + ref + ' as checked and send it to the approver?' : 'Accept the evidence for ' + ref + ' and send it to the Program lead to concur?') : 'Concur with the evidence and close ' + ref + '?')) return;
+                const ectx = decision === 'return' ? 'sr_ev_return' : this.getUserRole() !== 'procurement' ? 'sr_ev_concur'
+                    : (this._procTwoStep() && this._procStage() === 'reviewer' ? 'sr_ev_proc_review' : 'sr_ev_proc_accept');
+                const ewhat = { sr_ev_return: `send back the evidence on ${ref}: ${note}`, sr_ev_concur: `concur with the evidence of use on ${ref}.`,
+                    sr_ev_proc_review: `have checked the evidence of use on ${ref}.`, sr_ev_proc_accept: `accept the evidence of use on ${ref}.` }[ectx];
+                if (!await this._signStep(ref, ectx, 'Evidence Review Signature', ewhat)) return;
                 try {
                     const { error } = await supabaseClient.rpc('review_store_evidence', { p_ref: ref, p_decision: decision, p_note: note });
                     if (error) throw error;
@@ -9837,6 +9910,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const q = parseFloat(this._fVal('srQty')), purpose = this._fVal('srPurpose');
                 if (!(q > 0) || !purpose) { alert('Enter the quantity and what they are for.'); return; }
                 if (!this._fVal('srCn')) { alert('Choose the activity (concept note) the items are for. Items can only be used for activities under the same project.'); return; }
+                if (!await this._signStep('pending:sr', 'sr_request', 'Requester Signature', `request ${q} item(s) from the store for ${purpose} (${this._fVal('srCn')}).`)) return;
                 try {
                     const { data, error } = await supabaseClient.rpc('request_store_items', { p_item: itemId, p_qty: q, p_purpose: purpose, p_cn_ref: this._fVal('srCn') });
                     if (error) throw error;
@@ -9855,6 +9929,13 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     if (!(qty > 0)) { alert('Enter the quantity' + (this._procTwoStep() && this._procStage() === 'reviewer' ? ' you propose to release.' : ' to release.')); return; }
                     note = prompt('Note for the record (optional)', '') || '';
                 }
+                if (decision !== 'cancel') {
+                    const rev = this._procTwoStep() && this._procStage() === 'reviewer';
+                    const ctx = decision === 'reject' ? 'sr_reject' : decision === 'release' ? (rev ? 'sr_proc_review' : 'sr_proc_release') : this.getUserRole() === 'ed' ? 'sr_ed' : 'sr_bo';
+                    const what = { sr_reject: `decline store request ${ref}.`, sr_proc_review: `have reviewed store request ${ref} and propose to release ${qty}.`,
+                        sr_proc_release: `release ${qty} on store request ${ref}.`, sr_ed: `approve store request ${ref}.`, sr_bo: `approve store request ${ref}.` }[ctx];
+                    if (!await this._signStep(ref, ctx, decision === 'reject' ? 'Signature: Declined' : 'Approval Signature', what)) return;
+                }
                 try {
                     const { error } = await supabaseClient.rpc('decide_store_request', { p_ref: ref, p_decision: decision, p_qty: qty, p_note: note });
                     if (error) throw error;
@@ -9863,6 +9944,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 } catch (e) { alert('Could not save: ' + (e.message || e)); }
             },
             async confirmStoreReceipt(ref) {
+                if (!await this._signStep(ref, 'sr_received', 'Receipt Signature', `confirm I have received the items on store request ${ref}.`)) return;
                 try {
                     const { error } = await supabaseClient.rpc('confirm_store_receipt', { p_ref: ref });
                     if (error) throw error;
