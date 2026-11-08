@@ -7593,12 +7593,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         if (sr.length) { const { data: its } = await supabaseClient.from('store_items').select('id,name,unit').in('id', [...new Set(sr.map(x => x.item_id))]); (its || []).forEach(i => { items[i.id] = i; }); }
                         const D = d => d ? new Date(d).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
                         const N = n => '\u20a6' + Number(n || 0).toLocaleString();
-                        const LBL = { vr_request: 'Requested by', vr_proc_review: 'Procurement: reviewed', vr_proc_approve: 'Procurement: checked, vehicle and driver assigned',
-                            vr_bo: 'Budget Owner: approved', vr_ed: 'Executive Director: approved', vr_reject: 'Not approved', vr_trip_cost: 'Procurement: actual trip cost',
-                            vr_excess_bo: 'Budget Owner: excess cost approved', vr_excess_ed: 'Executive Director: excess cost approved', vr_excess_reject: 'Excess cost not approved',
-                            sr_request: 'Requested by', sr_bo: 'Budget Owner: approved', sr_ed: 'Executive Director: approved', sr_proc_review: 'Procurement: reviewed',
-                            sr_proc_release: 'Procurement: released', sr_reject: 'Declined', sr_received: 'Requester: items received', sr_ev_submit: 'Requester: evidence of use',
-                            sr_ev_proc_review: 'Procurement: evidence checked', sr_ev_proc_accept: 'Procurement: evidence accepted', sr_ev_concur: 'Program lead: concurred', sr_ev_return: 'Evidence sent back' };
+                        const LBL = this._stepLabels();
                         const boxes = ref => {
                             const own = sigs.filter(x => x.docRef === ref);
                             if (!own.length) return '<p style="font-size:12px;color:#777;margin:4px 0 12px;">Done before signatures were required on these steps; see the approval trail on the request.</p>';
@@ -7610,7 +7605,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                                 if (x.pageContext === 'sr_ev_concur' && x.signerRole === 'ed') lbl = 'Executive Director: concurred';
                                 return `<div style="border:1px solid #ddd;border-radius:6px;padding:8px 10px;"><div class="lbl">${escHtml(lbl)}</div><div style="font-weight:700;font-size:12px;margin-top:3px;">${escHtml(x.signerName || '')}</div>`
                                     + (x.signatureData ? `<img src="${x.signatureData}" style="height:44px;max-width:100%;display:block;margin-top:3px;border-bottom:1px solid #333;">` : '')
-                                    + `<div style="font-size:10px;color:#777;margin-top:3px;">${D(x.signedAt)}</div></div>`;
+                                    + `<div style="font-size:10px;color:#777;margin-top:3px;">${D(x.signedAt)}${x.usedAt && new Date(x.signedAt) - new Date(x.usedAt) > 3600000 ? `<br><i>Signed after the step (step done ${D(x.usedAt)})</i>` : ''}</div></div>`;
                             }).join('') + '</div>';
                         };
                         if (fr.length) reqSection += '<h2>VEHICLE REQUEST: SIGNED APPROVALS</h2>' + fr.map(r => `<p style="font-size:12px;margin:8px 0 2px;"><b>${escHtml(r.ref)}</b> · ${escHtml(r.purpose || '')}${r.destination ? ' (' + escHtml(r.destination) + ')' : ''} · ${D(r.depart_at)} to ${D(r.return_at)} · requested ${N(r.amount)}${r.actual_cost != null ? ' · actual ' + N(r.actual_cost) : ''}${r.charge_amount != null ? ' · charged ' + N(r.charge_amount) : ''}</p>` + boxes(r.ref)).join('');
@@ -9312,6 +9307,8 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 const { data: tlogs } = await supabaseClient.from('fleet_trip_logs').select('stage,reading,photo,logged_by,logged_at').eq('request_id', r.id).order('logged_at');
                 const logs = tlogs || [];
                 const procReview = r.approver === 'procurement' && this._procTwoStep() && !r.proc_reviewed_by;
+                const unsigned = (await this._myUnsigned(r.ref))[r.ref];
+                if (unsigned && unsigned.length) actions += `<div style="background:#FFF8E1;border:1px solid #F59E0B;border-radius:10px;padding:10px 12px;margin:10px 0;font-size:13px;">You did ${unsigned.length > 1 ? 'these steps' : 'this step'} before signatures were required. Add your signature so the dossier is complete:<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">${this._unsignedButtons(r.ref, unsigned)}</div></div>`;
                 if (r.proc_approved_by || r.bo_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B5E20;">${r.proc_approved_by ? `Checked by Procurement: <b>${escHtml(r.proc_approved_by)}</b>` : ''}${r.proc_approved_by && r.bo_by ? ' · ' : ''}${r.bo_by ? `Budget Owner ${r.approver === 'ed' && r.status === 'pending' ? 'pre-signed' : 'approved'}: <b>${escHtml(r.bo_by)}</b>` : ''}</div>`;
                 if (r.status === 'pending' && r.proc_reviewed_by) actions += `<div style="font-size:13px;margin:8px 0;color:#1B4D8E;">Reviewed by <b>${escHtml(r.proc_reviewed_by)}</b>${r.proc_review_note ? ': "' + escHtml(r.proc_review_note) + '"' : ''}${r.status === 'pending' ? ' · waiting for ' + escHtml(this._procNames('approver')) : ''}</div>`;
                 if (r.status === 'pending' && !mine && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver)) actions += panel(procReview ? 'Your review' : 'Your decision', `<div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -9389,6 +9386,33 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     signatureData: sig, signedAt: new Date().toISOString(), pageContext: ctx }]);
                 if (error) { alert('Could not save your signature: ' + error.message); return false; }
                 return true;
+            },
+            _stepLabels() { return { vr_request: 'Requested by', vr_proc_review: 'Procurement: reviewed', vr_proc_approve: 'Procurement: checked, vehicle and driver assigned',
+                            vr_bo: 'Budget Owner: approved', vr_ed: 'Executive Director: approved', vr_reject: 'Not approved', vr_trip_cost: 'Procurement: actual trip cost',
+                            vr_excess_bo: 'Budget Owner: excess cost approved', vr_excess_ed: 'Executive Director: excess cost approved', vr_excess_reject: 'Excess cost not approved',
+                            sr_request: 'Requested by', sr_bo: 'Budget Owner: approved', sr_ed: 'Executive Director: approved', sr_proc_review: 'Procurement: reviewed',
+                            sr_proc_release: 'Procurement: released', sr_reject: 'Declined', sr_received: 'Requester: items received', sr_ev_submit: 'Requester: evidence of use',
+                            sr_ev_proc_review: 'Procurement: evidence checked', sr_ev_proc_accept: 'Procurement: evidence accepted', sr_ev_concur: 'Program lead: concurred', sr_ev_return: 'Evidence sent back' }; },
+            // Steps I did before signatures were required, by request: { ref: [{ ctx, done_at }] }
+            async _myUnsigned(ref) {
+                try {
+                    const { data, error } = await supabaseClient.rpc('my_unsigned_steps', ref ? { p_ref: ref } : {});
+                    if (error) return {};
+                    const m = {}; (data || []).forEach(x => { (m[x.ref] = m[x.ref] || []).push(x); }); return m;
+                } catch (e) { return {}; }
+            },
+            _unsignedButtons(ref, list) {
+                return (list || []).map(x => `<button class="action-btn view" style="border-color:#F59E0B;color:#92400E;" title="You did this step before signatures were required" onclick="app.signMissingStep('${escHtml(ref)}','${x.ctx}')">✍ Sign: ${escHtml((this._stepLabels()[x.ctx] || x.ctx).replace(/^[^:]*: /, ''))}</button>`).join('');
+            },
+            async signMissingStep(ref, ctx) {
+                const lbl = this._stepLabels()[ctx] || ctx;
+                if (!await this._signStep(ref, ctx, 'Signature (added after the step)', `confirm I did this step on ${ref}: ${lbl}. The dossier will show today's date as the signing date.`)) return;
+                try {
+                    const { error } = await supabaseClient.rpc('add_missing_signature', { p_ref: ref, p_ctx: ctx });
+                    if (error) throw error;
+                    await this._logAudit(ref.startsWith('VR-') ? 'fleet_requests' : 'store_requests', ref, 'signature_added', ctx);
+                    if (ref.startsWith('VR-')) await this.viewFleetRequest(ref); else await this.renderStore(document.getElementById('mainContent'), 'requests');
+                } catch (e) { alert('Could not add the signature: ' + (e.message || e)); }
             },
             async decideVehicleRequest(ref, decision, isReview) {
                 let note = '';
@@ -9725,7 +9749,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             async renderStore(content, tab) {
                 tab = tab || this._storeTab || 'stock'; this._storeTab = tab;
                 content.innerHTML = '<div class="header"><h2>📦 Store</h2><p>Loading…</p></div>';
-                const S = await this._loadStore();
+                const [S, unsAll] = await Promise.all([this._loadStore(), tab === 'requests' ? this._myUnsigned() : Promise.resolve({})]);
                 const over = this._storeOverseer(), isProc = this.getUserRole() === 'procurement';
                 const item = id => S.stock.find(x => x.item_id === id) || {};
                 const proj = this._storeProject || '';
@@ -9752,6 +9776,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                 ${isProc ? `<button class="action-btn view" onclick="app.storeAdjust(${x.item_id})">Correct count</button><button class="action-btn view" onclick="app.storeReorder(${x.item_id})">Reorder level</button>` : ''}</td></tr>`; }).join('') || `<tr><td colspan="${over ? 10 : 7}">Nothing in the store yet.</td></tr>`}
                         </tbody></table></div>`;
                 } else if (tab === 'requests') {
+                    const uns = unsAll;
                     body = `<div class="table-container"><table><thead><tr><th>Request</th><th>By</th><th>Item</th><th style="text-align:right;">Asked</th><th style="text-align:right;">Released</th><th>For</th><th>Status</th><th></th></tr></thead><tbody>
                         ${S.reqs.map(r => { const it = item(r.item_id);
                             return `<tr><td><b>${escHtml(r.ref)}</b><div style="font-size:11px;color:#777;">${new Date(r.created_at).toLocaleDateString('en-NG')}</div></td><td>${escHtml(r.requested_by)}</td>
@@ -9771,7 +9796,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                                 ${r.ev_proc_reviewed_by && r.status === 'evidence_review' ? `<div style="font-size:11px;color:#1B4D8E;">Checked by ${escHtml(r.ev_proc_reviewed_by)}</div>` : ''}${r.ev_proc_approved_by ? `<div style="font-size:11px;color:#1B4D8E;">Accepted by Procurement: ${escHtml(r.ev_proc_approved_by)}</div>` : ''}${r.ev_concur_by ? `<div style="font-size:11px;color:#1B5E20;">Concurred: ${escHtml(r.ev_concur_by)}</div>` : ''}
                                 ${r.status === 'evidence_review' && r.requested_by !== this.currentUser && ((r.evidence_reviewer || 'procurement') === 'procurement' ? this._procStepMine(r.ev_proc_reviewed_by) : role === r.evidence_reviewer) ? `<button class="action-btn approve" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','accept')">${(r.evidence_reviewer || 'procurement') === 'procurement' && this._procTwoStep() && !r.ev_proc_reviewed_by ? '✓ Checked: send to approver' : (r.evidence_reviewer || 'procurement') === 'procurement' ? '✓ Accept: send to the Program lead' : r.ev_proc_approved_by ? '✓ Concur and close' : '✓ Accept and close'}</button><button class="action-btn reject" onclick="app.reviewStoreEvidence('${escHtml(r.ref)}','return')">↩ Send back</button>` : ''}
                                 ${r.evidence_note ? `<div style="font-size:11px;color:#555;max-width:240px;white-space:normal;">${escHtml(r.evidence_note)}</div>` : ''}
-                                ${r.approved_by ? `<div style="font-size:10px;color:#777;">Approved by ${escHtml(r.approved_by)}</div>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8">No requests yet.</td></tr>'}
+                                ${r.approved_by ? `<div style="font-size:10px;color:#777;">Approved by ${escHtml(r.approved_by)}</div>` : ''}${uns[r.ref] ? `<div style="margin-top:4px;">${this._unsignedButtons(r.ref, uns[r.ref])}</div>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="8">No requests yet.</td></tr>'}
                         </tbody></table></div>`;
                 } else {
                     const onlyAdj = this._storeOnlyAdj;
