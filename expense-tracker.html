@@ -1,41 +1,42 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RAHAMA Expense Tracker (Finance)</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
 /* Layout: dark-green sidebar for views, sticky slicer bar, KPI strip, chart grid, ledger table. */
-:root{--bg:#F3F7F4;--panel:#FFFFFF;--ink:#14261B;--mute:#5F7266;--line:#DDE7E0;--g:#1F5C3A;--g2:#4FA36B;--g3:#CFE5D6;--side:#17432B;--sideink:#E6F2EA;--warn:#D98E1F;--bad:#C2453B;--good:#2E8B57;--c1:#1F5C3A;--c2:#4FA36B;--c3:#E0A33A;--c4:#3F7CAC;--c5:#8E6BB5;--c6:#C2453B;--chip:#EAF2EC;--shadow:0 1px 2px rgba(20,38,27,.06),0 4px 14px rgba(20,38,27,.05);--f1:'Schibsted Grotesk',system-ui,sans-serif;--f2:'Public Sans',system-ui,sans-serif}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0E1A13;--panel:#15251B;--ink:#E6F0E9;--mute:#93A89A;--line:#25382C;--g:#5DBB82;--g2:#3F8F5E;--g3:#1E3A2A;--side:#0A130E;--sideink:#D5E6DB;--warn:#E8A93B;--bad:#E4685D;--good:#5DBB82;--c1:#5DBB82;--c2:#3F8F5E;--c3:#E8B04A;--c4:#6FA8DA;--c5:#B494D6;--c6:#E4685D;--chip:#1C3024;--shadow:none;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#0E1A13;--panel:#15251B;--ink:#E6F0E9;--mute:#93A89A;--line:#25382C;--g:#5DBB82;--g2:#3F8F5E;--g3:#1E3A2A;--side:#0A130E;--sideink:#D5E6DB;--warn:#E8A93B;--bad:#E4685D;--good:#5DBB82;--c1:#5DBB82;--c2:#3F8F5E;--c3:#E8B04A;--c4:#6FA8DA;--c5:#B494D6;--c6:#E4685D;--chip:#1C3024;--shadow:none;color-scheme:dark}
+:root{--bg:#F4F7F5;--panel:#FFFFFF;--ink:#14201A;--mute:#5C6B62;--line:#E2E9E4;--g:#2d7a52;--g2:#40C078;--g3:#DDEFE4;--side:#14432B;--side2:#1a4d32;--sideink:#DCEBE2;--warn:#B7791F;--bad:#C4432A;--good:#2d7a52;--c1:#2d7a52;--c2:#40C078;--c3:#D9A21B;--c4:#3F7CAC;--c5:#8E6BB5;--c6:#C4432A;--chip:#EAF3EE;--shadow:0 1px 2px rgba(16,40,32,0.06),0 4px 14px rgba(16,40,32,0.08);--f1:'Plus Jakarta Sans',system-ui,sans-serif;--f2:'Plus Jakarta Sans',system-ui,sans-serif;color-scheme:light}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--f2);font-size:14px;line-height:1.45}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f2);font-size:14px;line-height:1.45}
 button,input,select,textarea{font:inherit;color:inherit}
-.app{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:100vh}
-aside{background:var(--side);color:var(--sideink);padding:18px 14px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;align-self:start;height:100vh}
-.brand{display:flex;gap:10px;align-items:center;margin-bottom:14px}
-.brand img{width:38px;height:38px;border-radius:50%;background:#fff}
-.brand b{font-family:var(--f1);font-size:17px;letter-spacing:.04em;display:block;line-height:1.1}
-.brand small{opacity:.7;font-size:11px}
-.nav{display:flex;flex-direction:column;gap:4px}
-.nav button{all:unset;cursor:pointer;padding:9px 12px;border-radius:8px;font-weight:500;display:flex;gap:10px;align-items:center}
-.nav button:hover{background:rgba(255,255,255,.07)}
-.nav button[aria-current="true"]{background:var(--g2);color:#fff}
+.app{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:100vh}
+aside{background:linear-gradient(180deg,var(--side) 0%,var(--side2) 100%);color:var(--sideink);padding:22px 0 18px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto}
+.brand{text-align:center;padding:0 20px 18px;border-bottom:1px solid rgba(255,255,255,.10);margin-bottom:12px}
+.brand img{width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1)}
+.brand b{font-family:var(--f1);font-size:18px;font-weight:800;letter-spacing:-.01em;display:block;line-height:1.15;color:#fff}
+.brand small{display:block;font-size:11.5px;font-weight:500;color:rgba(255,255,255,.75);margin-top:4px}
+.who{margin:0 16px 14px;padding:16px 24px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);color:#fff}
+.who small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:6px}.who b{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.back{margin:14px 16px 0;padding:12px;border-radius:8px;text-align:center;text-decoration:none;font-weight:600;font-size:13px;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);display:block}
+.back:hover{background:rgba(255,255,255,.2)}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{all:unset;cursor:pointer;padding:10px 20px;margin:0 10px;border-radius:8px;font-weight:500;font-size:13.5px;color:#DCEBE2;display:flex;gap:10px;align-items:center}
+.nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav button[aria-current="true"]{background:#fff;color:var(--side);font-weight:700}
 .nav button:focus-visible,.chip:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--c3);outline-offset:2px}
-.sidefoot{margin-top:auto;font-size:11.5px;opacity:.75;line-height:1.5}
-main{padding:18px max(16px,env(safe-area-inset-right,0px)) 40px 22px;min-width:0}
-h1{font-family:var(--f1);font-size:24px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sidefoot{margin-top:auto;padding:14px 20px 0;font-size:11.5px;opacity:.75;line-height:1.5}
+main{padding:28px max(16px,env(safe-area-inset-right,0px)) 40px 32px;min-width:0}
+h1{font-family:var(--f1);font-size:24px;font-weight:800;margin:0;letter-spacing:-.01em;text-wrap:balance}
 .top{display:flex;gap:12px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
 .sub{color:var(--mute);font-size:12.5px}
 .btn{cursor:pointer;border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:8px;font-weight:600}
 .btn:hover{border-color:var(--g)}
 .btn.pri{background:var(--g);border-color:var(--g);color:#fff}
-:root[data-theme="dark"] .btn.pri,:root:not([data-theme="light"]) .btn.pri{color:#07130C}
 .slicers{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:8px 0 10px;border-bottom:1px solid var(--line);margin-bottom:14px;display:grid;gap:8px}
 .srow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .srow>label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);font-weight:700;min-width:62px}
 .chip{cursor:pointer;border:1px solid var(--line);background:var(--chip);padding:4px 11px;border-radius:999px;font-size:12.5px;font-weight:500}
 .chip[aria-pressed="true"]{background:var(--g);border-color:var(--g);color:#fff}
-:root[data-theme="dark"] .chip[aria-pressed="true"]{color:#07130C}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip[aria-pressed="true"]{color:#07130C}}
 select,input,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;min-width:0}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin-bottom:14px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px;box-shadow:var(--shadow);min-width:0}
@@ -55,8 +56,6 @@ select,input,textarea{background:var(--panel);border:1px solid var(--line);borde
 .tw{overflow:auto;max-width:100%;max-height:560px;border:1px solid var(--line);border-radius:10px}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
 th{position:sticky;top:0;background:var(--g);color:#fff;text-align:left;padding:7px 9px;white-space:nowrap;cursor:pointer;user-select:none}
-:root[data-theme="dark"] th{color:#07130C}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) th{color:#07130C}}
 td{padding:6px 9px;border-top:1px solid var(--line);vertical-align:top}
 td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 tr.idc td{background:var(--g3)} tr.out td{background:color-mix(in srgb,var(--warn) 16%,transparent)}
@@ -69,14 +68,16 @@ tr.idc td{background:var(--g3)} tr.out td{background:color-mix(in srgb,var(--war
 .empty{padding:26px;text-align:center;color:var(--mute)}
 .note{font-size:12.5px;color:var(--mute);max-width:78ch}
 .note li{margin:3px 0}
-@media (max-width:980px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:10px max(16px,env(safe-area-inset-left,0px))}.brand{margin:0}.nav{flex-direction:row;flex-wrap:wrap}.sidefoot{display:none}main{padding-left:max(16px,env(safe-area-inset-left,0px))}.s8,.s7,.s6,.s5,.s4{grid-column:span 12}}
+@media (max-width:980px){.app{grid-template-columns:1fr}aside{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:10px max(16px,env(safe-area-inset-left,0px))}.brand{margin:0;padding:0;border:0;display:flex;gap:10px;align-items:center;text-align:left}.brand img{width:38px;height:38px;margin:0}.who{display:none}.back{margin:0;padding:8px 12px}.nav{flex-direction:row;flex-wrap:wrap}.sidefoot{display:none}main{padding-left:max(16px,env(safe-area-inset-left,0px))}.s8,.s7,.s6,.s5,.s4{grid-column:span 12}}
 @media (max-width:520px){.form{grid-template-columns:1fr}.form .w{grid-column:span 1}.srow>label{min-width:100%}}
 </style>
 <div class="app">
 <aside>
- <div class="brand"><img alt="RAHAMA" src="RAHAMA Empowerment Logo Design (3).png" onerror="this.style.display='none'"><div><b>RAHAMA</b><small>Finance tracker</small></div></div>
+ <div class="brand"><img alt="RAHAMA" src="RAHAMA Empowerment Logo Design (3).png" onerror="this.style.display='none'"><div><b>RAHAMA FMS</b><small>Expense Tracker</small></div></div>
+ <div class="who"><small>Signed in as</small><b id="who"></b></div>
  <nav class="nav" id="nav"></nav>
- <div class="sidefoot">Finance only.</div>
+ <a class="back" href="index.html">← Back to FMS</a>
+ <div class="sidefoot">Finance and named viewers only.</div>
 </aside>
 <main>
  <div class="top"><div><h1 id="ttl">Expense dashboard</h1><div class="sub" id="sub"></div></div>
@@ -101,11 +102,13 @@ const nextM=m=>m%100===12?m+89:m+1;
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const catOf=l=>!l?'':(/^[14]\./.test(l)?l.slice(0,3):l[0]);
 const SB=supabase.createClient("https://sqygmoxpegbfxddglhbx.supabase.co","sb_publishable__nPBgo9IeeU4Mrk_ggEeTg_YEkWrB24");
-let CAN_WRITE=false,PROJ_LIST=[];
+let CAN_WRITE=false,PROJ_LIST=[],QUEUE=[];
 const fromDb=r=>({p:r.project_name,d:r.expense_date||'',m:r.cost_month||0,l:r.budget_line||'',c:r.category||catOf(r.budget_line||''),v:r.voucher_ref||'',n:r.description||'',s:r.payee||'',a:Number(r.amount||0),t:r.expense_type,r:r.retirement_status||'',o:r.source||'',k:r.comment||''});
 async function pageAll(q){let out=[],from=0;for(;;){const {data,error}=await q().range(from,from+999);if(error)throw error;out=out.concat(data||[]);if(!data||data.length<1000)break;from+=1000}return out}
 async function loadAll(){
- const [ex,pr,bl]=await Promise.all([pageAll(()=>SB.from('fin_expenses').select('*').order('id')),SB.from('fin_projects').select('*'),SB.from('fin_budget_lines').select('*').order('category_key')]);
+ const [ex,pr,bl,qu]=await Promise.all([pageAll(()=>SB.from('fin_expenses').select('*').order('id')),SB.from('fin_projects').select('*'),SB.from('fin_budget_lines').select('*').order('category_key'),
+  SB.from('fin_fms_queue').select('*').eq('status','pending').order('queued_at').then(r=>r,()=>({data:[]}))]);
+ QUEUE=(qu&&!qu.error&&qu.data)||[];
  if(pr.error)throw pr.error;
  BASE=ex.map(fromDb);dbRows=[];SET={};PROJ_LIST=(pr.data||[]).map(p=>p.project_name);
  (pr.data||[]).forEach(p=>{SET[p.project_name]={project:p.project_name,budget:Number(p.direct_budget||0),cash:Number(p.cash_received||0),start:p.start_month||0,dur:p.duration_months||0,idc:Number(p.indirect_rate||0),opening:Number(p.opening_spend||0),cats:[]}});
@@ -124,8 +127,8 @@ function filt(skip){let q=st.q.toLowerCase();return base().filter(r=>(skip==='ty
 const sum=(a,f)=>a.reduce((s,r)=>s+(f?f(r):r.a),0);
 const grp=(a,k,v)=>{const o={};a.forEach(r=>{const x=k(r);o[x]=(o[x]||0)+(v?v(r):r.a)});return o};
 // ---------- UI shell
-const NAV=[['dash','Dashboard'],['ledger','Expense list'],['budget','Budgets and cash'],['notes','Data notes']];
-function drawNav(){document.getElementById('nav').innerHTML=NAV.map(([k,l])=>`<button data-v="${k}" aria-current="${st.view===k}">${l}</button>`).join('');document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{st.view=b.dataset.v;save();render()})}
+const NAV=[['dash','Dashboard'],['ledger','Expense list'],['confirm','To confirm'],['budget','Budgets and cash'],['notes','Data notes']];
+function drawNav(){document.getElementById('nav').innerHTML=NAV.map(([k,l])=>`<button data-v="${k}" aria-current="${st.view===k}">${k==='confirm'&&QUEUE.length?l+' ('+QUEUE.length+')':l}</button>`).join('');document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{st.view=b.dataset.v;save();render()})}
 function save(){try{localStorage.setItem('rahama_slicers',JSON.stringify({proj:st.proj,view:st.view}))}catch(e){}}
 function tog(arr,v){const i=arr.indexOf(v);i<0?arr.push(v):arr.splice(i,1)}
 function chips(label,opts,sel,key){return `<div class="srow"><label>${label}</label>${opts.map(o=>`<button class="chip" data-k="${key}" data-v="${esc(o)}" aria-pressed="${sel.includes(o)}">${esc(o)}</button>`).join('')}</div>`}
@@ -224,6 +227,28 @@ function view(){const v=document.getElementById('view');
  if(st.view==='ledger')ledger(v);
  if(st.view==='budget')budgetView(v);
  if(st.view==='notes')notes(v);
+ if(st.view==='confirm')confirmView(v);
+}
+// ---------- FMS payments waiting for Finance to confirm
+function confirmView(v){
+ const L=QUEUE;
+ v.innerHTML=`<div class="card"><h3>FMS payments to confirm<span>${L.length} waiting · ₦${N(L.reduce((s,r)=>s+Number(r.amount||0),0))}</span></h3>
+ <p class="note">Each payment marked paid in the FMS appears here. It is <b>not</b> in the tracker or any total until Finance confirms it. Remove anything already in the tracker (for example on the MdM tracker or entered offline).</p>
+ ${L.length?`<div class="tw"><table><thead><tr><th>Paid</th><th>Project</th><th>Payment / concept note</th><th>Description</th><th>Staff / supplier</th><th class="n">Amount (₦)</th><th>Retirement</th>${CAN_WRITE?'<th>Finance decision</th>':''}</tr></thead><tbody>
+ ${L.map((r,i)=>`<tr><td style="white-space:nowrap">${esc(r.expense_date||'')}</td><td>${esc(r.project_name)}${r.source!=='FMS'?`<div class="sub">${esc(r.source)}</div>`:''}</td><td>${esc(r.payment_ref)}${r.fms_status&&r.fms_status!=='paid'?` <span class="pill bd">now ${esc(r.fms_status)} in FMS</span>`:''}<div class="sub">${esc(r.voucher_ref||'')}</div></td><td>${esc(r.description||'')}</td><td>${esc(r.payee||'')}</td><td class="n">${N(r.amount)}</td><td>${esc(r.retirement_status||'')}</td>
+  ${CAN_WRITE?`<td style="min-width:250px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+   <select id="qt${i}" aria-label="Type">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select><input id="ql${i}" placeholder="Budget line, e.g. 4.1.14" aria-label="Budget line">
+   <input id="qk${i}" placeholder="Comment (reason needed to remove)" aria-label="Comment" style="grid-column:span 2">
+   <button class="btn pri" data-qc="${i}">Confirm</button><button class="btn" data-qr="${i}">Remove</button></div></td>`:''}</tr>`).join('')}</tbody></table></div>`
+ :'<div class="empty">Nothing waiting. New FMS payments appear here once they are marked paid.</div>'}</div>`;
+ const busy=b=>{v.querySelectorAll('[data-qc],[data-qr]').forEach(x=>x.disabled=b)};
+ v.querySelectorAll('[data-qc]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.qc,r=L[i],line=document.getElementById('ql'+i).value.trim();busy(true);
+  const {error}=await SB.rpc('fin_fms_confirm',{p_ref:r.payment_ref,p_type:document.getElementById('qt'+i).value,p_line:line||null,p_category:catOf(line)||null,p_comment:document.getElementById('qk'+i).value.trim()||null});
+  if(error){busy(false);toast('Not confirmed: '+error.message);return}toast('Added to the tracker');await loadAll()});
+ v.querySelectorAll('[data-qr]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.qr,r=L[i],why=document.getElementById('qk'+i).value.trim();
+  if(!why){toast('Write the reason in Comment first');document.getElementById('qk'+i).focus();return}busy(true);
+  const {error}=await SB.rpc('fin_fms_remove',{p_ref:r.payment_ref,p_reason:why});
+  if(error){busy(false);toast('Not removed: '+error.message);return}toast('Removed from the list');await loadAll()});
 }
 function ledger(v){
  const F=filt().slice();const cols=[['d','Date'],['p','Project'],['l','Line'],['v','Voucher / CN'],['n','Description'],['s','Staff / supplier'],['a','Amount (₦)'],['t','Type'],['r','Retirement'],['o','Source'],['k','Comment']];
@@ -242,7 +267,7 @@ function budgetView(v){
   return `<div class="card" style="margin-bottom:12px"><h3>${esc(p)}<span><button class="btn" data-e="${esc(p)}">Edit budget and cash</button></span></h3>
   <div class="kpis"><div class="kpi"><small>Direct budget</small><b>${c.budget?M(c.budget):'Not entered'}</b></div><div class="kpi"><small>Direct spend to ${ML(st.to)}</small><b>${M(dir+c.opening)}</b><i>${c.opening?'incl. opening '+M(c.opening):''}</i></div><div class="kpi"><small>Cash received</small><b>${c.cash?M(c.cash):'Not entered'}</b></div><div class="kpi"><small>Start / duration</small><b>${c.start?ML(c.start)+' · '+c.dur+' mo':'Not entered'}</b></div></div>
   ${c.cats.length?`<div class="tw"><table><tr><th>Key</th><th>Category</th><th class="n">Budget</th><th class="n">Spent</th><th class="n">Balance</th><th class="n">Used</th></tr>${c.cats.map(k=>{const s=g[k[0]]||0;const u=k[2]?s/k[2]:0;return `<tr><td>${esc(k[0])}</td><td>${esc(k[1])}</td><td class="n">${N(k[2])}</td><td class="n">${N(s)}</td><td class="n">${N(k[2]-s)}</td><td class="n"><span class="pill ${u>1?'bd':u>.9?'wa':'ok'}">${(u*100).toFixed(0)}%</span></td></tr>`}).join('')}<tr><td></td><td>Spent with no category (FMS payments carry no budget line)</td><td></td><td class="n">${N(g['None']||0)}</td><td></td><td></td></tr></table></div>`:'<div class="empty">No category budget entered. Use Edit budget and cash.</div>'}</div>`}).join('');
- v.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>editCfg(b.dataset.e));
+ v.querySelectorAll('[data-e]').forEach(b=>{b.onclick=()=>editCfg(b.dataset.e);if(!CAN_WRITE)b.style.display='none'});
 }
 function editCfg(p){const c=cfg(p);const h=document.getElementById('modalHost');
  h.innerHTML=`<div class="modal"><div><h3 style="margin:0 0 10px;font-family:var(--f1)">${esc(p)}: budget and cash</h3><div class="form">
@@ -267,6 +292,7 @@ function notes(v){v.innerHTML=`<div class="card"><h3>How this works</h3><ul clas
 <li><b>Add expenses each month</b> with Add expense. Budgets, cash received, start month, duration and IDC rate are edited under Budgets and cash.</li>
 <li><b>Type</b>: Direct is programme cost. IDC is the indirect cost row. Outside budget is spend with no budget line in the grant.</li>
 <li><b>Source</b> shows where each row came from: MdM tracker, Financial Tracker (pre-FMS), FMS, or Finance entry.</li>
+<li><b>FMS payments</b> paid from now on wait under To confirm. Finance confirms each one (it then joins the tracker and its retirement status updates by itself) or removes it with a reason.</li>
 <li><b>Pace</b>: utilisation is compared with the grant's own duration. Ahead of pace means spend is 15 points above time elapsed.</li></ul></div>`}
 // ---------- add expense
 document.getElementById('addBtn').onclick=()=>{const h=document.getElementById('modalHost'),today=new Date().toISOString().slice(0,10);
@@ -285,20 +311,20 @@ document.getElementById('addBtn').onclick=()=>{const h=document.getElementById('
 };
 document.getElementById('csvBtn').onclick=async()=>{const F=filt();const cols=['p','d','m','l','v','n','s','a','t','r','o','k'];const csv=[['Project','Date','Month','Line','Voucher','Description','Supplier','Amount','Type','Retirement','Source','Comment'].join(',')].concat(F.map(r=>cols.map(c=>'"'+String(r[c]==null?'':r[c]).replace(/"/g,'""')+'"').join(','))).join('\n');
  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='rahama_expenses.csv';a.click();toast('CSV ready')}catch(e){toast('Download failed')}};
-function render(light){document.getElementById('ttl').textContent={dash:'Expense dashboard',ledger:'Expense list',budget:'Budgets and cash',notes:'Data notes'}[st.view];
+function render(light){document.getElementById('ttl').textContent={dash:'Expense dashboard',ledger:'Expense list',confirm:'FMS payments to confirm',budget:'Budgets and cash',notes:'Data notes'}[st.view];
  document.getElementById('sub').textContent=st.proj.join(' · ')+' · '+ML(st.from)+' to '+ML(st.to);
- drawNav();if(!light||true){drawSlicers()}view();
+ drawNav();if(!light||true){drawSlicers()}const qv=st.view==='confirm';document.getElementById('slicers').style.display=qv?'none':'';['csvBtn','resetBtn'].forEach(id=>document.getElementById(id).style.display=qv?'none':'');
+ if(qv)document.getElementById('sub').textContent='Payments marked paid in the FMS, waiting for Finance';view();
  const q=document.getElementById('q');if(q&&light&&document.activeElement===document.body){}
 }
 // ---------- boot
 setMonths();render();
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>render());
-new MutationObserver(()=>render()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 (async()=>{
  const gate=m=>{document.body.innerHTML='<div style="max-width:420px;margin:90px auto;padding:28px;font-family:system-ui;text-align:center"><h2>RAHAMA Expense Tracker</h2><p>'+m+'</p><p><a href="index.html">Back to FMS</a></p></div>'};
  try{
   const {data:{session}}=await SB.auth.getSession();
   if(!session)return gate('Please sign in through the FMS first, then open the tracker from the menu.');
+  try{const u=JSON.parse(localStorage.getItem('pms_user')||'null');document.getElementById('who').textContent=(u&&u.name)||session.user.email||''}catch(e){document.getElementById('who').textContent=session.user.email||''}
   const w=await SB.rpc('fin_is_finance');CAN_WRITE=w.data===true;
   const addBtn=document.getElementById('addBtn');if(addBtn&&!CAN_WRITE)addBtn.style.display='none';
   document.querySelectorAll('[data-e]').forEach(b=>{if(!CAN_WRITE)b.style.display='none'});
