@@ -1,9 +1,0 @@
-project_name,category_key,category_name,budget
-ECHO HIP,1.1,Salaries: technical staff,43700000
-ECHO HIP,1.2,Salaries: support staff (LoE),19175000
-ECHO HIP,2,Travel and transportation,19075000
-ECHO HIP,3,Administration and communication,14550000
-ECHO HIP,4.1,"Health, nutrition and livelihoods (Outcome 1)",38940000
-ECHO HIP,4.2,MHPSS and GBV (Outcome 2),15680000
-ECHO HIP,4.3,WASH (Outcome 3),2649600
-ECHO HIP,5,Monitoring and evaluation,2798543
