@@ -262,9 +262,11 @@ function allDeadlines(){
   const out=[], gp=id=>S.data.grants.find(x=>x.id===id)||{};
   S.data.grants.forEach(g=>{
     if(g.stage==='pipeline'){
-      if(g.loi_due) out.push({date:g.loi_due,kind:'LOI due',g,text:'Letter of intent'});
-      if(g.submission_date) out.push({date:g.submission_date,kind:'Submission',g,text:'Full application'+(g.submission_time?' by '+g.submission_time+(g.submission_tz?' '+g.submission_tz:''):'')});
-      if(g.decision_expected) out.push({date:g.decision_expected,kind:'Decision expected',g,text:'Funder decision'});
+      const loiDone = !!g.loi_sent_date || !['Prospect / Research','Letter of Intent'].includes(g.status);
+      const subDone = !!g.submitted_on || ['Submitted','Awaiting Outcome'].includes(g.status);
+      if(g.loi_due) out.push({date:g.loi_due,kind:'LOI due',g,text:'Letter of intent'+(g.loi_sent_date?' · sent '+fmtD(g.loi_sent_date):''),done:loiDone,mark:'loi_sent_date'});
+      if(g.submission_date) out.push({date:g.submission_date,kind:'Submission',g,text:'Full application'+(g.submission_time?' by '+g.submission_time+(g.submission_tz?' '+g.submission_tz:''):'')+(g.submitted_on?' · submitted '+fmtD(g.submitted_on):''),done:subDone,mark:'submitted_on'});
+      if(g.decision_expected) out.push({date:g.decision_expected,kind:'Decision expected',g,text:'Funder decision (follow up if late)'});
     }
     if(won(g) && g.end_date) out.push({date:g.end_date,kind:'Grant ends',g,text:'End of grant period',done:g.stage==='closed'});
   });
@@ -292,6 +294,13 @@ function render(){
   if(S.grantId) return renderGrant(el, S.grantId);
   ({dashboard:renderDashboard,deadlines:renderDeadlines,gantt:renderGantt,pipeline:renderPipeline,active:renderActive,unsuccessful:renderUnsuccessful,funders:renderFunders,receivables:renderReceivables,audit:renderAudit}[S.tab]||renderDashboard)(el);
 }
+function clearOverdue(k){ try{ localStorage.setItem('gt_overdue_cleared', k); }catch(e){} toast('Cleared. It comes back only if something new becomes overdue.'); render(); }
+async function markDone(id, field){
+  const row = { [field]: new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10), updated_by:(S.user&&(S.user.email||S.user.name))||'unknown' };
+  const { error } = await db.from('grants_register').update(row).eq('id', id);
+  if(error) return alert(/column/.test(error.message) ? 'Run the latest grants_tracker_upgrade.sql first (it adds the "done" dates).' : 'Not saved: '+error.message);
+  toast('Marked as done'); await reload();
+}
 function go(t){ S.tab=t; S.grantId=null; render(); window.scrollTo(0,0); }
 function openGrant(id){ S.grantId=id; render(); window.scrollTo(0,0); }
 function setYear(y){ S.year=y; render(); }
@@ -314,7 +323,10 @@ function renderDashboard(el){
   const noLessons = uns.filter(g=>!g.lessons);
   let h = head('Grants dashboard', yLabel()+' · '+all.length+' record'+(all.length===1?'':'s'), `<button class="btn" onclick="exportExcel()">⬇ Excel report</button>${S.canEdit?'<button class="btn pri" onclick="editGrant(null)">+ Add record</button>':''}`) + upgradeNote();
   if(crit.length) h += `<div class="alert red"><span>⚠️</span><div><b>${crit.length} critical receivable${crit.length===1?'':'s'} need action</b><button class="link" onclick="go('receivables')">Open receivables</button></div></div>`;
-  if(overdue.length) h += `<div class="alert red"><span>⏰</span><div><b>${overdue.length} overdue deadline${overdue.length===1?'':'s'}</b>${overdue.slice(0,3).map(d=>esc(d.kind+': '+(d.g.project||''))).join(' · ')}${overdue.length>3?' …':''} <button class="link" onclick="S.f.dl='overdue';go('deadlines')">See all</button></div></div>`;
+  const odKey = overdue.map(d=>d.kind+'|'+d.g.id+'|'+d.date).sort().join(',');
+  let odHidden=''; try{ odHidden = localStorage.getItem('gt_overdue_cleared')||''; }catch(e){}
+  if(overdue.length && odHidden!==odKey) h += `<div class="alert red" style="position:relative;padding-right:44px"><span>⏰</span><div><b>${overdue.length} overdue deadline${overdue.length===1?'':'s'}</b>${overdue.slice(0,4).map(d=>`<button class="link" style="color:inherit;text-decoration:underline" onclick="openGrant(${d.g.id})" title="Open the grant">${esc(d.kind+': '+(d.g.project||''))}</button>`).join(' · ')}${overdue.length>4?' …':''} <button class="link" onclick="S.f.dl='overdue';go('deadlines')">See all and mark done</button></div>
+    <button onclick="clearOverdue('${esc(odKey)}')" title="Clear this alert" aria-label="Clear this alert" style="position:absolute;right:10px;top:8px;border:0;background:transparent;font-size:20px;cursor:pointer;color:inherit">×</button></div>`;
   if(noBudget.length) h += `<div class="alert amber"><span>📝</span><div><b>${noBudget.length} awarded grant${noBudget.length===1?'':'s'} still without award figures</b>${noBudget.map(g=>`<button class="link" onclick="openGrant(${g.id})">${esc(g.project)}</button>`).join(' · ')}</div></div>`;
   h += `<div class="kpis">
     <div class="kpi win"><small>Win rate · ${yLabel()}</small><b>${rate==null?'–':Math.round(rate*100)+'%'}</b><i>${wins} won · ${losses} not awarded · ${awaiting} awaiting</i></div>
@@ -376,7 +388,7 @@ function deadlineTable(list, compact){
   if(!list.length) return '<div class="empty">Nothing due.</div>';
   return `<div class="tw"><table><thead><tr><th>Date</th><th>What</th><th>Grant</th>${compact?'':'<th>Detail</th><th>Status</th>'}</tr></thead><tbody>${list.map(d=>`<tr class="click" onclick="openGrant(${d.g.id})">
     <td class="nw">${fmtD(d.date)}<div>${d.done?'<span class="chip green">done</span>':when(d.date)}</div></td><td class="nw"><b>${esc(d.kind)}</b>${compact?`<div class="sub">${esc(d.text)}</div>`:''}</td>
-    <td>${esc(d.g.project||'')}<div class="sub">${esc(d.g.funder||'')}</div></td>${compact?'':`<td>${esc(d.text)}</td><td>${badge(d.g.status)}</td>`}</tr>`).join('')}</tbody></table></div>`;
+    <td>${esc(d.g.project||'')}<div class="sub">${esc(d.g.funder||'')}</div></td>${compact?'':`<td>${esc(d.text)}</td><td>${badge(d.g.status)}${S.canEdit&&d.mark&&!d.done?` <button class="btn sm" onclick="event.stopPropagation();markDone(${d.g.id},'${d.mark}')">Mark done</button>`:''}</td>`}</tr>`).join('')}</tbody></table></div>`;
 }
 function renderDeadlines(el){
   const all = allDeadlines(), f=S.f;
@@ -493,9 +505,9 @@ function renderGrant(el,id){
       ${dlRow('Programme officer',esc(g.contact_name))}${dlRow('Email',g.contact_email?`<a href="mailto:${esc(g.contact_email)}">${esc(g.contact_email)}</a>`:'')}${dlRow('Phone',esc(g.contact_phone))}
       ${dlRow('Focus areas',esc(g.focus_areas))}${dlRow('Eligibility',esc(g.eligibility))}${dlRow('Theme',esc(g.thematic))}${dlRow('Geography',esc(g.geo))}</dl></div>
     <div class="card s6"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">2</i>Application and pipeline</span></h3><dl class="dl">
-      ${dlRow('Grant code',esc(g.grant_code))}${dlRow('Stage',badge(g.status))}${dlRow('LOI due',g.loi_due?fmtD(g.loi_due)+' '+(g.stage==='pipeline'?when(g.loi_due):''):'')}
+      ${dlRow('Grant code',esc(g.grant_code))}${dlRow('Stage',badge(g.status))}${dlRow('LOI due',g.loi_due?fmtD(g.loi_due)+' '+(g.stage==='pipeline'&&!g.loi_sent_date&&['Prospect / Research','Letter of Intent'].includes(g.status)?when(g.loi_due):''):'')}
       ${dlRow('Submission deadline',g.submission_date?fmtD(g.submission_date)+(g.submission_time?' · '+esc(g.submission_time):'')+(g.submission_tz?' '+esc(g.submission_tz):'')+' '+(g.stage==='pipeline'?when(g.submission_date):''):esc(g.deadline))}
-      ${dlRow('Decision expected',g.decision_expected?fmtD(g.decision_expected):'')}${dlRow('Requested',money(g.amount,g.currency))}${dlRow('Probability',g.prob!=null?Math.round(g.prob*100)+'%':'')}
+      ${dlRow('LOI sent on',g.loi_sent_date?fmtD(g.loi_sent_date):'')}${dlRow('Submitted on',g.submitted_on?fmtD(g.submitted_on):'')}${dlRow('Decision expected',g.decision_expected?fmtD(g.decision_expected):'')}${dlRow('Requested',money(g.amount,g.currency))}${dlRow('Probability',g.prob!=null?Math.round(g.prob*100)+'%':'')}
       ${dlRow('Weighted',g.amount!=null&&g.prob!=null?money(g.amount*g.prob,g.currency):'')}</dl></div>
     <div class="card s12"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">3</i>Award and finance</span><span>${won(g)?'':'Filled in once the grant is awarded'}</span></h3>
       <div class="grid" style="margin:0"><div class="s6"><dl class="dl">
@@ -585,7 +597,7 @@ function editGrant(id, preset){
     ${F.i('prob','Probability (0–1)',g.prob,'number','step="0.05" min="0" max="1"')}${up?F.i('loi_due','LOI due',g.loi_due,'date'):F.i('deadline','Deadline',g.deadline)}
     ${up?F.i('submission_date','Submission deadline (date)',g.submission_date,'date')+F.i('submission_time','Time',g.submission_time,'time')
       +F.s('submission_tz','Time zone',g.submission_tz||'WAT (UTC+1)',['WAT (UTC+1)','GMT / UTC','CET / CEST (Europe)','EST / EDT (US East)','PST / PDT (US West)','EAT (UTC+3)','SAST (UTC+2)','Other (see notes)'])
-      +F.i('decision_expected','Decision expected',g.decision_expected,'date')+F.i('deadline','Deadline / quarter (old free text)',g.deadline):''}
+      +F.i('loi_sent_date','LOI sent on',g.loi_sent_date,'date')+F.i('submitted_on','Application submitted on',g.submitted_on,'date')+F.i('decision_expected','Decision expected',g.decision_expected,'date')+F.i('deadline','Deadline / quarter (old free text)',g.deadline):''}
     <div class="w" id="secAward" style="display:contents">${F.h('3 · Award and finance')}
       ${up?F.i('awarded_amount','Awarded amount',g.awarded_amount,'number','step="any"')+F.s('award_currency','Award currency',g.award_currency||g.currency||'USD',['USD','EUR','GBP','NGN'])
         +F.i('start_date','Grant start',g.start_date,'date')+F.i('end_date','Grant end',g.end_date,'date'):''}
@@ -606,7 +618,7 @@ async function saveGrant(f, id){
   const fd = new FormData(f), num = k => { if(!fd.has(k)) return undefined; const v=parseFloat(fd.get(k)); return isNaN(v)?null:v; }, txt = k => { if(!fd.has(k)) return undefined; const v=String(fd.get(k)).trim(); return v===''?null:v; };
   const row = { year:parseInt(fd.get('year'),10), status:fd.get('status'), project:txt('project'), funder:txt('funder') };
   ['thematic','geo','note','deadline','period','years','lessons','strategy','currency','grant_code','funder_type','funder_website','contact_name','contact_email','contact_phone','focus_areas','eligibility',
-   'loi_due','submission_date','submission_time','submission_tz','decision_expected','award_currency','start_date','end_date','restrictions','doc_link','relationship_notes','tracker_project'].forEach(k=>{const v=txt(k); if(v!==undefined) row[k]=v;});
+   'loi_due','loi_sent_date','submitted_on','submission_date','submission_time','submission_tz','decision_expected','award_currency','start_date','end_date','restrictions','doc_link','relationship_notes','tracker_project'].forEach(k=>{const v=txt(k); if(v!==undefined) row[k]=v;});
   ['amount','prob','total_usd','total_ngn','received_usd','outstanding_usd','outstanding_ngn','amount_eur','awarded_amount'].forEach(k=>{const v=num(k); if(v!==undefined) row[k]=v;});
   if(row.prob!=null && (row.prob<0||row.prob>1)) return alert('Probability must be between 0 and 1 (e.g. 0.4 for 40%).');
   if(row.start_date && row.end_date && row.end_date < row.start_date) return alert('The grant end date is before the start date.');
@@ -666,10 +678,10 @@ function exportExcel(){
   sheet(wb,'Summary',['Year','Applications','Won','Not awarded','Open','Win rate'], ys.map(y=>{const r=gs.filter(g=>+g.year===y),w=r.filter(won).length,l=r.filter(g=>g.stage==='unsuccessful').length;
     return [y,r.length,w,l,r.filter(g=>g.stage==='pipeline').length,w+l?Math.round(w/(w+l)*100)+'%':'–'];}).concat([['All years',gs.length,wins,losses,gs.filter(g=>g.stage==='pipeline').length,wins+losses?Math.round(wins/(wins+losses)*100)+'%':'–']]),[12,14,8,12,8,10]);
   sheet(wb,'Grants register',['Code','Year','Project','Funder','Funder type','Website','Programme officer','Email','Phone','Focus areas','Eligibility','Theme','Geography','Stage','Status',
-    'Requested','Currency','Probability','LOI due','Submission date','Time','Time zone','Decision expected','Awarded','Award currency','Start','End','Period (text)','Total USD','Total NGN','Received USD','Outstanding USD','Outstanding NGN',
+    'Requested','Currency','Probability','LOI due','LOI sent on','Submission date','Submitted on','Time','Time zone','Decision expected','Awarded','Award currency','Start','End','Period (text)','Total USD','Total NGN','Received USD','Outstanding USD','Outstanding NGN',
     'Restrictions','Expense Tracker project','Documents','Outcome / lessons','Re-submission strategy','Relationship notes','Notes'],
     gs.map(g=>[g.grant_code,g.year,g.project,g.funder,g.funder_type,g.funder_website,g.contact_name,g.contact_email,g.contact_phone,g.focus_areas,g.eligibility,g.thematic,g.geo,g.stage,lab(g.status),
-      g.amount,g.currency,g.prob,g.loi_due,g.submission_date,g.submission_time,g.submission_tz,g.decision_expected,g.awarded_amount,g.award_currency,g.start_date,g.end_date,g.period,g.total_usd,g.total_ngn,g.received_usd,g.outstanding_usd,g.outstanding_ngn,
+      g.amount,g.currency,g.prob,g.loi_due,g.loi_sent_date,g.submission_date,g.submitted_on,g.submission_time,g.submission_tz,g.decision_expected,g.awarded_amount,g.award_currency,g.start_date,g.end_date,g.period,g.total_usd,g.total_ngn,g.received_usd,g.outstanding_usd,g.outstanding_ngn,
       g.restrictions,g.tracker_project,g.doc_link,g.lessons,g.strategy,g.relationship_notes,g.note]));
   const pn = id => (S.data.grants.find(g=>g.id===id)||{}).project||'';
   if(S.data.tranches.length) sheet(wb,'Tranches',['Grant','Due','Expected','Currency','Received on','Received','Note'], S.data.tranches.map(t=>[pn(t.grant_id),t.due_date,t.amount,t.currency,t.received_date,t.received_amount,t.note]),[40,12,14,9,12,14,40]);
