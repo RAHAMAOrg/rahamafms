@@ -1,0 +1,7 @@
+project_name,fms_codes,donor,start_month,duration_months,indirect_rate,direct_budget,cash_received,opening_spend
+ECHO HIP,HIP101,ECHO (lead partner MdM),202604,10,0.0595,156568143.2,132707158.18,0
+GEPP,GEPP101,Obama Foundation (Girls Opportunity Alliance),202510,15,,61825000,61825000,0
+ASCENT DR-TB,DRT102,Unitaid via Treatment Action Group,202511,11,,30000197,,0
+FIFSAN,FIFSAN001,French Government,,,,,,0
+Core (ADM001),ADM001,RAHAMA core funds,,,,,,0
+Other codes,"CBA101,TES101,RAM101",Various,,,,,,0
