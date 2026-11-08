@@ -164,7 +164,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ═════════ STATE ═════════
 const S = { user:null, canEdit:false, tab:'dashboard', year:'all', grantId:null, upgraded:true,
-  data:{ grants:[], receivables:[], audit:[], tranches:[], reports:[], milestones:[], finProjects:[] },
+  data:{ grants:[], receivables:[], audit:[], tranches:[], reports:[], milestones:[], finProjects:[], fmsProjects:[] },
   f:{ dl:'upcoming', dlKind:'', q:'', gantt:'awarded' } };
 let CH = {};
 
@@ -242,17 +242,18 @@ function denied(h,p){ document.getElementById('userRole').textContent='No access
 
 async function load(){
   const opt = q => q.then(r => r, () => ({ data:[], error:{message:'unavailable'} }));
-  const [g,r,a,t,rp,m,fp] = await Promise.all([
+  const [g,r,a,t,rp,m,fp,pj] = await Promise.all([
     db.from('grants_register').select('*').order('id'),
     opt(db.from('receivables').select('*').order('id')),
     opt(db.from('grants_audit').select('*').order('changed_at',{ascending:false}).limit(300)),
     opt(db.from('grant_tranches').select('*').order('due_date')),
     opt(db.from('grant_reports').select('*').order('due_date')),
     opt(db.from('grant_milestones').select('*').order('due_date')),
-    opt(db.from('fin_projects').select('project_name,direct_budget,cash_received'))]);
+    opt(db.from('fin_projects').select('project_name,direct_budget,cash_received,fms_codes')),
+    opt(db.from('projects').select('code,name,budget,startDate,endDate,donor,active').order('code'))]);
   if(g.error) throw new Error('grants_register: '+g.error.message);
   Object.assign(S.data, { grants:g.data||[], receivables:r.data||[], audit:a.data||[], tranches:(t.error?[]:t.data)||[], reports:(rp.error?[]:rp.data)||[],
-    milestones:(m.error?[]:m.data)||[], finProjects:(fp.error?[]:fp.data)||[] });
+    milestones:(m.error?[]:m.data)||[], finProjects:(fp.error?[]:fp.data)||[], fmsProjects:(pj.error?[]:pj.data)||[] });
   if(t.error) S.upgraded = false;
 }
 async function reload(){ await load(); render(); }
@@ -455,7 +456,7 @@ function renderActive(el){
     (d.length ? `<div class="tw"><table><thead><tr><th>Code</th><th>Grant / funder</th><th>Period</th><th>Awarded</th><th>Total (NGN)</th><th>Tranches received</th><th>Next report</th><th>Status</th>${S.canEdit?'<th></th>':''}</tr></thead><tbody>
       ${d.map(g=>{ const [a,c]=awardOf(g), sp=span(g), tr=byGrant(S.data.tranches,g.id), rec=tr.filter(t=>t.received_date).length,
         nr=byGrant(S.data.reports,g.id).filter(r=>!r.submitted_date&&r.due_date).sort((x,y)=>String(x.due_date).localeCompare(y.due_date))[0];
-        return `<tr class="click" onclick="openGrant(${g.id})" style="${g.stage==='closed'?'opacity:.65':''}"><td class="nw sub">${esc(g.grant_code||'')}</td><td><b>${esc(g.project)}</b><div class="sub">${esc(g.funder||'')}</div>${a==null?' <span class="chip amber">needs award figures</span>':''}</td>
+        return `<tr class="click" onclick="openGrant(${g.id})" style="${g.stage==='closed'?'opacity:.65':''}"><td class="nw sub">${esc(g.grant_code||'')}</td><td><b>${esc(g.project)}</b><div class="sub">${esc(g.funder||'')}</div>${a==null?' <span class="chip amber">needs award figures</span>':''}${g.stage==='active'&&!g.fms_project_code&&S.upgraded?' <span class="chip amber">not linked to FMS</span>':''}</td>
         <td class="nw">${sp[0]&&sp[1]?fmtD(sp[0]).slice(3)+' – '+fmtD(sp[1]).slice(3):esc(g.period||'–')}${sp[0]&&sp[1]&&g.stage!=='closed'?`<div class="bar"><span style="width:${Math.min(100,Math.max(0,(today()-sp[0])/(sp[1]-sp[0])*100))}%"></span></div>`:''}</td>
         <td class="n">${money(a,c)}</td><td class="n">${g.total_ngn?money(g.total_ngn,'NGN'):'–'}</td><td class="nw">${tr.length?rec+' of '+tr.length:'–'}</td>
         <td class="nw">${nr?esc(nr.kind)+'<div class="sub">'+fmtD(nr.due_date)+'</div>'+when(nr.due_date):'–'}</td><td>${badge(g.status)}</td>${actions(g.id)}</tr>`; }).join('')}</tbody></table></div>`
@@ -510,6 +511,7 @@ function renderGrant(el,id){
       ${dlRow('LOI sent on',g.loi_sent_date?fmtD(g.loi_sent_date):'')}${dlRow('Submitted on',g.submitted_on?fmtD(g.submitted_on):'')}${dlRow('Decision expected',g.decision_expected?fmtD(g.decision_expected):'')}${dlRow('Requested',money(g.amount,g.currency))}${dlRow('Probability',g.prob!=null?Math.round(g.prob*100)+'%':'')}
       ${dlRow('Weighted',g.amount!=null&&g.prob!=null?money(g.amount*g.prob,g.currency):'')}</dl></div>
     <div class="card s12"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">3</i>Award and finance</span><span>${won(g)?'':'Filled in once the grant is awarded'}</span></h3>
+      ${won(g)?`<div class="alert ${g.fms_project_code?'':'amber'}" style="${g.fms_project_code?'background:#EAF5EE;border-color:#CFE5D6;color:var(--primary-dark)':''}"><span>${g.fms_project_code?'🔗':'⚠️'}</span><div style="flex:1"><b>${g.fms_project_code?`Linked: FMS project ${esc(g.fms_project_code)} · Expense Tracker “${esc(g.tracker_project||'')}”`:'Not linked to the FMS and Expense Tracker yet'}</b>${g.fms_project_code?`Award in Naira ${money(g.total_ngn,'NGN')}. FMS payments under ${esc(g.fms_project_code)} reach this project in the Expense Tracker.`:'Link it so the FMS project and the Expense Tracker budget are set up from this award.'}</div>${S.canEdit&&S.upgraded?`<button class="btn ${g.fms_project_code?'':'pri'}" onclick="linkAward(${id})">${g.fms_project_code?'Update link':'Link now'}</button>`:''}</div>`:''}
       <div class="grid" style="margin:0"><div class="s6"><dl class="dl">
         ${dlRow('Awarded amount',money(a,c))}${dlRow('Requested vs awarded',a!=null&&g.amount?Math.round(a/g.amount*100)+'% of request'+(c!==(g.currency||'USD')?' (different currencies)':''):'')}
         ${dlRow('Total (NGN)',g.total_ngn?money(g.total_ngn,'NGN'):'')}${dlRow('Grant period',sp[0]&&sp[1]?fmtD(sp[0])+' – '+fmtD(sp[1])+(sp[2]?' <span class="sub">(read from "'+esc(g.period)+'")</span>':''):esc(g.period))}
@@ -631,6 +633,130 @@ async function saveGrant(f, id){
   const saved = (res.data||[])[0];
   if(saved && +saved.year !== +S.year && S.year!=='all') S.year = +saved.year;
   await load(); if(saved){ S.grantId = saved.id; } render();
+  if(saved && S.upgraded && S.canEdit && ['Awarded','Active'].includes(saved.status) && !saved.fms_project_code) linkAward(saved.id, true);
+}
+// ═════════ LINK AN AWARDED GRANT TO THE FMS AND THE EXPENSE TRACKER ═════════
+function linkAward(id, justAwarded){
+  const g = S.data.grants.find(x=>x.id===id); if(!g) return;
+  const fms = S.data.fmsProjects, fin = S.data.finProjects;
+  const [aw, awc] = awardOf(g);
+  const ngn0 = g.total_ngn || (awc==='NGN' ? aw : null);
+  const code0 = g.fms_project_code || '';
+  const finFor = c => (fin.find(f => String(f.fms_codes||'').toUpperCase().split(',').map(x=>x.trim()).includes(String(c).toUpperCase()) && f.project_name!=='Other codes')||{}).project_name;
+  const short0 = (g.project||'').replace(/\(([^)]+)\)/,'').split(/[–—:-]/)[0].trim().slice(0,40);
+  modal((justAwarded?'Awarded! ':'')+'Link to the FMS and the Expense Tracker', `<form class="form" id="lForm">
+    <div class="w sub">${esc(g.project)} · ${esc(g.funder||'')}. Confirm the figures in Naira: the FMS and the Expense Tracker both work in Naira. Nothing changes until you press Link.</div>
+    ${F.h('Award in Naira')}
+    ${aw!=null&&awc!=='NGN'?`<label>Awarded (${esc(awc)})<input value="${esc(money(aw,awc))}" disabled></label><label>Exchange rate (₦ per ${esc(awc)})<input name="fx" type="number" step="any" placeholder="e.g. 1500"></label>`:''}
+    <label>Award in Naira (₦)<input name="ngn" type="number" step="any" required value="${esc(ngn0??'')}"></label>
+    <label>Admin cost (₦) — goes to the Admin cost line<input name="admin" type="number" step="any" value="0"></label>
+    <label>…or admin as % of the award<input name="adminPct" type="number" step="any" min="0" max="100" placeholder="e.g. 7"></label>
+    <div class="sub" id="lSum" style="align-self:end"></div>
+    ${F.h('FMS project')}
+    <label>FMS project<select name="fmsSel"><option value="__new">+ New FMS project</option>${fms.map(p=>`<option value="${esc(p.code)}" ${String(p.code).toUpperCase()===code0.toUpperCase()?'selected':''}>${esc(p.code+' · '+(p.name||''))}</option>`).join('')}</select></label>
+    <label id="lNewCode">New project code<input name="code" value="${esc(code0)}" placeholder="e.g. GEPP102" style="text-transform:uppercase"></label>
+    <label id="lNewName" class="w">FMS project name<input name="name" value="${esc(short0)}"></label>
+    ${F.i('start','Grant start',g.start_date||'','date')}${F.i('end','Grant end',g.end_date||'','date')}
+    ${F.h('Expense Tracker project')}
+    <label>Expense Tracker project<select name="finSel"><option value="__new">+ New tracker project</option>${fin.filter(f=>f.project_name!=='Other codes').map(f=>`<option ${f.project_name===(g.tracker_project||'')?'selected':''}>${esc(f.project_name)}</option>`).join('')}</select></label>
+    <label id="lNewFin">New tracker project name<input name="fin" value="${esc(g.tracker_project||short0)}"></label>
+    <div class="w" id="lExist"></div>
+    ${F.h('Budget (upload it now — its lines go to the Expense Tracker)')}
+    <label class="w">Budget file (.xlsx, .xls or .csv) — any layout<input type="file" id="bFile" accept=".xlsx,.xls,.csv"></label>
+    <div class="w" id="bCfg"></div><div class="w" id="bPrev"></div>
+    <div class="w fa"><button type="button" class="btn" onclick="closeModal()">${justAwarded?'Later':'Cancel'}</button><button class="btn pri" type="submit">Link</button></div><div class="w sub" id="lMsg"></div></form>`);
+  const f = document.getElementById('lForm'), $ = n => f.elements[n];
+  const sync = () => {
+    const isNewF = $('fmsSel').value==='__new', isNewT = $('finSel').value==='__new';
+    document.getElementById('lNewCode').style.display = isNewF ? '' : 'none'; document.getElementById('lNewName').style.display = isNewF ? '' : 'none';
+    document.getElementById('lNewFin').style.display = isNewT ? '' : 'none';
+    const ngn = +$('ngn').value||0, adm = +$('admin').value||0;
+    document.getElementById('lSum').innerHTML = ngn ? `Programme lines ₦${Number(ngn-adm).toLocaleString('en-NG')} + Admin cost ₦${Number(adm).toLocaleString('en-NG')}` : '';
+    const ex = [];
+    if(!isNewF){ const p = fms.find(x=>x.code===$('fmsSel').value); if(p) ex.push(`FMS ${esc(p.code)} budget now <b>${money(p.budget,'NGN')}</b>`); }
+    if(!isNewT){ const t = fin.find(x=>x.project_name===$('finSel').value); if(t) ex.push(`Expense Tracker “${esc(t.project_name)}” budget now <b>${money(t.direct_budget,'NGN')}</b>`); }
+    document.getElementById('lExist').innerHTML = ex.length ? `<label style="display:flex;gap:8px;align-items:center;text-transform:none;font-weight:600;color:var(--text)"><input type="checkbox" name="upd" style="width:auto"> Update the existing budget${ex.length>1?'s':''} to ₦${Number(ngn).toLocaleString('en-NG')} and the dates</label><div class="sub">${ex.join(' · ')}. Leave unticked to link without changing them.</div>` : '<div class="sub">New projects are created with this award as their budget.</div>';
+  };
+  // if the grant's code already exists in the FMS, select it; pick the tracker project that receives that code
+  if(code0 && fms.some(p=>String(p.code).toUpperCase()===code0.toUpperCase())){ $('fmsSel').value = fms.find(p=>String(p.code).toUpperCase()===code0.toUpperCase()).code; }
+  else $('fmsSel').value = '__new';
+  if(!g.tracker_project){ const t = finFor($('fmsSel').value); $('finSel').value = t || '__new'; }
+  $('fmsSel').onchange = () => { const t = finFor($('fmsSel').value); if(t) $('finSel').value = t; sync(); };
+  ['finSel','ngn','admin'].forEach(n => $(n).oninput = $(n).onchange = sync);
+  if($('fx')) $('fx').oninput = () => { const r = +$('fx').value; if(r>0){ $('ngn').value = Math.round(aw*r); sync(); } };
+  $('adminPct').oninput = () => { const p = +$('adminPct').value; if(p>=0) { $('admin').value = Math.round((+$('ngn').value||0)*p/100); sync(); } };
+  // ----- budget upload: read the file, pick columns, convert to Naira, admin rows → Admin cost
+  const B = { wb:null, rows:[], hdr:0, cols:{code:-1,desc:-1,amt:-1}, cur:'NGN', lines:[], admin:0, adminN:0 };
+  const txt = v => String(v==null?'':v).replace(/\s+/g,' ').trim();
+  const num = v => { if(typeof v==='number') return v; const n=parseFloat(String(v==null?'':v).replace(/[₦$€£,\s]/g,'').replace(/^\((.*)\)$/,'-$1')); return isNaN(n)?null:n; };
+  const ADM = /admin(istrative)?\s*(cost|fee|support|overhead|expense)|indirect|overhead|\bidc\b|\bicr\b/i;
+  const rate = () => B.cur==='NGN' ? 1 : (+($('fx')&&$('fx').value)||0);
+  const bParse = () => { const out=[], seen={}; let adm=0, admN=0, inAdm=false; const C=B.cols, k=rate();
+    for(let i=B.hdr+1;i<B.rows.length;i++){ const R=B.rows[i]||[]; let d=C.desc>=0?txt(R[C.desc]):'', code=C.code>=0?txt(R[C.code]):''; const a0=C.amt>=0?num(R[C.amt]):null;
+      if(!d&&!code) continue;
+      if(/sub\s*-?\s*total|^total|grand\s*total|total\s+(objective|budget|cost)/i.test(d)||/^total/i.test(code)){ inAdm=false; continue; }
+      if(a0==null||a0<=0){ if(d&&a0==null) inAdm=ADM.test(d); continue; }
+      const a = Math.round(a0*k*100)/100;
+      if(!code){ const m=d.match(/^\s*(\d+(?:\.\d+)+|\d+)[\s.):-]+(.*)$/); if(m){ code=m[1]; d=m[2]||d; } }
+      code = code.replace(/\.0+$/,'');
+      if(inAdm||ADM.test(d+' '+code)){ adm+=a; admN++; continue; }
+      if(!code) code='L'+String(out.length+1).padStart(2,'0'); let key=code, j=2; while(seen[key.toUpperCase()]) key=code+'-'+(j++); seen[key.toUpperCase()]=1;
+      out.push({key, name:d.slice(0,200), amount:a}); }
+    B.lines=out; B.admin=adm; B.adminN=admN; };
+  const bShow = () => { if(!B.wb) return; bParse();
+    if(B.adminN && !(+$('admin').value)) { $('admin').value = Math.round(B.admin); sync(); }
+    const prog = B.lines.reduce((s,l)=>s+l.amount,0), adm=+$('admin').value||0, tot=prog+adm, award=+$('ngn').value||0;
+    const needRate = B.cur!=='NGN' && !rate();
+    document.getElementById('bPrev').innerHTML = needRate ? '<div class="alert amber"><span>💱</span><div>Enter the exchange rate above to convert this budget to Naira.</div></div>' :
+      `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin:4px 0 6px"><b>${B.lines.length} lines + Admin cost · ₦${Number(tot).toLocaleString('en-NG')}</b>
+       <span class="sub">${B.adminN?`${B.adminN} admin row${B.adminN===1?'':'s'} in the file → Admin cost`:'no admin rows in the file: Admin cost uses the amount above'}${award&&Math.abs(tot-award)>1?` · <b style="color:var(--warn)">differs from the award by ₦${Number(tot-award).toLocaleString('en-NG')}</b>`:award?' · matches the award':''}</span></div>
+       <div class="sub" style="margin-bottom:6px">Linking replaces this project's budget lines in the Expense Tracker with these (the previous lines are kept in the budget history). Every expense then counts against these lines.</div>
+       <div class="tw" style="max-height:220px"><table><thead><tr><th>Code</th><th>Line</th><th class="n">₦</th></tr></thead><tbody>${B.lines.map(l=>`<tr><td>${esc(l.key)}</td><td>${esc(l.name)}</td><td class="n">${Number(l.amount).toLocaleString('en-NG')}</td></tr>`).join('')}
+       <tr><td><b>ADMIN</b></td><td><b>Admin cost</b></td><td class="n"><b>${Number(adm).toLocaleString('en-NG')}</b></td></tr></tbody></table></div>`; };
+  const bCfg = () => { const H=B.rows[B.hdr]||[], opt=sel=>`<option value="-1">(none)</option>`+H.map((x,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(String.fromCharCode(65+(i%26))+': '+(txt(x)||'(blank)').slice(0,34))}</option>`).join('');
+    document.getElementById('bCfg').innerHTML = `<div class="form" style="grid-template-columns:repeat(3,minmax(0,1fr))">${B.wb.SheetNames.length>1?`<label>Sheet<select id="bSh">${B.wb.SheetNames.map(n=>`<option ${n===B.sheet?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}
+      <label>Header row<input id="bHr" type="number" min="1" value="${B.hdr+1}"></label><label>Line code<select id="bC">${opt(B.cols.code)}</select></label><label>Description<select id="bD">${opt(B.cols.desc)}</select></label>
+      <label>Amount column<select id="bA">${opt(B.cols.amt)}</select></label><label>Amounts are in<select id="bCur"><option value="NGN" ${B.cur==='NGN'?'selected':''}>Naira</option>${awc&&awc!=='NGN'?`<option value="FX" ${B.cur==='FX'?'selected':''}>${esc(awc)} (convert at the rate above)</option>`:''}</select></label></div>`;
+    const g2=id=>document.getElementById(id);
+    if(g2('bSh')) g2('bSh').onchange=e=>bSheet(e.target.value);
+    g2('bHr').onchange=e=>{ B.hdr=Math.max(0,(+e.target.value||1)-1); bGuess(); bCfg(); bShow(); };
+    [['bC','code'],['bD','desc'],['bA','amt']].forEach(([id,k])=>g2(id).onchange=e=>{ B.cols[k]=+e.target.value; bGuess(k); bShow(); });
+    g2('bCur').onchange=e=>{ B.cur=e.target.value; bShow(); }; };
+  const bGuess = keep => { const H=(B.rows[B.hdr]||[]).map(x=>txt(x).toLowerCase()), fi=re=>H.findIndex(x=>re.test(x));
+    if(keep) return;
+    const ngn=fi(/naira|ngn|local/), usd=fi(/usd|us\$|dollar/);
+    let amt = ngn>=0 ? ngn : H.reduce((b,x,i)=>/total|amount|budget|cost/.test(x)&&!/unit|rate/.test(x)?i:b,-1);
+    B.cur = ngn>=0 || amt<0 || !(usd===amt) ? 'NGN' : 'FX';
+    B.cols={ code:fi(/^s\/?n$|^code$|line|^no\.?$|^ref|budget code|^#$/), desc:fi(/desc|activit|item|particular|detail|narrat/), amt }; };
+  const bSheet = name => { B.sheet=name; B.rows=XLSX.utils.sheet_to_json(B.wb.Sheets[name],{header:1,raw:true,defval:''});
+    B.hdr=Math.max(0,B.rows.slice(0,40).findIndex(r=>r.filter(x=>txt(x)&&num(x)===null).length>=3&&r.some(x=>/desc|activit|item|total|amount|budget|cost|line/i.test(txt(x)))));
+    bGuess(); bCfg(); bShow(); };
+  document.getElementById('bFile').onchange = async e => { const file=e.target.files[0]; if(!file) return;
+    if(!window.XLSX){ document.getElementById('bPrev').textContent='The spreadsheet reader did not load. Reload the page and try again.'; return; }
+    try{ B.wb=XLSX.read(await file.arrayBuffer(),{type:'array'}); const best=B.wb.SheetNames.map(n=>[n,XLSX.utils.sheet_to_json(B.wb.Sheets[n],{header:1}).length]).sort((a,b)=>b[1]-a[1])[0][0]; bSheet(best); }
+    catch(err){ document.getElementById('bPrev').textContent='Could not read the file: '+err.message; } };
+  ['ngn','admin','adminPct'].forEach(n => { const o=$(n).oninput; $(n).oninput = () => { o&&o(); bShow(); }; });
+  if($('fx')){ const o=$('fx').oninput; $('fx').oninput = () => { o&&o(); bShow(); }; }
+  sync();
+  f.onsubmit = async e => { e.preventDefault();
+    const isNewF = $('fmsSel').value==='__new', isNewT = $('finSel').value==='__new';
+    const code = (isNewF ? $('code').value : $('fmsSel').value).trim().toUpperCase();
+    if(isNewF && fms.some(p=>String(p.code).toUpperCase()===code)) return document.getElementById('lMsg').textContent = code+' already exists in the FMS: choose it from the list instead.';
+    const args = { p_grant:id, p_code:code, p_name:isNewF?$('name').value.trim():((fms.find(p=>p.code===code)||{}).name||''), p_total_ngn:+$('ngn').value, p_admin_ngn:+$('admin').value||0,
+      p_start:$('start').value||null, p_end:$('end').value||null, p_tracker_project:(isNewT?$('fin').value:$('finSel').value).trim(), p_update_budget:!!($('upd')&&$('upd').checked), p_lines:null };
+    if(B.wb){ if(B.cur!=='NGN'&&!rate()) return document.getElementById('lMsg').textContent='Enter the exchange rate to convert the budget to Naira.';
+      bParse(); if(!B.lines.length) return document.getElementById('lMsg').textContent='No budget lines found: check the header row and the columns.';
+      const tot=B.lines.reduce((s,l)=>s+l.amount,0)+(+$('admin').value||0);
+      if(Math.abs(tot-args.p_total_ngn)>1 && !confirm(`The budget lines add up to ₦${Number(tot).toLocaleString('en-NG')}, but the award is ₦${Number(args.p_total_ngn).toLocaleString('en-NG')}.\n\nLink anyway? (The award stays the project budget.)`)) return;
+      args.p_lines = B.lines.map(({key,name,amount})=>({key,name,amount})).concat([{key:'ADMIN',name:'Admin cost',amount:+$('admin').value||0}]); }
+    const btn = f.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Linking…';
+    const { data, error } = await db.rpc('grants_link_award', args);
+    if(error){ btn.disabled=false; btn.textContent='Link'; document.getElementById('lMsg').textContent = /grants_link_award|function/i.test(error.message) && /not exist|could not find/i.test(error.message) ? 'Run grants_award_link.sql once in the FMS SQL editor first.' : 'Not linked: '+error.message; return; }
+    closeModal();
+    const w = { created:'created', updated:'updated', linked:'linked (budget unchanged)' };
+    toast(`FMS ${data.code}: ${w[data.fms]} · Expense Tracker “${data.tracker_project}”: ${w[data.tracker]}${args.p_lines?` · ${args.p_lines.length} budget lines loaded`:''}`);
+    await load(); S.grantId = id; render();
+  };
 }
 async function delGrant(id){
   const g = S.data.grants.find(x=>x.id===id);
