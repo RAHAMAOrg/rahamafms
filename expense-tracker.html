@@ -1,6 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RAHAMA Expense Tracker (Finance)</title>
+<link rel="icon" type="image/png" href="RAHAMA Empowerment Logo Design (3).png">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
@@ -88,11 +89,12 @@ tr.idc td{background:var(--g3)} tr.out td{background:color-mix(in srgb,var(--war
 <div id="modalHost"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 let BASE=[];
 const PROJECTS=['ECHO HIP','GEPP','ASCENT DR-TB','FIFSAN','Core (ADM001)','Other codes'];
 const DEF={};
-const TYPES=['Direct','IDC','Outside budget'];
+const TYPES=['Direct','Outside budget'];
 const RST=['Retired','Retirement submitted','Retirement rejected','Not retired'];
 const N=v=>Math.round(v||0).toLocaleString('en-NG');
 const M=v=>{v=v||0;const a=Math.abs(v);return (v<0?'-':'')+'₦'+(a>=1e9?(a/1e9).toFixed(2)+'B':a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(0)+'k':a.toFixed(0))};
@@ -100,25 +102,34 @@ const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec
 const ML=m=>m?MN[(m%100)-1]+' '+Math.floor(m/100):'';
 const nextM=m=>m%100===12?m+89:m+1;
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const catOf=l=>!l?'':(/^[14]\./.test(l)?l.slice(0,3):l[0]);
+const catOf=l=>!l?'':/^admin/i.test(l)?'ADMIN':(/^[14]\./.test(l)?l.slice(0,3):l[0]);
 const SB=supabase.createClient("https://sqygmoxpegbfxddglhbx.supabase.co","sb_publishable__nPBgo9IeeU4Mrk_ggEeTg_YEkWrB24");
 let CAN_WRITE=false,PROJ_LIST=[],QUEUE=[];
 const fromDb=r=>({id:r.id,p:r.project_name,d:r.expense_date||'',m:r.cost_month||0,l:r.budget_line||'',c:r.category||catOf(r.budget_line||''),v:r.voucher_ref||'',n:r.description||'',s:r.payee||'',a:Number(r.amount||0),t:r.expense_type,r:r.retirement_status||'',o:r.source||'',k:r.comment||''});
 async function pageAll(q){let out=[],from=0;for(;;){const {data,error}=await q().range(from,from+999);if(error)throw error;out=out.concat(data||[]);if(!data||data.length<1000)break;from+=1000}return out}
 async function loadAll(){
- const [ex,pr,bl,qu]=await Promise.all([pageAll(()=>SB.from('fin_expenses').select('*').order('id')),SB.from('fin_projects').select('*'),SB.from('fin_budget_lines').select('*').order('category_key'),
+ const [ex,pr,bl,qu]=await Promise.all([pageAll(()=>SB.from('fin_expenses').select('*').order('id')),SB.from('fin_projects').select('*'),SB.from('fin_budget_lines').select('*').order('sort_order',{nullsFirst:false}).order('category_key'),
   SB.from('fin_fms_queue').select('*').eq('status','pending').order('queued_at').then(r=>r,()=>({data:[]}))]);
  QUEUE=(qu&&!qu.error&&qu.data)||[];
  if(pr.error)throw pr.error;
  BASE=ex.map(fromDb);dbRows=[];SET={};PROJ_LIST=(pr.data||[]).map(p=>p.project_name);
  (pr.data||[]).forEach(p=>{SET[p.project_name]={project:p.project_name,budget:Number(p.direct_budget||0),cash:Number(p.cash_received||0),start:p.start_month||0,dur:p.duration_months||0,idc:Number(p.indirect_rate||0),opening:Number(p.opening_spend||0),cats:[]}});
  ((bl&&bl.data)||[]).forEach(b=>{if(SET[b.project_name])SET[b.project_name].cats.push([b.category_key,b.category_name||'',Number(b.budget||0)])});
+ BASE.forEach(r=>{r.key=keyOf(r);r.g=r.key||r.c||'None'});
  setMonths();render()}
 let DB=null,dbRows=[],SET={},st={view:'dash',proj:['ECHO HIP'],from:0,to:0,types:[],status:[],src:[],cats:[],q:'',sort:'d',dir:-1,page:0,months:[]};
 try{const s=JSON.parse(localStorage.getItem('rahama_slicers')||'null');if(s&&s.proj)Object.assign(st,{proj:s.proj,view:s.view||'dash'})}catch(e){}
 const slug=p=>p.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 const cfg=p=>Object.assign({budget:0,start:0,dur:0,idc:0,cash:0,opening:0,cats:[]},DEF[p]||{},SET[p]||{});
 const all=()=>BASE.concat(dbRows);
+// Which budget line an expense belongs to: the most specific line code that matches its budget line
+// (4.1.14 → 4.1 or 4; 1.1.1 → 1.1.1), else its category, else a line with the same name. Old IDC rows → Admin cost.
+function keyOf(r){const cats=(SET[r.p]||{}).cats||[];if(!cats.length)return null;const K=cats.map(c=>String(c[0]));
+ if(r.t==='IDC'&&K.some(k=>k.toUpperCase()==='ADMIN'))return K.find(k=>k.toUpperCase()==='ADMIN');
+ const l=String(r.l||'').trim().toUpperCase();if(l){let best=null;K.forEach(k=>{const u=k.toUpperCase();if(l===u||l.startsWith(u+'.')||l.startsWith(u+' ')||l.startsWith(u+'-'))if(!best||k.length>best.length)best=k});if(best)return best}
+ const c=String(r.c||'').trim().toUpperCase();if(c){const m=K.find(k=>k.toUpperCase()===c);if(m)return m;const n=cats.find(x=>String(x[1]||'').trim().toUpperCase()===c);if(n)return n[0]}
+ return null}
+const lineName=(p,k)=>{const c=((SET[p]||{}).cats||[]).find(x=>x[0]===k);return c?c[1]:''};
 function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const NOWM=(()=>{const d=new Date();return d.getFullYear()*100+d.getMonth()+1})();
@@ -128,7 +139,7 @@ function setMonths(){const a=all().map(r=>r.m).filter(Boolean);let lo=a.length?M
  if(!st.from||!st._full&&a.length)st.from=o[0];if(!st.to||!st._full&&a.length)st.to=o.filter(m=>m<=NOWM).pop()||o[o.length-1];if(a.length)st._full=true;
  if(!o.includes(st.from))st.from=o[0];if(!o.includes(st.to))st.to=o.filter(m=>m<=NOWM).pop()||o[o.length-1]}
 function base(){return all().filter(r=>st.proj.includes(r.p)&&(!r.m||(r.m>=st.from&&r.m<=st.to)))}
-function filt(skip){let q=st.q.toLowerCase();return base().filter(r=>(skip==='types'||!st.types.length||st.types.includes(r.t))&&(!st.status.length||st.status.includes(r.r||'No status'))&&(!st.src.length||st.src.includes(r.o))&&(skip==='cats'||!st.cats.length||st.cats.includes(r.c||'None'))&&(!q||(r.n+' '+r.s+' '+r.v+' '+r.l).toLowerCase().includes(q)))}
+function filt(skip){let q=st.q.toLowerCase();return base().filter(r=>(skip==='types'||!st.types.length||st.types.includes(r.t))&&(!st.status.length||st.status.includes(r.r||'No status'))&&(!st.src.length||st.src.includes(r.o))&&(skip==='cats'||!st.cats.length||st.cats.includes(r.g))&&(!q||(r.n+' '+r.s+' '+r.v+' '+r.l).toLowerCase().includes(q)))}
 const sum=(a,f)=>a.reduce((s,r)=>s+(f?f(r):r.a),0);
 const grp=(a,k,v)=>{const o={};a.forEach(r=>{const x=k(r);o[x]=(o[x]||0)+(v?v(r):r.a)});return o};
 // ---------- UI shell
@@ -138,7 +149,7 @@ function save(){try{localStorage.setItem('rahama_slicers',JSON.stringify({proj:s
 function tog(arr,v){const i=arr.indexOf(v);i<0?arr.push(v):arr.splice(i,1)}
 function chips(label,opts,sel,key){return `<div class="srow"><label>${label}</label>${opts.map(o=>`<button class="chip" data-k="${key}" data-v="${esc(o)}" aria-pressed="${sel.includes(o)}">${esc(o)}</button>`).join('')}</div>`}
 function drawSlicers(){
- const cats=[...new Set(base().map(r=>r.c||'None'))].sort();
+ const cats=[...new Set(base().map(r=>r.g))].sort();
  const stat=[...new Set(base().map(r=>r.r||'No status'))];
  const srcs=[...new Set(base().map(r=>r.o))];
  const opt=sel=>st.months.map(m=>`<option value="${m}" ${m===sel?'selected':''}>${ML(m)}</option>`).join('');
@@ -158,21 +169,22 @@ function mk(id,cfg){if(CH[id])CH[id].destroy();const c=document.getElementById(i
 function baseOpts(){const tick=css('--mute'),grid=css('--line');return {responsive:true,maintainAspectRatio:false,animation:{duration:350},plugins:{legend:{labels:{color:tick,boxWidth:10,font:{size:11}}},tooltip:{callbacks:{label:c=>(c.dataset.label?c.dataset.label+': ':'')+'₦'+N(c.parsed.y!==undefined&&c.chart.options.indexAxis!=='y'?c.parsed.y:c.parsed.x!==undefined?c.parsed.x:c.parsed)}}},scales:{x:{ticks:{color:tick,font:{size:10.5}},grid:{color:grid}},y:{ticks:{color:tick,font:{size:10.5},callback:v=>M(v)},grid:{color:grid}}}}}
 function pal(){return [css('--c1'),css('--c2'),css('--c3'),css('--c4'),css('--c5'),css('--c6')]}
 function drawKpis(F,B){
- const dir=sum(B.filter(r=>r.t==='Direct')),idc=sum(B.filter(r=>r.t==='IDC')),out=sum(B.filter(r=>r.t==='Outside budget'));
+ const dir=sum(B.filter(r=>r.t!=='Outside budget')),out=sum(B.filter(r=>r.t==='Outside budget'));
+ const adm=sum(B.filter(r=>r.key&&r.key.toUpperCase()==='ADMIN')),admB=st.proj.reduce((s,p)=>s+((cfg(p).cats.find(c=>String(c[0]).toUpperCase()==='ADMIN')||[])[2]||0),0);
  let bud=0,cash=0,open=0,el=0,dur=0,one=st.proj.length===1;
  st.proj.forEach(p=>{const c=cfg(p);bud+=c.budget;cash+=c.cash;open+=c.opening});
  const c0=cfg(st.proj[0]);if(one&&c0.start&&c0.dur){el=Math.min(1,((Math.floor(st.to/100)-Math.floor(c0.start/100))*12+st.to%100-c0.start%100+1)/c0.dur);dur=c0.dur}
  const dirAll=dir+open,use=bud?dirAll/bud:null;
  const unret=sum(B.filter(r=>r.o!=='MdM tracker'&&r.r&&r.r!=='Retired'));
  const flag=use!=null&&el?(use>el+.15?['Ahead of pace','bd']:use<el-.3?['Behind pace','wa']:['On pace','ok']):null;
- const tot=dir+idc+out+open;
- const K=[['Direct spend',M(dirAll),open?`incl. ${M(open)} opening`:`${B.filter(r=>r.t==='Direct').length} payments`],
- ['Direct budget',bud?M(bud):'Not entered',bud?`${M(bud-dirAll)} left`:'Set it in Budgets and cash'],
+ const tot=dir+out+open;
+ const K=[['Spent against budget',M(dirAll),open?`incl. ${M(open)} opening`:`${B.filter(r=>r.t!=='Outside budget').length} payments`],
+ ['Budget',bud?M(bud):'Not entered',bud?`${M(bud-dirAll)} left`:'Upload it in Budgets and cash'],
  ['Utilisation',use==null?'n/a':(use*100).toFixed(1)+'%',el?`${(el*100).toFixed(0)}% of time (${dur} mo) · ${flag?flag[0]:''}`:'one project, with start and duration set'],
- ['Indirect cost (IDC)',M(idc),idc&&dir?`${(idc/dir*100).toFixed(2)}% of direct`:'booked as rows'],
+ ['Admin cost',M(adm),admB?`${(adm/admB*100).toFixed(0)}% of ${M(admB)} admin line`:'Admin cost line has no budget yet'],
  ['Outside budget',M(out),'no budget line'],
- ['Total spend',M(tot),'direct + IDC + outside'],
- ['Cash received',cash?M(cash):'Not entered',cash?`${M(cash-tot)} cash balance`:'Set it in Budgets and cash'],
+ ['Total spend',M(tot),'budget lines + outside budget'],
+ ['Cash received',cash?M(cash):'Not entered',cash?`${M(cash-tot)} cash balance`:'Enter it in Budgets and cash'],
  ['Paid, not retired',M(unret),'FMS rows with open retirement']];
  document.getElementById('kpis').innerHTML=K.map((k,i)=>`<div class="kpi"><small>${k[0]}</small><b>${k[1]}</b><i>${esc(k[2])}</i>${i===2&&use!=null?`<div class="bar"><span style="width:${Math.min(100,use*100)}%;background:${flag&&flag[1]==='bd'?css('--bad'):css('--g2')}"></span>${el?`<em style="left:${el*100}%"></em>`:''}</div>`:''}</div>`).join('');
 }
@@ -180,19 +192,19 @@ function drawCharts(F,B){
  const P=pal(),o=baseOpts();
  // monthly
  const mm=st.months.filter(m=>m>=st.from&&m<=st.to&&(B.some(r=>r.m===m)));
- const by=t=>mm.map(m=>sum(F.filter(r=>r.m===m&&r.t===t)));
+ const by=t=>mm.map(m=>sum(F.filter(r=>r.m===m&&(t==='Direct'?r.t!=='Outside budget':r.t===t))));
  let cum=0;const cumv=mm.map((m,i)=>cum+=by('Direct')[i]);
  const o1=baseOpts();o1.scales.x.stacked=true;o1.scales.y.stacked=true;o1.scales.y1={position:'right',ticks:{color:css('--mute'),callback:v=>M(v),font:{size:10.5}},grid:{display:false}};
  o1.onClick=(e,els,ch)=>{if(els.length){const m=mm[els[0].index];st.from=st.to=m;render()}};
- mk('c1',{data:{labels:mm.map(ML),datasets:[{type:'bar',label:'Direct',data:by('Direct'),backgroundColor:P[0],stack:'a'},{type:'bar',label:'IDC',data:by('IDC'),backgroundColor:P[2],stack:'a'},{type:'bar',label:'Outside budget',data:by('Outside budget'),backgroundColor:P[5],stack:'a'},{type:'line',label:'Cumulative direct',data:cumv,yAxisID:'y1',borderColor:P[3],backgroundColor:P[3],tension:.25,pointRadius:3}]},options:o1});
+ mk('c1',{data:{labels:mm.map(ML),datasets:[{type:'bar',label:'Budget lines',data:by('Direct'),backgroundColor:P[0],stack:'a'},{type:'bar',label:'Outside budget',data:by('Outside budget'),backgroundColor:P[5],stack:'a'},{type:'line',label:'Cumulative',data:cumv,yAxisID:'y1',borderColor:P[3],backgroundColor:P[3],tension:.25,pointRadius:3}]},options:o1});
  // categories
  const one=st.proj.length===1,c0=cfg(st.proj[0]);
- const Bn=filt('cats').filter(r=>r.t==='Direct');
- const spent=grp(Bn,r=>r.c||'None');
+ const Bn=filt('cats').filter(r=>r.t!=='Outside budget');
+ const spent=grp(Bn,r=>r.g);
  let keys=Object.keys(spent).sort((a,b)=>spent[b]-spent[a]);
  const bud={};if(one)c0.cats.forEach(c=>bud[c[0]]=c[2]);
  if(one&&c0.cats.length)keys=[...new Set(c0.cats.map(c=>c[0]).concat(keys))];
- const nm=k=>one&&c0.cats.find(c=>c[0]===k)?k+' '+c0.cats.find(c=>c[0]===k)[1].split(/[:(]/)[0]:(k==='None'?'No line (FMS)':k);
+ const nm=k=>{const c=one&&c0.cats.find(c=>c[0]===k);const t=c?(k+' '+String(c[1]||'').split(/[:(]/)[0]):(k==='None'?'Not on a budget line':k+' (not a line)');return t.length>42?t.slice(0,41)+'…':t};
  const o2=baseOpts();o2.indexAxis='y';o2.scales={x:{ticks:{color:css('--mute'),callback:v=>M(v),font:{size:10.5}},grid:{color:css('--line')}},y:{ticks:{color:css('--mute'),font:{size:10.5}},grid:{display:false}}};
  o2.onClick=(e,els)=>{if(els.length){const k=keys[els[0].index];tog(st.cats,k);render()}};
  const ds=[{label:'Spent',data:keys.map(k=>spent[k]||0),backgroundColor:keys.map(k=>st.cats.length&&!st.cats.includes(k)?P[1]+'55':P[0])}];
@@ -243,7 +255,7 @@ function confirmView(v){
  ${L.length?`<div class="tw"><table><thead><tr><th>Paid</th><th>Project</th><th>Payment / concept note</th><th>Description</th><th>Staff / supplier</th><th class="n">Amount (₦)</th><th>Retirement</th>${CAN_WRITE?'<th>Finance decision</th>':''}</tr></thead><tbody>
  ${L.map((r,i)=>`<tr><td style="white-space:nowrap">${esc(r.expense_date||'')}</td><td>${esc(r.project_name)}${r.source!=='FMS'?`<div class="sub">${esc(r.source)}</div>`:''}</td><td>${esc(r.payment_ref)}${r.fms_status&&r.fms_status!=='paid'?` <span class="pill bd">now ${esc(r.fms_status)} in FMS</span>`:''}<div class="sub">${esc(r.voucher_ref||'')}</div></td><td>${esc(r.description||'')}</td><td>${esc(r.payee||'')}</td><td class="n">${N(r.amount)}</td><td>${esc(r.retirement_status||'')}</td>
   ${CAN_WRITE?`<td style="min-width:250px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-   <select id="qt${i}" aria-label="Type">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select><input id="ql${i}" placeholder="Budget line, e.g. 4.1.14" aria-label="Budget line">
+   <select id="qt${i}" aria-label="Type">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select><input id="ql${i}" list="qll${i}" placeholder="Budget line" aria-label="Budget line"><datalist id="qll${i}">${((SET[r.project_name]||{}).cats||[]).map(c=>`<option value="${esc(c[0])}">${esc(c[0]+' · '+(c[1]||''))}</option>`).join('')}</datalist>
    <input id="qk${i}" placeholder="Comment (reason needed to remove)" aria-label="Comment" style="grid-column:span 2">
    <button class="btn pri" data-qc="${i}">Confirm</button><button class="btn" data-qr="${i}">Remove</button></div></td>`:''}</tr>`).join('')}</tbody></table></div>`
  :'<div class="empty">Nothing waiting. New FMS payments appear here once they are marked paid.</div>'}</div>`;
@@ -270,18 +282,19 @@ function ledger(v){
 }
 function budgetView(v){
  v.innerHTML=st.proj.map(p=>{const c=cfg(p),B=all().filter(r=>r.p===p&&r.m<=st.to),dir=sum(B.filter(r=>r.t==='Direct'));
-  const g=grp(B.filter(r=>r.t==='Direct'),r=>r.c||'None');
-  return `<div class="card" style="margin-bottom:12px"><h3>${esc(p)}<span><button class="btn" data-e="${esc(p)}">Edit budget and cash</button></span></h3>
-  <div class="kpis"><div class="kpi"><small>Direct budget</small><b>${c.budget?M(c.budget):'Not entered'}</b></div><div class="kpi"><small>Direct spend to ${ML(st.to)}</small><b>${M(dir+c.opening)}</b><i>${c.opening?'incl. opening '+M(c.opening):''}</i></div><div class="kpi"><small>Cash received</small><b>${c.cash?M(c.cash):'Not entered'}</b></div><div class="kpi"><small>Start / duration</small><b>${c.start?ML(c.start)+' · '+c.dur+' mo':'Not entered'}</b></div></div>
-  ${c.cats.length?`<div class="tw"><table><tr><th>Key</th><th>Category</th><th class="n">Budget</th><th class="n">Spent</th><th class="n">Balance</th><th class="n">Used</th></tr>${c.cats.map(k=>{const s=g[k[0]]||0;const u=k[2]?s/k[2]:0;return `<tr><td>${esc(k[0])}</td><td>${esc(k[1])}</td><td class="n">${N(k[2])}</td><td class="n">${N(s)}</td><td class="n">${N(k[2]-s)}</td><td class="n"><span class="pill ${u>1?'bd':u>.9?'wa':'ok'}">${(u*100).toFixed(0)}%</span></td></tr>`}).join('')}<tr><td></td><td>Spent with no category (FMS payments carry no budget line)</td><td></td><td class="n">${N(g['None']||0)}</td><td></td><td></td></tr></table></div>`:'<div class="empty">No category budget entered. Use Edit budget and cash.</div>'}</div>`}).join('');
+  const BL=B.filter(r=>r.t!=='Outside budget'),g=grp(BL,r=>r.key||'__none'),un=BL.filter(r=>!r.key),ung=grp(un,r=>r.c||'No line or category');
+  return `<div class="card" style="margin-bottom:12px"><h3>${esc(p)}<span><button class="btn pri" data-up="${esc(p)}">Upload budget</button> <button class="btn" data-e="${esc(p)}">Edit budget and cash</button></span></h3>
+  <div class="kpis"><div class="kpi"><small>Budget</small><b>${c.budget?M(c.budget):'Not entered'}</b><i>${c.cats.length?c.cats.length+' lines · '+M(c.cats.reduce((s,k)=>s+k[2],0)):''}</i></div><div class="kpi"><small>Spent to ${ML(st.to)}</small><b>${M(dir+c.opening)}</b><i>${c.opening?'incl. opening '+M(c.opening):''}</i></div><div class="kpi"><small>Cash received</small><b>${c.cash?M(c.cash):'Not entered'}</b></div><div class="kpi"><small>Start / duration</small><b>${c.start?ML(c.start)+' · '+c.dur+' mo':'Not entered'}</b></div></div>
+  ${c.cats.length?`<div class="tw"><table><tr><th>Code</th><th>Line</th><th class="n">Budget</th><th class="n">Spent</th><th class="n">Balance</th><th class="n">Used</th></tr>${c.cats.map(k=>{const s=g[k[0]]||0;const u=k[2]?s/k[2]:0;return `<tr><td>${esc(k[0])}</td><td>${esc(k[1])}</td><td class="n">${N(k[2])}</td><td class="n">${N(s)}</td><td class="n">${N(k[2]-s)}</td><td class="n"><span class="pill ${u>1?'bd':u>.9?'wa':'ok'}">${(u*100).toFixed(0)}%</span></td></tr>`}).join('')}<tr style="background:var(--chip)"><td></td><td><b>Not on a budget line</b> (${un.length} expense${un.length===1?'':'s'})${Object.keys(ung).length?`<div class="sub">${Object.entries(ung).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([k,v])=>esc(k)+' '+M(v)).join(' · ')}</div>`:''}${un.length&&CAN_WRITE?'<div class="sub">Give them a line with Edit on the Expense list.</div>':''}</td><td></td><td class="n">${N(g['__none']||0)}</td><td></td><td></td></tr></table></div>`:'<div class="empty">No budget lines yet. Use Upload budget.</div>'}</div>`}).join('');
  v.querySelectorAll('[data-e]').forEach(b=>{b.onclick=()=>editCfg(b.dataset.e);if(!CAN_WRITE)b.style.display='none'});
+ v.querySelectorAll('[data-up]').forEach(b=>{b.onclick=()=>uploadBudget(b.dataset.up);if(!CAN_WRITE)b.style.display='none'});
 }
 function editCfg(p){const c=cfg(p);const h=document.getElementById('modalHost');
  h.innerHTML=`<div class="modal"><div><h3 style="margin:0 0 10px;font-family:var(--f1)">${esc(p)}: budget and cash</h3><div class="form">
- <label>Direct budget (₦)<input id="b1" type="number" value="${c.budget}"></label><label>Cash received to date (₦)<input id="b2" type="number" value="${c.cash}"></label>
+ <label>Total budget (₦)<input id="b1" type="number" value="${c.budget}"></label><label>Cash received to date (₦)<input id="b2" type="number" value="${c.cash}"></label>
  <label>Start month (yymm, e.g. 202604)<input id="b3" type="number" value="${c.start||''}"></label><label>Duration (months)<input id="b4" type="number" value="${c.dur||''}"></label>
- <label>IDC rate (e.g. 0.0595)<input id="b5" type="number" step="0.0001" value="${c.idc||''}"></label><label>Opening spend before FMS (₦)<input id="b6" type="number" value="${c.opening||0}"></label>
- <label class="w">Category budgets, one per line: key | name | amount<textarea id="b7" rows="8">${esc(c.cats.map(k=>k.join(' | ')).join('\n'))}</textarea></label></div>
+ <input id="b5" type="hidden" value="${c.idc||''}"><label>Opening spend before FMS (₦)<input id="b6" type="number" value="${c.opening||0}"></label>
+ <label class="w">Budget lines, one per line: code | name | amount (keep the ADMIN line for admin cost)<textarea id="b7" rows="8">${esc(c.cats.map(k=>k.join(' | ')).join('\n'))}</textarea></label></div>
  <div class="srow" style="margin-top:12px"><button class="btn pri" id="sv">Save</button><button class="btn" id="cn">Cancel</button><span class="sub" id="msg"></span></div></div></div>`;
  document.getElementById('cn').onclick=()=>h.innerHTML='';
  document.getElementById('sv').onclick=async()=>{const g=i=>+document.getElementById(i).value||0;
@@ -289,18 +302,68 @@ function editCfg(p){const c=cfg(p);const h=document.getElementById('modalHost');
   const d={budget:g('b1'),cash:g('b2'),start:g('b3'),dur:g('b4'),idc:g('b5'),opening:g('b6'),cats};
   if(!CAN_WRITE){document.getElementById('msg').textContent='Only Finance can change budgets and cash.';return}
   try{let r=await SB.from('fin_projects').upsert({project_name:p,direct_budget:d.budget,cash_received:d.cash,start_month:d.start||null,duration_months:d.dur||null,indirect_rate:d.idc||null,opening_spend:d.opening});if(r.error)throw r.error;
-   r=await SB.from('fin_budget_lines').delete().eq('project_name',p);if(r.error)throw r.error;
-   if(d.cats.length){r=await SB.from('fin_budget_lines').insert(d.cats.map(c=>({project_name:p,category_key:c[0],category_name:c[1],budget:c[2]})));if(r.error)throw r.error}
+   if(d.cats.length){const x=await SB.rpc('fin_replace_budget',{p_project:p,p_lines:d.cats.map(c=>({key:c[0],name:c[1],amount:c[2]})),p_set_total:false,p_note:'Edited by hand'});
+    if(x.error&&!/fin_replace_budget|function/i.test(x.error.message))throw x.error;
+    if(x.error){r=await SB.from('fin_budget_lines').delete().eq('project_name',p);if(r.error)throw r.error;r=await SB.from('fin_budget_lines').insert(d.cats.map(c=>({project_name:p,category_key:c[0],category_name:c[1],budget:c[2]})));if(r.error)throw r.error}}
    }catch(e){document.getElementById('msg').textContent='Not saved: '+(e.message||'error');return}
   h.innerHTML='';toast('Saved');await loadAll()};
 }
 function notes(v){v.innerHTML=`<div class="card"><h3>How this works</h3><ul class="note">
 <li><b>Finance only.</b> Figures are read from the FMS database after sign-in. Nothing is stored in this page.</li>
 <li><b>Add expenses each month</b> with Add expense. <b>Correct a mistake</b> with Edit on the Expense list (Finance only); every edit and deletion is kept under Change history. Budgets, cash received, start month, duration and IDC rate are edited under Budgets and cash.</li>
-<li><b>Type</b>: Direct is programme cost. IDC is the indirect cost row. Outside budget is spend with no budget line in the grant.</li>
+<li><b>Budget lines</b>: every project's budget is a list of lines, uploaded from any Excel or CSV budget (Budgets and cash → Upload budget). Admin cost is its own line (ADMIN) with its own budget; there is no separate IDC type. An expense counts against the most specific line code that matches its budget line; anything without one shows as Not on a budget line.</li><li><b>Type</b>: Direct counts against the budget lines. Outside budget is spend the grant does not cover.</li>
 <li><b>Source</b> shows where each row came from: MdM tracker, Financial Tracker (pre-FMS), FMS, or Finance entry.</li>
 <li><b>FMS payments</b> paid from now on wait under To confirm. Finance confirms each one (it then joins the tracker and its retirement status updates by itself) or removes it with a reason.</li>
 <li><b>Pace</b>: utilisation is compared with the grant's own duration. Ahead of pace means spend is 15 points above time elapsed.</li></ul></div>`}
+// ---------- upload a budget from any Excel or CSV layout (Finance)
+function uploadBudget(p){const h=document.getElementById('modalHost');if(!CAN_WRITE){toast('Only Finance can upload budgets');return}
+ if(!window.XLSX){toast('The spreadsheet reader did not load. Check the connection and reload.');return}
+ const U={rows:[],wb:null,hdr:0,cols:{code:-1,desc:-1,amt:-1},lines:[]};const cur=cfg(p);
+ h.innerHTML=`<div class="modal"><div style="width:min(980px,100%)"><h3 style="margin:0 0 6px;font-family:var(--f1)">Upload budget: ${esc(p)}</h3>
+ <p class="sub" style="margin:0 0 12px">Any layout works: pick the sheet, the header row and which columns hold the line code, description and amount in Naira. Sub-totals and totals are skipped. Admin and indirect costs go to the Admin cost line. Nothing is saved until you press Save.</p>
+ <div class="form"><label class="w">Budget file (.xlsx, .xls or .csv)<input id="uf" type="file" accept=".xlsx,.xls,.csv"></label><div id="ucfg" class="w"></div></div>
+ <div id="uprev" style="margin-top:12px"></div>
+ <div class="srow" style="margin-top:12px"><label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="uset" ${cur.budget?'':'checked'}> Set the project budget to the total of these lines${cur.budget?` (now ₦${N(cur.budget)})`:''}</label><span style="flex:1"></span><button class="btn" id="ucn">Cancel</button><button class="btn pri" id="usv" disabled>Save budget</button></div><div class="sub" id="umsg"></div></div></div>`;
+ const $=id=>document.getElementById(id),msg=t=>$('umsg').textContent=t;$('ucn').onclick=()=>h.innerHTML='';
+ const num=v=>{if(typeof v==='number')return v;const t=String(v==null?'':v).replace(/[₦$,\s]/g,'').replace(/^\((.*)\)$/,'-$1');const n=parseFloat(t);return isNaN(n)?null:n};
+ const txt=v=>String(v==null?'':v).replace(/\s+/g,' ').trim();
+ const guess=()=>{const H=(U.rows[U.hdr]||[]).map(x=>txt(x).toLowerCase());const f=re=>H.findIndex(x=>re.test(x));
+  let amt=f(/naira|ngn|local/);if(amt<0)amt=H.reduce((b,x,i)=>/total|amount|budget|cost/.test(x)&&!/usd|us\$|\$|unit|rate/.test(x)?i:b,-1);
+  U.cols={code:f(/^s\/?n$|^code$|line|^no\.?$|^ref|budget code|^#$/),desc:f(/desc|activit|item|particular|detail|narrat/),amt}};
+ const ADM=/admin(istrative)?\s*(cost|fee|support|overhead|expense)|indirect|overhead|\bidc\b|\bicr\b/i;
+ const parse=()=>{const out=[],seen={};let admin=0,adminN=0,inAdm=false;const C=U.cols;
+  for(let i=U.hdr+1;i<U.rows.length;i++){const R=U.rows[i]||[];let d=C.desc>=0?txt(R[C.desc]):'';const a=C.amt>=0?num(R[C.amt]):null;let code=C.code>=0?txt(R[C.code]):'';
+   if(!d&&!code)continue;if(/sub\s*-?\s*total|^total|grand\s*total|total\s+(objective|budget|cost)/i.test(d)||/^total/i.test(code)){inAdm=false;continue}
+   // a heading row (text, no amount) starts a section; an admin heading sends its rows to the Admin cost line
+   if(a==null||a<=0){if(d&&(a==null))inAdm=ADM.test(d);continue}
+   if(!code){const m=d.match(/^\s*(\d+(?:\.\d+)+|\d+)[\s.):-]+(.*)$/);if(m){code=m[1];d=m[2]||d}}
+   code=code.replace(/\.0+$/,'');
+   if(inAdm||ADM.test(d+' '+code)){admin+=a;adminN++;continue}
+   if(!code)code='L'+String(out.length+1).padStart(2,'0');let k=code,j=2;while(seen[k.toUpperCase()])k=code+'-'+(j++);seen[k.toUpperCase()]=1;
+   out.push({key:k,name:d.slice(0,200),amount:Math.round(a*100)/100})}
+  const old=(cur.cats.find(c=>String(c[0]).toUpperCase()==='ADMIN')||[])[2]||0;
+  out.push({key:'ADMIN',name:'Admin cost',amount:adminN?admin:old,_auto:adminN?`from ${adminN} admin/indirect row${adminN===1?'':'s'} in the file`:old?'kept from the current budget':'no admin row found — set the amount here'});
+  U.lines=out};
+ const show=()=>{parse();const L=U.lines,tot=L.reduce((s,l)=>s+(+l.amount||0),0);
+  $('uprev').innerHTML=`<div class="srow" style="margin-bottom:6px"><b>${L.length} lines · ₦${N(tot)}</b><span class="sub">${cur.budget?`current budget ₦${N(cur.budget)}`:'no budget yet'}${cur.budget&&Math.abs(cur.budget-tot)>1?` · difference ₦${N(tot-cur.budget)}`:''}</span></div>
+   <div class="tw" style="max-height:340px"><table><thead><tr><th>Code</th><th>Line</th><th class="n">Amount (₦)</th></tr></thead><tbody>${L.map((l,i)=>`<tr><td>${esc(l.key)}</td><td>${esc(l.name)}${l._auto?`<div class="sub">${esc(l._auto)}</div>`:''}</td><td class="n">${l.key==='ADMIN'?`<input id="uadm" type="number" step="0.01" value="${l.amount}" style="width:150px;text-align:right">`:N(l.amount)}</td></tr>`).join('')}</tbody></table></div>`;
+  $('usv').disabled=L.length<2;const ad=$('uadm');if(ad)ad.oninput=()=>{U.lines[U.lines.length-1].amount=+ad.value||0}};
+ const cfgUI=()=>{const H=(U.rows[U.hdr]||[]),opt=(sel)=>`<option value="-1">(none)</option>`+H.map((x,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(String.fromCharCode(65+(i%26))+': '+(txt(x)||'(blank)').slice(0,40))}</option>`).join('');
+  $('ucfg').innerHTML=`<div class="form" style="grid-template-columns:repeat(5,minmax(0,1fr))">${U.wb.SheetNames.length>1?`<label>Sheet<select id="ush">${U.wb.SheetNames.map(n=>`<option ${n===U.sheet?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}
+   <label>Header row<input id="uhr" type="number" min="1" value="${U.hdr+1}"></label><label>Line code<select id="uc">${opt(U.cols.code)}</select></label><label>Description<select id="ud">${opt(U.cols.desc)}</select></label><label>Amount in ₦<select id="ua">${opt(U.cols.amt)}</select></label></div>`;
+  if($('ush'))$('ush').onchange=e=>loadSheet(e.target.value,true);
+  $('uhr').onchange=e=>{U.hdr=Math.max(0,(+e.target.value||1)-1);guess();cfgUI();show()};
+  [['uc','code'],['ud','desc'],['ua','amt']].forEach(([id,k])=>$(id).onchange=e=>{U.cols[k]=+e.target.value;show()})};
+ const loadSheet=(name)=>{U.sheet=name;U.rows=XLSX.utils.sheet_to_json(U.wb.Sheets[name],{header:1,raw:true,defval:''});
+  U.hdr=Math.max(0,U.rows.slice(0,40).findIndex(r=>r.filter(x=>txt(x)&&num(x)===null).length>=3&&r.some(x=>/desc|activit|item|total|amount|budget|cost|line/i.test(txt(x)))));
+  guess();cfgUI();show()};
+ $('uf').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{U.wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+  const best=U.wb.SheetNames.map(n=>[n,XLSX.utils.sheet_to_json(U.wb.Sheets[n],{header:1}).length]).sort((a,b)=>b[1]-a[1])[0][0];loadSheet(best)}catch(err){msg('Could not read the file: '+err.message)}};
+ $('usv').onclick=async()=>{const L=U.lines.map(({key,name,amount})=>({key,name,amount}));if(!L.length)return;$('usv').disabled=true;msg('Saving…');
+  const r=await SB.rpc('fin_replace_budget',{p_project:p,p_lines:L,p_set_total:$('uset').checked,p_note:'Uploaded from '+(($('uf').files[0]||{}).name||'file')});
+  if(r.error){$('usv').disabled=false;msg(/fin_replace_budget|function/i.test(r.error.message)?'Run expense_tracker_budget_lines.sql once first, then upload again.':'Not saved: '+r.error.message);return}
+  h.innerHTML='';toast(`Budget saved: ${L.length} lines`);await loadAll()};
+}
 // ---------- change history of expenses (edits and deletions)
 async function historyView(v){v.innerHTML='<div class="card"><div class="empty">Loading…</div></div>';
  const {data,error}=await SB.from('fin_expenses_audit').select('*').order('changed_at',{ascending:false}).limit(300);
@@ -317,12 +380,13 @@ function expenseForm(rec){const h=document.getElementById('modalHost'),x=rec||{}
  const projs=[...new Set(PROJECTS.concat(PROJ_LIST).concat(x.p?[x.p]:[]))];
  h.innerHTML=`<div class="modal"><div><h3 style="margin:0 0 10px;font-family:var(--f1)">${ed?'Edit expense':'Add expense'}</h3>${ed?`<p class="sub" style="margin:0 0 10px">Source: ${esc(x.o||'–')}. Every change is kept in the change history with who made it.</p>`:''}<form class="form" id="f">
  <label>Project<select id="fp">${projs.map(p=>`<option ${p===(x.p||st.proj[0])?'selected':''}>${esc(p)}</option>`).join('')}</select></label><label>Date<input id="fd" type="date" value="${esc(x.d||today)}" required></label>
- <label>Budget line (e.g. 4.1.14)<input id="fl" value="${esc(x.l||'')}"></label><label>Voucher / CN number<input id="fv" value="${esc(x.v||'')}"></label>
+ <label>Budget line<input id="fl" list="flList" value="${esc(x.l||'')}" placeholder="pick or type a line code"><datalist id="flList"></datalist></label><label>Voucher / CN number<input id="fv" value="${esc(x.v||'')}"></label>
  <label class="w">Description<input id="fn" required value="${esc(x.n||'')}"></label><label>Staff / supplier<input id="fs" value="${esc(x.s||'')}"></label><label>Amount (₦)<input id="fa" type="number" step="0.01" required value="${x.a!=null&&ed?x.a:''}"></label>
  <label>Type<select id="ft">${TYPES.map(t=>`<option ${t===x.t?'selected':''}>${t}</option>`).join('')}</select></label><label>Retirement status<select id="fr"><option value="">Not applicable</option>${RST.map(t=>`<option ${t===x.r?'selected':''}>${t}</option>`).join('')}</select></label>
  <label class="w">${ed?'Comment (say what was corrected)':'Comment'}<input id="fk" value="${esc(x.k||'')}"></label>
  <div class="w srow"><button class="btn pri" type="submit">${ed?'Save changes':'Save expense'}</button><button class="btn" type="button" id="cn">Cancel</button>${ed?'<button class="btn" type="button" id="dl" style="margin-left:auto;color:var(--bad)">Delete</button>':''}<span class="sub" id="msg"></span></div></form></div></div>`;
  const msg=t=>document.getElementById('msg').textContent=t;
+ const fillLines=()=>{const p=document.getElementById('fp').value;document.getElementById('flList').innerHTML=((SET[p]||{}).cats||[]).map(c=>`<option value="${esc(c[0])}">${esc(c[0]+' · '+(c[1]||''))}</option>`).join('')};fillLines();document.getElementById('fp').onchange=fillLines;
  document.getElementById('cn').onclick=()=>h.innerHTML='';
  document.getElementById('f').onsubmit=async e=>{e.preventDefault();const g=i=>document.getElementById(i).value.trim();const d=g('fd'),l=g('fl'),amt=parseFloat(g('fa'));
   if(isNaN(amt)){msg('Enter the amount.');return}
