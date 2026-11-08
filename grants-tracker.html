@@ -1,1188 +1,684 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAHAMA Project Tracker</title>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="icon" type="image/png" href="RAHAMA Empowerment Logo Design (3).png">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Archivo:wght@600;700&display=swap');
-
-        :root {
-            --primary: #059669;
-            --primary-dark: #047857;
-            --primary-light: #10b981;
-            --danger: #D32F2F;
-            --warning: #F57C00;
-            --success: #059669;
-            --bg: #F5F7FA;
-            --surface: #FFFFFF;
-            --text: #1A1A1A;
-            --text-muted: #616161;
-            --border: #E0E0E0;
-            --shadow: 0 2px 8px rgba(0,0,0,0.08);
-            --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
-            --dark: #1E4D2B;
-            --mid: #2E7D47;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'DM Sans', -apple-system, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-        }
-
-        .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
-
-        .sidebar {
-            background: var(--surface);
-            border-right: 1px solid var(--border);
-            padding: 24px 0;
-            box-shadow: var(--shadow);
-            position: sticky;
-            top: 0;
-            height: 100vh;
-            overflow-y: auto;
-        }
-
-        .logo {
-            padding: 0 24px 20px;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .logo img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 8px; }
-        .logo h1 { font-family: 'Archivo', sans-serif; font-size: 16px; font-weight: 700; color: var(--primary); }
-        .logo p { font-size: 11px; color: var(--text-muted); }
-
-        .user-card {
-            margin: 0 16px 20px;
-            padding: 12px 16px;
-            background: var(--bg);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            font-size: 13px;
-        }
-        .user-card .name { font-weight: 700; color: var(--text); }
-        .role-badge {
-            display: inline-block;
-            margin-top: 4px;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .role-editor { background: #E8F5E9; color: var(--success); }
-        .role-viewer { background: #E3F2FD; color: #1976D2; }
-
-        .nav { list-style: none; }
-        .nav button {
-            width: 100%;
-            padding: 11px 24px;
-            text-align: left;
-            background: none;
-            border: none;
-            font-size: 13.5px;
-            font-weight: 500;
-            cursor: pointer;
-            color: var(--text);
-            transition: all 0.2s;
-            position: relative;
-            font-family: 'DM Sans', sans-serif;
-        }
-        .nav button:hover { background: var(--bg); color: var(--primary); }
-        .nav button.active {
-            background: linear-gradient(90deg, rgba(5,150,105,0.1) 0%, transparent 100%);
-            color: var(--primary);
-            font-weight: 600;
-        }
-        .nav button.active::before {
-            content: '';
-            position: absolute;
-            left: 0; top: 0; bottom: 0;
-            width: 3px;
-            background: var(--primary);
-        }
-
-        .portal-link {
-            margin: 20px 16px 0;
-            padding: 11px;
-            background: linear-gradient(135deg, #059669, #047857);
-            color: white;
-            text-align: center;
-            border-radius: 8px;
-            text-decoration: none;
-            display: block;
-            font-weight: 600;
-            font-size: 12px;
-            transition: all 0.2s;
-        }
-        .portal-link:hover { background: linear-gradient(135deg, #047857, #065f46); transform: translateY(-1px); }
-
-        .main {
-            padding: 32px 40px;
-            max-width: 1400px;
-            overflow-x: auto;
-        }
-
-        .page-header { margin-bottom: 28px; }
-        .page-header h2 { font-family: 'Archivo', sans-serif; font-size: 26px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
-        .page-header p { color: var(--text-muted); font-size: 14px; }
-
-        .alert-banner {
-            padding: 14px 18px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-        }
-        .alert-banner.critical { background: #FFEBEE; border: 1px solid #FFCDD2; color: var(--danger); }
-        .alert-banner.warning  { background: #FFF3E0; border: 1px solid #FFE0B2; color: var(--warning); }
-
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
-        .metric-card { padding: 20px; border-radius: 12px; color: white; }
-        .metric-card .label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; opacity: 0.8; margin-bottom: 6px; }
-        .metric-card .value { font-size: 22px; font-weight: 800; font-family: 'Archivo', sans-serif; line-height: 1.2; }
-        .metric-card.green { background: var(--dark); }
-        .metric-card.mid   { background: var(--mid); }
-        .metric-card.red   { background: #8B1A1A; }
-
-        .badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 10px;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
-        .section-title {
-            font-size: 11px;
-            font-weight: 800;
-            color: var(--dark);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 14px;
-            padding-bottom: 6px;
-            border-bottom: 2px solid var(--dark);
-        }
-
-        .table-wrap {
-            background: var(--surface);
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border);
-            overflow: hidden;
-            overflow-x: auto;
-            margin-bottom: 28px;
-        }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        thead tr { background: var(--mid); }
-        th { color: white; padding: 10px 12px; text-align: left; font-weight: 700; font-size: 11px; white-space: nowrap; }
-        td { padding: 10px 12px; border-top: 1px solid var(--border); vertical-align: top; }
-        tr:nth-child(even) td { background: #f9fdf9; }
-        tr:hover td { background: #f0faf4; }
-        tfoot tr { background: var(--dark); }
-        tfoot td { color: white; font-weight: 700; padding: 10px 12px; border-top: none; background: transparent; }
-
-        .td-project { max-width: 260px; line-height: 1.4; }
-        .td-note { max-width: 200px; font-size: 11px; color: var(--text-muted); line-height: 1.4; }
-        .td-warn { background: #FFEBEE !important; color: #721C24; font-weight: 700; }
-
-        .modal-backdrop {
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.55);
-            z-index: 1000;
-            display: flex; align-items: center; justify-content: center;
-            padding: 16px;
-        }
-        .modal {
-            background: white;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 700px;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 24px 64px rgba(0,0,0,0.25);
-        }
-        .modal-header {
-            background: var(--dark);
-            padding: 16px 24px;
-            border-radius: 12px 12px 0 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        .modal-header span { color: white; font-weight: 700; font-size: 15px; font-family: 'Archivo', sans-serif; }
-        .modal-header button { background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; line-height: 1; }
-        .modal-body { padding: 24px; }
-
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-        .form-full { grid-column: 1 / -1; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; }
-        .form-group label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 0.5px; }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            padding: 8px 12px;
-            border: 1.5px solid #ccc;
-            border-radius: 6px;
-            font-size: 13px;
-            font-family: inherit;
-            background: white;
-            transition: border-color 0.2s;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus { outline: none; border-color: var(--primary); }
-        .form-group textarea { min-height: 72px; resize: vertical; }
-        .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
-
-        .btn { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
-        .btn-primary { background: var(--dark); color: white; }
-        .btn-primary:hover { background: var(--primary-dark); }
-        .btn-secondary { background: white; color: var(--text); border: 1.5px solid #ccc; }
-        .btn-secondary:hover { background: var(--bg); }
-        .btn-add { background: var(--dark); color: white; padding: 7px 16px; font-size: 12px; font-weight: 700; border: none; border-radius: 6px; cursor: pointer; }
-        .btn-edit { background: transparent; border: none; color: var(--mid); cursor: pointer; font-size: 12px; font-weight: 600; padding: 2px 6px; }
-        .btn-del  { background: transparent; border: none; color: #8B1A1A; cursor: pointer; font-size: 12px; font-weight: 600; padding: 2px 6px; }
-        .btn-edit:hover, .btn-del:hover { text-decoration: underline; }
-
-        .empty-state { text-align: center; padding: 48px 24px; color: var(--text-muted); }
-
-        .access-denied {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            min-height: 60vh; text-align: center; color: var(--text-muted);
-        }
-        .access-denied .icon { font-size: 64px; margin-bottom: 16px; }
-        .access-denied h2 { font-family: 'Archivo', sans-serif; color: var(--text); margin-bottom: 8px; }
-
-        .loading { text-align: center; padding: 64px; }
-        .spinner { font-size: 32px; color: var(--primary); display: inline-block; animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-        .rcv-critical td { background: #FFF0F0 !important; }
-        .rcv-pending  td { background: #FFFBEA !important; }
-
-        .chip { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; margin: 2px; }
-
-        @media (max-width: 900px) {
-            .app { grid-template-columns: 1fr; }
-            .sidebar { height: auto; position: relative; }
-            .main { padding: 16px; }
-            .form-grid { grid-template-columns: 1fr; }
-        }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAHAMA Project Tracker</title>
+<link rel="icon" type="image/png" href="RAHAMA Empowerment Logo Design (3).png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Same look as the FMS: dark-green sidebar, Plus Jakarta Sans, RAHAMA greens */
+:root{
+  --primary:#2d7a52;--primary-dark:#1a4d32;--accent:#40C078;--side:#14432B;--side2:#1a4d32;
+  --bg:#F4F7F5;--surface:#FFFFFF;--text:#14201A;--muted:#5C6B62;--border:#E2E9E4;--soft:#EAF3EE;
+  --danger:#C4432A;--warn:#B7791F;--info:#3F7CAC;--violet:#8E6BB5;
+  --shadow:0 1px 2px rgba(16,40,32,.06),0 4px 14px rgba(16,40,32,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:280px minmax(0,1fr);min-height:100vh}
+/* sidebar */
+aside{background:linear-gradient(180deg,var(--side) 0%,var(--side2) 100%);color:#DCEBE2;padding:22px 0 18px;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.brand{text-align:center;padding:0 20px 18px;border-bottom:1px solid rgba(255,255,255,.10);margin-bottom:12px}
+.brand img{width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1)}
+.brand b{display:block;font-size:18px;font-weight:800;color:#fff;letter-spacing:-.01em}
+.brand small{display:block;font-size:11.5px;color:rgba(255,255,255,.75);margin-top:4px}
+.who{margin:0 16px 14px;padding:16px 24px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10);color:#fff}
+.who small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:6px}
+.who b{font-size:16px;font-weight:700;overflow-wrap:anywhere}
+.role{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:999px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:rgba(255,255,255,.15)}
+.years{padding:0 16px 12px}
+.years label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);margin:0 0 7px 4px}
+.years div{display:flex;gap:6px;flex-wrap:wrap}
+.yr{cursor:pointer;padding:5px 11px;border-radius:7px;font-size:12.5px;font-weight:700;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:rgba(255,255,255,.8)}
+.yr.on{background:#fff;color:var(--side);border-color:#fff}
+.yr.add{border-style:dashed;background:transparent}
+.navg{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5);padding:14px 30px 6px}
+.nav button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;width:calc(100% - 20px);margin:1px 10px;padding:9px 20px;border-radius:8px;font-size:13.5px;font-weight:500;color:#DCEBE2}
+.nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav button.on{background:#fff;color:var(--side);font-weight:700}
+.nav .cnt{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:rgba(255,255,255,.14)}
+.nav button.on .cnt{background:var(--soft);color:var(--side)}
+.nav .cnt.red{background:var(--danger);color:#fff}
+.back{margin:14px 16px 0;padding:12px;border-radius:8px;text-align:center;text-decoration:none;font-weight:600;font-size:13px;color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);display:block}
+.back:hover{background:rgba(255,255,255,.2)}
+/* main */
+main{padding:28px 32px 48px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.top h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em}
+.top p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{cursor:pointer;border:1px solid var(--border);background:var(--surface);padding:8px 14px;border-radius:8px;font-weight:600;font-size:13px}
+.btn:hover{border-color:var(--primary)}
+.btn.pri{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.pri:hover{background:var(--primary-dark)}
+.btn.danger{color:var(--danger)}
+.btn.sm{padding:4px 10px;font-size:12px}
+.link{all:unset;cursor:pointer;color:var(--primary);font-weight:600}
+.link:hover{text-decoration:underline}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px;min-width:0}
+.card h3{margin:0 0 12px;font-size:14.5px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.card h3 span{font-size:12px;font-weight:500;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.s12{grid-column:span 12}.s8{grid-column:span 8}.s7{grid-column:span 7}.s6{grid-column:span 6}.s5{grid-column:span 5}.s4{grid-column:span 4}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow);min-width:0}
+.kpi small{display:block;color:var(--muted);font-size:11.5px;font-weight:600}
+.kpi b{display:block;font-size:22px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kpi i{font-style:normal;font-size:11.5px;color:var(--muted)}
+.kpi.win{background:linear-gradient(135deg,var(--primary-dark),var(--primary));color:#fff;border:0}
+.kpi.win small,.kpi.win i{color:rgba(255,255,255,.8)}
+.cv{position:relative;height:260px}.cv.sm{height:220px}
+.alert{display:flex;gap:10px;align-items:flex-start;padding:12px 16px;border-radius:10px;margin-bottom:10px;font-size:13px;border:1px solid}
+.alert.red{background:#FBEDEA;border-color:#F2C9C0;color:#8E2C1A}
+.alert.amber{background:#FFF6E3;border-color:#F3DDA8;color:#7A5410}
+.alert b{display:block}
+/* tables */
+.tw{overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:12.8px}
+th{background:var(--primary);color:#fff;text-align:left;padding:9px 11px;font-weight:700;font-size:12px;white-space:nowrap;position:sticky;top:0}
+td{padding:9px 11px;border-top:1px solid var(--border);vertical-align:top}
+tbody tr:hover td{background:#F6FAF7}
+tr.click{cursor:pointer}
+tfoot td{background:var(--primary-dark);color:#fff;font-weight:700;border:0}
+.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nw{white-space:nowrap}
+.sub{font-size:11.5px;color:var(--muted)}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:600;margin:2px 4px 2px 0;background:var(--soft)}
+.chip.red{background:#FBEDEA;color:var(--danger)}.chip.amber{background:#FFF6E3;color:var(--warn)}.chip.green{background:#E3F2E9;color:var(--primary-dark)}
+.empty{padding:36px 20px;text-align:center;color:var(--muted)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters button{cursor:pointer;border:1px solid var(--border);background:var(--soft);padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:600}
+.filters button.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.filters input,.filters select{border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:#fff}
+/* grant record */
+.rec-head{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px}
+.rec-head h1{margin:2px 0 4px;font-size:22px;font-weight:800}
+.dl{display:grid;grid-template-columns:170px 1fr;gap:6px 14px;font-size:13px}
+.dl dt{color:var(--muted);font-weight:600}
+.dl dd{margin:0;overflow-wrap:anywhere}
+.secn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;font-size:12px;font-weight:800;margin-right:8px}
+.bar{height:8px;border-radius:5px;background:var(--border);overflow:hidden;margin-top:6px}
+.bar span{display:block;height:100%;background:var(--accent)}
+/* gantt */
+.gantt{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.g-row{display:grid;grid-template-columns:260px 1fr;border-top:1px solid var(--border);min-height:52px}
+.g-row:first-child{border-top:0}
+.g-lab{padding:8px 12px;font-size:12.5px;border-right:1px solid var(--border);background:#fff;position:sticky;left:0;z-index:2}
+.g-lab b{display:block;font-weight:700;line-height:1.3}
+.g-track{position:relative}
+.g-head{background:var(--soft);font-size:11px;font-weight:700;color:var(--muted)}
+.g-m{position:absolute;top:0;bottom:0;border-left:1px solid var(--border);padding:10px 0 0 4px;white-space:nowrap}
+.g-bar{position:absolute;top:10px;height:20px;border-radius:6px;font-size:11px;color:#fff;padding:2px 8px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.g-mk{position:absolute;top:33px;width:12px;height:12px;transform:translateX(-6px);cursor:default;font-size:11px;line-height:12px;text-align:center}
+.g-today{position:absolute;top:0;bottom:0;border-left:2px dashed var(--danger);z-index:1}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:14px;height:10px;border-radius:3px}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(10,30,20,.5);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px;overflow:auto}
+.modal>div{background:#fff;border-radius:14px;width:min(820px,100%);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.mh{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--primary-dark);color:#fff;border-radius:14px 14px 0 0;position:sticky;top:0;z-index:2}
+.mh b{font-size:15px}.mh button{all:unset;cursor:pointer;font-size:22px;line-height:1}
+.mb{padding:18px 20px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form .w{grid-column:1/-1}
+.form label{display:grid;gap:4px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.form input,.form select,.form textarea{border:1px solid #CBD6CF;border-radius:8px;padding:8px 10px;background:#fff;font-size:13.5px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text);width:100%}
+.form textarea{min-height:64px;resize:vertical}
+.form input:focus,.form select:focus,.form textarea:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+.fh{grid-column:1/-1;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--primary-dark);border-bottom:1px solid var(--border);padding-bottom:5px;margin-top:6px}
+.fa{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--text);color:#fff;padding:9px 18px;border-radius:999px;font-weight:600;z-index:80}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;color:var(--muted)}
+.center h2{color:var(--text);margin:10px 0 6px}
+@media (max-width:1100px){.s8,.s7,.s6,.s5,.s4{grid-column:span 12}}
+@media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;height:auto}main{padding:18px 16px 40px}.form{grid-template-columns:1fr}.dl{grid-template-columns:1fr}.g-row{grid-template-columns:160px 1fr}}
+</style>
 </head>
 <body>
 <div class="app">
-    <aside class="sidebar">
-        <div class="logo">
-            <img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA" onerror="this.style.display='none'">
-            <h1>Project Tracker</h1>
-            <p id="yearCaption">Grants Register</p>
-        </div>
-        <div class="user-card" id="userCard">
-            <div class="name" id="userName">Loading…</div>
-            <span class="role-badge" id="userRoleBadge">–</span>
-        </div>
-
-        <div style="padding:0 16px 14px">
-            <label style="display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:7px">Year</label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <span id="yearSelect" style="display:contents"></span>
-                <button onclick="addYear()" title="Add a year"
-                        style="padding:6px 10px;border-radius:7px;border:1px dashed rgba(255,255,255,.35);background:transparent;color:rgba(255,255,255,.75);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">+</button>
-            </div>
-        </div>
-
-        <ul class="nav">
-            <li><button onclick="showTab('dashboard')"    data-tab="dashboard" class="active">📊 Dashboard</button></li>
-            <li><button onclick="showTab('pipeline')"     data-tab="pipeline">🔭 Pipeline</button></li>
-            <li><button onclick="showTab('active')"       data-tab="active">✅ Active Grants</button></li>
-            <li><button onclick="showTab('unsuccessful')" data-tab="unsuccessful">❌ Unsuccessful</button></li>
-            <li><button onclick="showTab('receivables')"  data-tab="receivables">⚠ Receivables</button></li>
-            <li><button onclick="showTab('audit')"        data-tab="audit">🕘 Change Log</button></li>
-        </ul>
-        <a href="index.html" class="portal-link">← Back to Portal</a>
-    </aside>
-
-    <main class="main" id="mainContent">
-        <div class="loading"><span class="spinner">⟳</span><p style="margin-top:16px;color:var(--text-muted)">Loading tracker…</p></div>
-    </main>
+<aside>
+  <div class="brand"><img src="RAHAMA Empowerment Logo Design (3).png" alt="RAHAMA" onerror="this.style.display='none'"><b>RAHAMA FMS</b><small>Project Tracker · Grants</small></div>
+  <div class="who"><small>Signed in as</small><b id="userName">Loading…</b><div><span class="role" id="userRole">–</span></div></div>
+  <div class="years"><label>Year</label><div id="yearBox"></div></div>
+  <nav class="nav" id="nav"></nav>
+  <a href="index.html" class="back">← Back to FMS</a>
+</aside>
+<main id="main"><div class="center"><p>Loading tracker…</p></div></main>
 </div>
-
-<div id="modalContainer"></div>
+<div id="modalHost"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════════════
+// ═════════ CONFIG ═════════
 const SUPABASE_URL = 'https://sqygmoxpegbfxddglhbx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable__nPBgo9IeeU4Mrk_ggEeTg_YEkWrB24';
-
-// NOTE: this check runs in the browser and can be bypassed by anyone who
-// edits localStorage. It controls what the UI shows, NOT what the database
-// permits. Real enforcement must live in Supabase RLS policies.
-const AUTHORIZED_EMPLOYEE_EMAILS = [
-    'salahuddeen.sambo@rgcweinigeria.org',
-    'sani.hamisu@rgcweinigeria.org',
-    'aisha.abdulrahman@rgcweinigeria.org',
-    'maryam.tijjani@rgcweinigeria.org',
-    'amina.yusuf@rgcweinigeria.org',
-];
-
+// Used only if the database access list has not been set up yet (before the upgrade SQL is run).
+const FALLBACK_EMAILS = ['salahuddeen.sambo@rgcweinigeria.org','sani.hamisu@rgcweinigeria.org','aisha.abdulrahman@rgcweinigeria.org','maryam.tijjani@rgcweinigeria.org','amina.yusuf@rgcweinigeria.org'];
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ═══════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════
-let STATE = {
-    user: null,
-    canEdit: false,
-    tab: 'dashboard',
-    year: null,
-    data: { grants: [], receivables: [], audit: [] }
-};
+// ═════════ STATE ═════════
+const S = { user:null, canEdit:false, tab:'dashboard', year:'all', grantId:null, upgraded:true,
+  data:{ grants:[], receivables:[], audit:[], tranches:[], reports:[], milestones:[], finProjects:[] },
+  f:{ dl:'upcoming', dlKind:'', q:'', gantt:'awarded' } };
+let CH = {};
 
-const YEARS_KEY = 'tracker_extra_years';
-const getExtraYears = () => {
-    try { return JSON.parse(localStorage.getItem(YEARS_KEY)) || []; }
-    catch (e) { return []; }
-};
-const saveExtraYears = ys => localStorage.setItem(YEARS_KEY, JSON.stringify(ys));
+// ═════════ STATUS & STAGES ═════════
+// Stored values stay as they are; two are shown with clearer names.
+const LABEL = { 'Not Submitted':'Drafting', 'Awaiting Outcome':'Under Review' };
+const lab = s => LABEL[s] || s || '–';
+const STATUS_OPTS = [['Prospect / Research','Prospect / Research'],['Letter of Intent','Letter of Intent (LOI)'],['Not Submitted','Drafting'],['Submitted','Submitted'],
+  ['Awaiting Outcome','Under Review'],['On Hold','On Hold'],['Awarded','Awarded'],['Active','Active'],['Not Awarded','Not Awarded'],['Closed','Closed']];
+const PIPE_ORDER = ['Prospect / Research','Letter of Intent','Not Submitted','Submitted','Awaiting Outcome','On Hold'];
+const STAGE_OF = s => s==='Awarded'||s==='Active' ? 'active' : s==='Not Awarded' ? 'unsuccessful' : s==='Closed' ? 'closed' : 'pipeline';
+const STATUS_COL = { 'Prospect / Research':['#EEF2F7','#3B4A5C'],'Letter of Intent':['#EDE7F6','#5B3C8C'],'Not Submitted':['#E8F4F8','#0C5460'],'Submitted':['#E8F0FE','#1a3c8f'],
+  'Awaiting Outcome':['#FFF3CD','#856404'],'On Hold':['#E2E3E5','#555'],'Awarded':['#D4EDDA','#155724'],'Active':['#D4EDDA','#1E4D2B'],'Not Awarded':['#F8D7DA','#721C24'],'Closed':['#E2E3E5','#383D41'],
+  'Overdue / Pending':['#FFF3CD','#856404'],'Overdue / CRITICAL':['#F8D7DA','#8B1A1A'],'Paid':['#D4EDDA','#155724'],'Partially Paid':['#FFF3CD','#856404'] };
+const badge = s => { const c = STATUS_COL[s] || ['#eee','#333']; return `<span class="badge" style="background:${c[0]};color:${c[1]}">${esc(lab(s))}</span>`; };
+const FUNDER_TYPES = ['Private foundation','Corporate','Government / bilateral','Multilateral / UN','Trust','INGO / pass-through','Individual / other'];
+const REPORT_KINDS = ['Interim narrative','Interim financial','Final narrative','Final financial','Audit','Other'];
+const RCV_STATUSES = ['Overdue / Pending','Overdue / CRITICAL','Paid','Partially Paid'];
 
-function allYears() {
-    const fromData = STATE.data.grants.map(g => Number(g.year)).filter(Boolean);
-    const set = new Set([...fromData, ...getExtraYears().map(Number)]);
-    if (set.size === 0) set.add(new Date().getFullYear());
-    return [...set].sort((a, b) => b - a);
+// ═════════ HELPERS ═════════
+const esc = s => (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const sym = c => c==='EUR'?'€':c==='NGN'?'₦':c==='GBP'?'£':'$';
+const money = (n,c) => n==null||n==='' ? '–' : sym(c||'USD') + Number(n).toLocaleString('en-NG',{maximumFractionDigits:0});
+const short = (n,c) => { if(n==null) return '–'; const a=Math.abs(n), s=sym(c||'USD'); return s+(a>=1e9?(n/1e9).toFixed(2)+'B':a>=1e6?(n/1e6).toFixed(2)+'M':a>=1e3?(n/1e3).toFixed(0)+'k':Math.round(n)); };
+const MN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const toD = s => { if(!s) return null; const d = new Date(String(s).slice(0,10)+'T00:00:00'); return isNaN(d) ? null : d; };
+const fmtD = s => { const d = s instanceof Date ? s : toD(s); return d ? d.getDate()+' '+MN[d.getMonth()]+' '+d.getFullYear() : '–'; };
+const today = () => { const d=new Date(); d.setHours(0,0,0,0); return d; };
+const days = s => { const d=toD(s); return d ? Math.round((d - today())/864e5) : null; };
+const when = s => { const n = days(s); if(n==null) return ''; return n<0 ? `<span class="chip red">${-n} day${n===-1?'':'s'} overdue</span>` : n===0 ? '<span class="chip amber">today</span>' : n<=14 ? `<span class="chip amber">in ${n} day${n===1?'':'s'}</span>` : `<span class="sub">in ${n} days</span>`; };
+function toast(t){ const e=document.createElement('div'); e.className='toast'; e.textContent=t; document.body.appendChild(e); setTimeout(()=>e.remove(),2600); }
+// Reads "Jan 2026 – Dec 2027", "March 2025 - Feb 2026", "2025-2027", "01/2025 - 12/2026" from the old free-text period
+function parsePeriod(p){
+  if(!p) return [null,null];
+  const t = String(p).replace(/[–—]/g,'-');
+  const mon = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?\\s*(\\d{4})';
+  let m = t.match(new RegExp(mon+'\\s*(?:-|to)\\s*'+mon,'i'));
+  if(m){ const a=MN.findIndex(x=>x.toLowerCase()===m[1].slice(0,3).toLowerCase()), b=MN.findIndex(x=>x.toLowerCase()===m[3].slice(0,3).toLowerCase());
+    return [new Date(+m[2],a,1), new Date(+m[4],b+1,0)]; }
+  m = t.match(/(\d{1,2})\/(\d{4})\s*(?:-|to)\s*(\d{1,2})\/(\d{4})/); if(m) return [new Date(+m[2],+m[1]-1,1), new Date(+m[4],+m[3],0)];
+  m = t.match(/(\d{4})\s*(?:-|to)\s*(\d{4})/); if(m) return [new Date(+m[1],0,1), new Date(+m[2],11,31)];
+  return [null,null];
 }
+function span(g){ const a=toD(g.start_date), b=toD(g.end_date); if(a&&b) return [a,b,false]; const [pa,pb]=parsePeriod(g.period); return [a||pa, b||pb, !(a&&b)&&!!(pa||pb)]; }
+const yearsAll = () => { const s=new Set(S.data.grants.map(g=>+g.year).filter(Boolean)); try{(JSON.parse(localStorage.getItem('tracker_extra_years'))||[]).forEach(y=>s.add(+y))}catch(e){} if(!s.size) s.add(new Date().getFullYear()); return [...s].sort((a,b)=>b-a); };
+const inYear = g => S.year==='all' || +g.year === +S.year;
+const G = () => S.data.grants.filter(inYear);
+const stage = st => G().filter(g => g.stage === st);
+const won = g => g.stage==='active' || g.stage==='closed';
+const awardOf = g => g.awarded_amount!=null ? [g.awarded_amount, g.award_currency||g.currency||'USD'] : g.total_usd ? [g.total_usd,'USD'] : g.total_ngn ? [g.total_ngn,'NGN'] : [null,null];
+const usdOf = g => g.awarded_amount!=null && (g.award_currency||'USD')==='USD' ? +g.awarded_amount : g.total_usd ? +g.total_usd : 0;
+const byGrant = (list,id) => list.filter(x => x.grant_id === id);
 
-const yearGrants = () => STATE.data.grants.filter(g => Number(g.year) === Number(STATE.year));
-const byStage    = st => yearGrants().filter(g => g.stage === st);
+// ═════════ INIT ═════════
+async function init(){
+  let session=null; try{ session = JSON.parse(localStorage.getItem('pms_user')||'null'); }catch(e){}
+  if(!session) return denied('Please sign in first','Open the tracker from the FMS menu after signing in.');
+  S.user = session;
+  const email = (session.email||'').toLowerCase().trim();
+  document.getElementById('userName').textContent = session.name || email || 'User';
+  // The database decides who can view and edit. Before the upgrade SQL is run, fall back to the old list.
+  const r = await db.rpc('grants_role');
+  let role = null;
+  if(r.error){ S.upgraded=false; role = ((session.role||'').toLowerCase()==='supervisor' || FALLBACK_EMAILS.includes(email)) ? 'editor' : null; }
+  else role = r.data;
+  if(!role) return denied('Access restricted','The Project Tracker is only open to staff on its access list. Ask the Programme Manager if you need access.');
+  S.canEdit = role === 'editor';
+  document.getElementById('userRole').textContent = S.canEdit ? 'Editor' : 'Viewer';
+  try { await load(); } catch(e){ document.getElementById('main').innerHTML = `<div class="center"><h2>Could not load the tracker</h2><p>${esc(e.message)}</p><button class="btn pri" onclick="init()">Try again</button></div>`; return; }
+  const ys = yearsAll(); S.year = ys.includes(new Date().getFullYear()) ? new Date().getFullYear() : 'all';
+  render();
+}
+function denied(h,p){ document.getElementById('userRole').textContent='No access'; document.getElementById('nav').innerHTML='';
+  document.getElementById('main').innerHTML = `<div class="center"><div style="font-size:48px">🔐</div><h2>${esc(h)}</h2><p>${esc(p)}</p><a class="btn pri" href="index.html" style="text-decoration:none;margin-top:10px">← Back to FMS</a></div>`; }
 
-// ═══════════════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════════════
-async function init() {
-    const raw = localStorage.getItem('pms_user');
-    if (!raw) { showAccessDenied('no-session'); return; }
+async function load(){
+  const opt = q => q.then(r => r, () => ({ data:[], error:{message:'unavailable'} }));
+  const [g,r,a,t,rp,m,fp] = await Promise.all([
+    db.from('grants_register').select('*').order('id'),
+    opt(db.from('receivables').select('*').order('id')),
+    opt(db.from('grants_audit').select('*').order('changed_at',{ascending:false}).limit(300)),
+    opt(db.from('grant_tranches').select('*').order('due_date')),
+    opt(db.from('grant_reports').select('*').order('due_date')),
+    opt(db.from('grant_milestones').select('*').order('due_date')),
+    opt(db.from('fin_projects').select('project_name,direct_budget,cash_received'))]);
+  if(g.error) throw new Error('grants_register: '+g.error.message);
+  Object.assign(S.data, { grants:g.data||[], receivables:r.data||[], audit:a.data||[], tranches:(t.error?[]:t.data)||[], reports:(rp.error?[]:rp.data)||[],
+    milestones:(m.error?[]:m.data)||[], finProjects:(fp.error?[]:fp.data)||[] });
+  if(t.error) S.upgraded = false;
+}
+async function reload(){ await load(); render(); }
 
-    let session;
-    try { session = JSON.parse(raw); }
-    catch (e) { showAccessDenied('no-session'); return; }
-
-    const name  = (session.name  || '').trim();
-    const email = (session.email || '').toLowerCase().trim();
-    const role  = (session.role  || '').toLowerCase().trim();
-
-    if (role !== 'supervisor' && !AUTHORIZED_EMPLOYEE_EMAILS.includes(email)) {
-        showAccessDenied('no-access');
-        return;
+// ═════════ DEADLINES (one list for everything with a date) ═════════
+function allDeadlines(){
+  const out=[], gp=id=>S.data.grants.find(x=>x.id===id)||{};
+  S.data.grants.forEach(g=>{
+    if(g.stage==='pipeline'){
+      if(g.loi_due) out.push({date:g.loi_due,kind:'LOI due',g,text:'Letter of intent'});
+      if(g.submission_date) out.push({date:g.submission_date,kind:'Submission',g,text:'Full application'+(g.submission_time?' by '+g.submission_time+(g.submission_tz?' '+g.submission_tz:''):'')});
+      if(g.decision_expected) out.push({date:g.decision_expected,kind:'Decision expected',g,text:'Funder decision'});
     }
-
-    STATE.user    = session;
-    STATE.canEdit = true;
-
-    document.getElementById('userName').textContent = name || email || 'User';
-    const badge = document.getElementById('userRoleBadge');
-    badge.textContent = 'Editor';
-    badge.className = 'role-badge role-editor';
-
-    try {
-        await loadAllData();
-    } catch (err) {
-        console.error('Data load error:', err);
-        document.getElementById('mainContent').innerHTML = `
-            <div class="access-denied">
-                <div class="icon">⚠️</div>
-                <h2>Could not load tracker data</h2>
-                <p style="margin-top:8px;max-width:400px">${esc(err.message) || 'A network or database error occurred.'}</p>
-                <br>
-                <button onclick="init()" class="btn btn-primary" style="margin-top:8px">Retry</button>
-            </div>`;
-        return;
-    }
-
-    const years = allYears();
-    STATE.year = years.includes(new Date().getFullYear()) ? new Date().getFullYear() : years[0];
-    refreshYearSelect();
-    showTab('dashboard');
+    if(won(g) && g.end_date) out.push({date:g.end_date,kind:'Grant ends',g,text:'End of grant period',done:g.stage==='closed'});
+  });
+  S.data.reports.forEach(r=>out.push({date:r.due_date,kind:'Report',g:gp(r.grant_id),text:r.kind+(r.title?': '+r.title:''),done:!!r.submitted_date}));
+  S.data.tranches.forEach(t=>out.push({date:t.due_date,kind:'Tranche',g:gp(t.grant_id),text:money(t.amount,t.currency)+' expected',done:!!t.received_date}));
+  S.data.milestones.forEach(m=>out.push({date:m.due_date,kind:'Milestone',g:gp(m.grant_id),text:m.title,done:!!m.done_date}));
+  return out.filter(x=>x.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
 }
 
-// ═══════════════════════════════════════════════════════
-// DATA
-// ═══════════════════════════════════════════════════════
-async function loadAllData() {
-    const [g, r, a] = await Promise.all([
-        db.from('grants_register').select('*').order('id', { ascending: true }),
-        db.from('receivables').select('*').order('id', { ascending: true }),
-        db.from('grants_audit').select('*').order('changed_at', { ascending: false }).limit(200)
-    ]);
+// ═════════ SHELL ═════════
+const TABS = [['Overview',[['dashboard','📊 Dashboard'],['deadlines','⏰ Deadlines'],['gantt','📅 Gantt chart']]],
+  ['Grants',[['pipeline','🔭 Pipeline'],['active','✅ Active grants'],['unsuccessful','❌ Unsuccessful'],['funders','🏛 Funders']]],
+  ['Finance',[['receivables','⚠ Receivables']]],['Records',[['audit','🕘 Change log']]]];
+function render(){
+  const overdue = allDeadlines().filter(d=>!d.done && days(d.date)<0).length;
+  const cnt = { pipeline:stage('pipeline').length, active:stage('active').length, unsuccessful:stage('unsuccessful').length, deadlines:overdue, receivables:S.data.receivables.filter(r=>r.status!=='Paid').length };
+  document.getElementById('nav').innerHTML = TABS.map(([grp,items])=>`<div class="navg">${grp}</div>`+items.map(([k,l])=>{
+    const c = cnt[k]; const red = (k==='deadlines'||k==='receivables') && c;
+    return `<button class="${S.tab===k&&!S.grantId?'on':''}" onclick="go('${k}')">${l}${c?`<span class="cnt ${red?'red':''}">${c}</span>`:''}</button>`; }).join('')).join('');
+  const ys = yearsAll();
+  document.getElementById('yearBox').innerHTML = `<button class="yr ${S.year==='all'?'on':''}" onclick="setYear('all')">All</button>` +
+    ys.map(y=>`<button class="yr ${+S.year===y?'on':''}" onclick="setYear(${y})">${y}</button>`).join('') + (S.canEdit?`<button class="yr add" onclick="addYear()" title="Add a year">+</button>`:'');
+  Object.values(CH).forEach(c=>{try{c.destroy()}catch(e){}}); CH={};
+  const el = document.getElementById('main');
+  if(S.grantId) return renderGrant(el, S.grantId);
+  ({dashboard:renderDashboard,deadlines:renderDeadlines,gantt:renderGantt,pipeline:renderPipeline,active:renderActive,unsuccessful:renderUnsuccessful,funders:renderFunders,receivables:renderReceivables,audit:renderAudit}[S.tab]||renderDashboard)(el);
+}
+function go(t){ S.tab=t; S.grantId=null; render(); window.scrollTo(0,0); }
+function openGrant(id){ S.grantId=id; render(); window.scrollTo(0,0); }
+function setYear(y){ S.year=y; render(); }
+function addYear(){ const v=prompt('Add a year to the tracker (e.g. 2027):'); if(!v) return; const y=parseInt(v,10); if(!(y>2000&&y<2100)) return alert('Please enter a four-digit year.');
+  let ex=[]; try{ex=JSON.parse(localStorage.getItem('tracker_extra_years'))||[]}catch(e){} if(!ex.includes(y)) ex.push(y); try{localStorage.setItem('tracker_extra_years',JSON.stringify(ex))}catch(e){} S.year=y; render(); }
+const yLabel = () => S.year==='all' ? 'All years' : String(S.year);
+const head = (h,p,tools) => `<div class="top"><div><h1>${h}</h1><p>${p}</p></div><div class="tools">${tools||''}</div></div>`;
+const upgradeNote = () => S.upgraded ? '' : `<div class="alert amber"><span>ℹ️</span><div><b>The new details are not switched on yet.</b>Run grants_tracker_upgrade.sql once in the FMS SQL editor to add funder contacts, dates, tranches, reports and milestones.</div></div>`;
 
-    if (g.error) throw new Error('grants_register: ' + g.error.message);
-    STATE.data.grants = g.data || [];
-
-    if (r.error) console.warn('receivables:', r.error.message);
-    STATE.data.receivables = r.data || [];
-
-    if (a.error) console.warn('grants_audit:', a.error.message);
-    STATE.data.audit = a.data || [];
+// ═════════ DASHBOARD ═════════
+function renderDashboard(el){
+  const all=G(), pipe=stage('pipeline'), act=stage('active'), clo=stage('closed'), uns=stage('unsuccessful');
+  const wins=act.length+clo.length, losses=uns.length, decided=wins+losses, rate = decided ? wins/decided : null;
+  const pipeVal = pipe.reduce((s,p)=>s+(+p.amount||0),0), wVal = pipe.reduce((s,p)=>s+(+p.amount||0)*(+p.prob||0),0);
+  const actNgn = act.reduce((s,g)=>s+(+g.total_ngn||0),0), actUsd = act.reduce((s,g)=>s+usdOf(g),0);
+  const awaiting = pipe.filter(p=>['Submitted','Awaiting Outcome'].includes(p.status)).length;
+  const rcvOpen = S.data.receivables.filter(r=>r.status!=='Paid'), crit = rcvOpen.filter(r=>r.priority==='CRITICAL');
+  const dl = allDeadlines().filter(d=>!d.done), overdue = dl.filter(d=>days(d.date)<0), soon = dl.filter(d=>{const n=days(d.date);return n>=0&&n<=60;});
+  const noBudget = act.filter(g=>!g.total_usd && !g.total_ngn && g.awarded_amount==null);
+  const noLessons = uns.filter(g=>!g.lessons);
+  let h = head('Grants dashboard', yLabel()+' · '+all.length+' record'+(all.length===1?'':'s'), `<button class="btn" onclick="exportExcel()">⬇ Excel report</button>${S.canEdit?'<button class="btn pri" onclick="editGrant(null)">+ Add record</button>':''}`) + upgradeNote();
+  if(crit.length) h += `<div class="alert red"><span>⚠️</span><div><b>${crit.length} critical receivable${crit.length===1?'':'s'} need action</b><button class="link" onclick="go('receivables')">Open receivables</button></div></div>`;
+  if(overdue.length) h += `<div class="alert red"><span>⏰</span><div><b>${overdue.length} overdue deadline${overdue.length===1?'':'s'}</b>${overdue.slice(0,3).map(d=>esc(d.kind+': '+(d.g.project||''))).join(' · ')}${overdue.length>3?' …':''} <button class="link" onclick="S.f.dl='overdue';go('deadlines')">See all</button></div></div>`;
+  if(noBudget.length) h += `<div class="alert amber"><span>📝</span><div><b>${noBudget.length} awarded grant${noBudget.length===1?'':'s'} still without award figures</b>${noBudget.map(g=>`<button class="link" onclick="openGrant(${g.id})">${esc(g.project)}</button>`).join(' · ')}</div></div>`;
+  h += `<div class="kpis">
+    <div class="kpi win"><small>Win rate · ${yLabel()}</small><b>${rate==null?'–':Math.round(rate*100)+'%'}</b><i>${wins} won · ${losses} not awarded · ${awaiting} awaiting</i></div>
+    <div class="kpi"><small>In the pipeline</small><b>${pipe.length}</b><i>${short(pipeVal)} requested</i></div>
+    <div class="kpi"><small>Weighted pipeline</small><b>${short(wVal)}</b><i>requested × probability</i></div>
+    <div class="kpi"><small>Active grants</small><b>${act.length}</b><i>${clo.length} closed</i></div>
+    <div class="kpi"><small>Active budget</small><b>${short(actNgn,'NGN')}</b><i>${actUsd?short(actUsd)+' in USD':'NGN total'}</i></div>
+    <div class="kpi"><small>Due in 60 days</small><b>${soon.length}</b><i>${overdue.length} overdue</i></div>
+    <div class="kpi"><small>Receivables open</small><b>${rcvOpen.length}</b><i>${short(rcvOpen.reduce((s,r)=>s+(+r.amount_usd||0),0))} · ${short(rcvOpen.reduce((s,r)=>s+(+r.amount_ngn||0),0),'NGN')}</i></div>
+  </div>
+  <div class="grid">
+    <div class="card s4"><h3>Wins against losses<span>${yLabel()}</span></h3><div class="cv sm"><canvas id="cWin"></canvas></div>
+      <div class="sub" style="margin-top:8px">Counted on decided applications only: Awarded, Active and Closed against Not Awarded.${noLessons.length?` <b style="color:var(--warn)">${noLessons.length} without lessons recorded.</b>`:''}</div></div>
+    <div class="card s8"><h3>Win rate by year<span>all years</span></h3><div class="cv sm"><canvas id="cYear"></canvas></div></div>
+    <div class="card s6"><h3>Pipeline by stage<span>${yLabel()} · number and amount requested</span></h3><div class="cv"><canvas id="cPipe"></canvas></div></div>
+    <div class="card s6"><h3>Won and lost by funder type<span>${yLabel()}</span></h3><div class="cv"><canvas id="cType"></canvas></div></div>
+    <div class="card s6"><h3>Applications by theme<span>${yLabel()} · won vs not awarded vs open</span></h3><div class="cv"><canvas id="cTheme"></canvas></div></div>
+    <div class="card s6"><h3>Coming up<span>next 60 days and overdue</span></h3>${deadlineTable(overdue.concat(soon).slice(0,9),true)}
+      <div style="margin-top:8px"><button class="link" onclick="go('deadlines')">All deadlines →</button></div></div>
+  </div>`;
+  el.innerHTML = h;
+  // charts
+  const C = getComputedStyle(document.documentElement), col = v => C.getPropertyValue(v).trim();
+  const P = [col('--primary'),col('--accent'),'#D9A21B',col('--info'),col('--violet'),col('--danger'),'#5C6B62'];
+  const base = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ boxWidth:10, font:{size:11} } } } };
+  CH.w = new Chart(document.getElementById('cWin'), { type:'doughnut', data:{ labels:['Won','Not awarded','Awaiting decision'], datasets:[{ data:[wins,losses,awaiting], backgroundColor:[P[0],P[5],'#D9A21B'] }] },
+    options:{ ...base, cutout:'64%', plugins:{ ...base.plugins, legend:{ position:'bottom', labels:{boxWidth:10,font:{size:11}} } } },
+    plugins:[{ id:'mid', afterDraw(c){ const {ctx,chartArea:a}=c; ctx.save(); ctx.font='800 22px Plus Jakarta Sans, sans-serif'; ctx.fillStyle=col('--text'); ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(rate==null?'–':Math.round(rate*100)+'%',(a.left+a.right)/2,(a.top+a.bottom)/2); ctx.restore(); } }] });
+  const ys = yearsAll().slice().reverse();
+  const yw = ys.map(y=>S.data.grants.filter(g=>+g.year===y&&won(g)).length), yl = ys.map(y=>S.data.grants.filter(g=>+g.year===y&&g.stage==='unsuccessful').length);
+  CH.y = new Chart(document.getElementById('cYear'), { data:{ labels:ys, datasets:[
+      { type:'bar', label:'Won', data:yw, backgroundColor:P[0], stack:'a' }, { type:'bar', label:'Not awarded', data:yl, backgroundColor:P[5], stack:'a' },
+      { type:'line', label:'Win rate %', data:ys.map((y,i)=>yw[i]+yl[i]?Math.round(yw[i]/(yw[i]+yl[i])*100):null), yAxisID:'r', borderColor:'#D9A21B', backgroundColor:'#D9A21B', tension:.25, spanGaps:true }] },
+    options:{ ...base, scales:{ x:{stacked:true}, y:{stacked:true,beginAtZero:true,ticks:{precision:0},title:{display:true,text:'applications'}}, r:{position:'right',min:0,max:100,grid:{display:false},ticks:{callback:v=>v+'%'}} } } });
+  const stg = PIPE_ORDER.map(s=>pipe.filter(p=>p.status===s));
+  const other = pipe.filter(p=>!PIPE_ORDER.includes(p.status));
+  const sl = PIPE_ORDER.map(lab).concat(other.length?['Other']:[]), sd = stg.concat(other.length?[other]:[]);
+  CH.p = new Chart(document.getElementById('cPipe'), { data:{ labels:sl, datasets:[
+      { type:'bar', label:'Number', data:sd.map(a=>a.length), backgroundColor:P[1], yAxisID:'y' },
+      { type:'bar', label:'Requested (USD)', data:sd.map(a=>a.reduce((s,p)=>s+((p.currency||'USD')==='USD'?(+p.amount||0):0),0)), backgroundColor:P[3], yAxisID:'r' }] },
+    options:{ ...base, scales:{ y:{beginAtZero:true,ticks:{precision:0}}, r:{position:'right',beginAtZero:true,grid:{display:false},ticks:{callback:v=>short(v)}} } } });
+  const types = [...new Set(all.map(g=>g.funder_type||'Not set'))];
+  CH.t = new Chart(document.getElementById('cType'), { type:'bar', data:{ labels:types, datasets:[
+      { label:'Won', data:types.map(t=>all.filter(g=>(g.funder_type||'Not set')===t&&won(g)).length), backgroundColor:P[0] },
+      { label:'Not awarded', data:types.map(t=>all.filter(g=>(g.funder_type||'Not set')===t&&g.stage==='unsuccessful').length), backgroundColor:P[5] }] },
+    options:{ ...base, indexAxis:'y', scales:{ x:{stacked:true,ticks:{precision:0}}, y:{stacked:true} } } });
+  const th = [...new Set(all.map(g=>(g.thematic||'Not set').split(/[,/;]/)[0].trim()))].slice(0,10);
+  const thOf = g=>(g.thematic||'Not set').split(/[,/;]/)[0].trim();
+  CH.h = new Chart(document.getElementById('cTheme'), { type:'bar', data:{ labels:th, datasets:[
+      { label:'Won', data:th.map(t=>all.filter(g=>thOf(g)===t&&won(g)).length), backgroundColor:P[0] },
+      { label:'Not awarded', data:th.map(t=>all.filter(g=>thOf(g)===t&&g.stage==='unsuccessful').length), backgroundColor:P[5] },
+      { label:'Open', data:th.map(t=>all.filter(g=>thOf(g)===t&&g.stage==='pipeline').length), backgroundColor:'#D9A21B' }] },
+    options:{ ...base, scales:{ x:{stacked:true,ticks:{autoSkip:false,maxRotation:40,font:{size:10.5}}}, y:{stacked:true,ticks:{precision:0}} } } });
 }
 
-async function upsertRow(table, id, row) {
-    row.updated_by = (STATE.user && (STATE.user.email || STATE.user.name)) || 'unknown';
-    const res = id
-        ? await db.from(table).update(row).eq('id', id)
-        : await db.from(table).insert([row]);
-    if (res.error) { alert('Error saving: ' + res.error.message); throw res.error; }
+// ═════════ DEADLINES ═════════
+function deadlineTable(list, compact){
+  if(!list.length) return '<div class="empty">Nothing due.</div>';
+  return `<div class="tw"><table><thead><tr><th>Date</th><th>What</th><th>Grant</th>${compact?'':'<th>Detail</th><th>Status</th>'}</tr></thead><tbody>${list.map(d=>`<tr class="click" onclick="openGrant(${d.g.id})">
+    <td class="nw">${fmtD(d.date)}<div>${d.done?'<span class="chip green">done</span>':when(d.date)}</div></td><td class="nw"><b>${esc(d.kind)}</b>${compact?`<div class="sub">${esc(d.text)}</div>`:''}</td>
+    <td>${esc(d.g.project||'')}<div class="sub">${esc(d.g.funder||'')}</div></td>${compact?'':`<td>${esc(d.text)}</td><td>${badge(d.g.status)}</td>`}</tr>`).join('')}</tbody></table></div>`;
+}
+function renderDeadlines(el){
+  const all = allDeadlines(), f=S.f;
+  const kinds = [...new Set(all.map(d=>d.kind))];
+  let list = all.filter(d=>!f.dlKind||d.kind===f.dlKind);
+  list = f.dl==='upcoming' ? list.filter(d=>!d.done&&days(d.date)>=0) : f.dl==='overdue' ? list.filter(d=>!d.done&&days(d.date)<0) : f.dl==='done' ? list.filter(d=>d.done) : list;
+  el.innerHTML = head('Deadlines','LOIs, submissions, decisions, reports, tranches, milestones and grant end dates — all years') + upgradeNote() +
+    `<div class="filters">${[['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All']].map(([k,l])=>`<button class="${f.dl===k?'on':''}" onclick="S.f.dl='${k}';render()">${l}</button>`).join('')}
+     <select onchange="S.f.dlKind=this.value;render()"><option value="">All types</option>${kinds.map(k=>`<option ${f.dlKind===k?'selected':''}>${esc(k)}</option>`).join('')}</select>
+     <span class="sub">${list.length} item${list.length===1?'':'s'}</span></div>` + deadlineTable(list,false);
 }
 
-async function deleteRow(table, id) {
-    if (!confirm('Delete this entry?\n\nIt will be removed from the tracker but retained in the Change Log.')) return;
-    const { error } = await db.from(table).delete().eq('id', id);
-    if (error) { alert('Error deleting: ' + error.message); return; }
-    await reload();
+// ═════════ GANTT ═════════
+function renderGantt(el){
+  const mode = S.f.gantt;
+  let rows = S.data.grants.filter(g => mode==='all' ? true : mode==='awarded' ? won(g) : g.stage==='active');
+  rows = rows.map(g=>({g,sp:span(g)})).filter(r=>r.sp[0]&&r.sp[1]).sort((a,b)=>a.sp[0]-b.sp[0]);
+  const missing = S.data.grants.filter(g => (mode==='all'||won(g)) && !(span(g)[0]&&span(g)[1]));
+  let h = head('Gantt chart','Grant periods with reports, tranches and milestones') + upgradeNote() +
+    `<div class="filters">${[['active','Active only'],['awarded','Active and closed'],['all','Everything with dates']].map(([k,l])=>`<button class="${mode===k?'on':''}" onclick="S.f.gantt='${k}';render()">${l}</button>`).join('')}</div>`;
+  if(!rows.length){ el.innerHTML = h + '<div class="card"><div class="empty">No grant has a start and end date yet. Open a grant and add its start and end dates.</div></div>'; return; }
+  let lo = new Date(Math.min(...rows.map(r=>r.sp[0]))), hi = new Date(Math.max(...rows.map(r=>r.sp[1]), today()));
+  lo = new Date(lo.getFullYear(), lo.getMonth(), 1); hi = new Date(hi.getFullYear(), hi.getMonth()+1, 0);
+  const months = []; for(let d=new Date(lo); d<=hi; d=new Date(d.getFullYear(), d.getMonth()+1, 1)) months.push(new Date(d));
+  const W = Math.max(900, months.length*46), tot = hi - lo, x = d => ((d - lo)/tot*W);
+  const tx = x(today());
+  const hdr = `<div class="g-row g-head"><div class="g-lab">Grant</div><div class="g-track" style="width:${W}px;height:34px">${months.map(m=>`<div class="g-m" style="left:${x(m)}px">${m.getMonth()===0||m===months[0]?MN[m.getMonth()]+' '+String(m.getFullYear()).slice(2):MN[m.getMonth()]}</div>`).join('')}</div></div>`;
+  const body = rows.map(({g,sp})=>{
+    const c = g.stage==='closed' ? '#8A9890' : g.stage==='active' ? 'var(--primary)' : g.stage==='unsuccessful' ? 'var(--danger)' : '#D9A21B';
+    const mk = (d,ch,colr,tip) => { const dd=toD(d); if(!dd||dd<lo||dd>hi) return ''; return `<span class="g-mk" style="left:${x(dd)}px;color:${colr}" title="${esc(tip)}">${ch}</span>`; };
+    const marks = byGrant(S.data.reports,g.id).map(r=>mk(r.due_date,'▲',r.submitted_date?'#2d7a52':days(r.due_date)<0?'#C4432A':'#14201A',r.kind+' report · '+fmtD(r.due_date)+(r.submitted_date?' · submitted':''))).join('')
+      + byGrant(S.data.tranches,g.id).map(t=>mk(t.due_date,'●',t.received_date?'#2d7a52':'#3F7CAC','Tranche '+money(t.amount,t.currency)+' · '+fmtD(t.due_date)+(t.received_date?' · received':''))).join('')
+      + byGrant(S.data.milestones,g.id).map(m=>mk(m.due_date,'◆',m.done_date?'#2d7a52':'#8E6BB5','Milestone: '+m.title+' · '+fmtD(m.due_date))).join('');
+    return `<div class="g-row"><div class="g-lab"><b><button class="link" onclick="openGrant(${g.id})">${esc(g.project)}</button></b><span class="sub">${esc(g.funder||'')}${sp[2]?' · dates read from period':''}</span></div>
+      <div class="g-track" style="width:${W}px"><div class="g-bar" style="left:${x(sp[0])}px;width:${Math.max(6,x(sp[1])-x(sp[0]))}px;background:${c};opacity:.9" onclick="openGrant(${g.id})" title="${esc(fmtD(sp[0])+' – '+fmtD(sp[1]))}">${MN[sp[0].getMonth()]} ${String(sp[0].getFullYear()).slice(2)} – ${MN[sp[1].getMonth()]} ${String(sp[1].getFullYear()).slice(2)}</div>${marks}</div></div>`;
+  }).join('');
+  h += `<div class="legend"><span><i class="sw" style="background:var(--primary)"></i>Active</span><span><i class="sw" style="background:#8A9890"></i>Closed</span><span><i class="sw" style="background:#D9A21B"></i>Pipeline</span>
+    <span>▲ Report</span><span style="color:#3F7CAC">● Tranche</span><span style="color:#8E6BB5">◆ Milestone</span><span style="color:var(--danger)">┆ Today</span><span>Green marker = done</span></div>
+    <div class="gantt"><div style="position:relative;min-width:${W+260}px">${hdr}${body}<div class="g-today" style="left:${260+tx}px" title="Today"></div></div></div>`;
+  if(missing.length) h += `<div class="alert amber" style="margin-top:12px"><span>📅</span><div><b>${missing.length} grant${missing.length===1?'':'s'} not on the chart (no start and end date)</b>${missing.map(g=>`<button class="link" onclick="openGrant(${g.id})">${esc(g.project)}</button>`).join(' · ')}</div></div>`;
+  el.innerHTML = h;
+  const gc = el.querySelector('.gantt'); if(gc) gc.scrollLeft = Math.max(0, tx - (gc.clientWidth - 260) * 0.6);
 }
 
-async function reload() { await loadAllData(); refreshYearSelect(); showTab(STATE.tab); }
-
-// ═══════════════════════════════════════════════════════
-// YEARS
-// ═══════════════════════════════════════════════════════
-function refreshYearSelect() {
-    const box = document.getElementById('yearSelect');
-    const years = allYears();
-    if (!years.includes(Number(STATE.year))) STATE.year = years[0];
-
-    box.innerHTML = years.map(y => {
-        const on = Number(y) === Number(STATE.year);
-        return `<button onclick="setYear(${y})" style="
-            padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;
-            font-size:13px;font-weight:700;
-            border:1px solid ${on ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.22)'};
-            background:${on ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.08)'};
-            color:${on ? '#1E4D2B' : 'rgba(255,255,255,.75)'};">${y}</button>`;
-    }).join('');
-
-    document.getElementById('yearCaption').textContent = years.length > 1
-        ? years[years.length - 1] + ' – ' + years[0]
-        : String(years[0]);
+// ═════════ LISTS ═════════
+const actions = id => S.canEdit ? `<td class="nw" onclick="event.stopPropagation()"><button class="btn sm" onclick="editGrant(${id})">Edit</button></td>` : '';
+function renderPipeline(el){
+  const d = stage('pipeline').slice().sort((a,b)=>PIPE_ORDER.indexOf(a.status)-PIPE_ORDER.indexOf(b.status));
+  const tot = d.reduce((s,p)=>s+((p.currency||'USD')==='USD'?+p.amount||0:0),0), w = d.reduce((s,p)=>s+((p.currency||'USD')==='USD'?(+p.amount||0)*(+p.prob||0):0),0);
+  el.innerHTML = head(yLabel()+' pipeline', d.length+' application'+(d.length===1?'':'s')+' · set status to Awarded or Not Awarded to move a record', S.canEdit?'<button class="btn pri" onclick="editGrant(null)">+ Add application</button>':'') +
+    `<div class="filters">${PIPE_ORDER.map(s=>{const n=d.filter(p=>p.status===s).length;return n?`<span class="chip">${esc(lab(s))}: ${n}</span>`:''}).join('')}</div>` +
+    (d.length ? `<div class="tw"><table><thead><tr><th>Code</th><th>Project / funder</th><th>Stage</th><th>Requested</th><th>Prob.</th><th>Weighted</th><th>LOI due</th><th>Submission</th><th>Decision expected</th>${S.canEdit?'<th></th>':''}</tr></thead><tbody>
+      ${d.map(p=>`<tr class="click" onclick="openGrant(${p.id})"><td class="nw sub">${esc(p.grant_code||'')}</td><td><b>${esc(p.project)}</b><div class="sub">${esc(p.funder||'')}${p.thematic?' · '+esc(p.thematic):''}</div></td><td>${badge(p.status)}</td>
+        <td class="n">${money(p.amount,p.currency)}</td><td class="n">${p.prob!=null?Math.round(p.prob*100)+'%':'–'}</td><td class="n">${p.amount!=null&&p.prob!=null?money(p.amount*p.prob,p.currency):'–'}</td>
+        <td class="nw">${p.loi_due?fmtD(p.loi_due)+'<div>'+when(p.loi_due)+'</div>':'–'}</td>
+        <td class="nw">${p.submission_date?fmtD(p.submission_date)+(p.submission_time?' '+esc(p.submission_time):'')+(p.submission_tz?'<div class="sub">'+esc(p.submission_tz)+'</div>':'')+'<div>'+when(p.submission_date)+'</div>':esc(p.deadline||'–')}</td>
+        <td class="nw">${p.decision_expected?fmtD(p.decision_expected):'–'}</td>${actions(p.id)}</tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="3">Total (USD applications)</td><td class="n">${money(tot)}</td><td></td><td class="n">${money(w)}</td><td colspan="${S.canEdit?4:3}"></td></tr></tfoot></table></div>`
+      : '<div class="card"><div class="empty">No pipeline entries for '+yLabel()+'.</div></div>');
+}
+function renderActive(el){
+  const live = stage('active'), closed = stage('closed'), d = live.concat(closed);
+  el.innerHTML = head(yLabel()+' active grants', live.length+' active'+(closed.length?' · '+closed.length+' closed':''), S.canEdit?`<button class="btn pri" onclick="editGrant(null,'Active')">+ Add active grant</button>`:'') +
+    (d.length ? `<div class="tw"><table><thead><tr><th>Code</th><th>Grant / funder</th><th>Period</th><th>Awarded</th><th>Total (NGN)</th><th>Tranches received</th><th>Next report</th><th>Status</th>${S.canEdit?'<th></th>':''}</tr></thead><tbody>
+      ${d.map(g=>{ const [a,c]=awardOf(g), sp=span(g), tr=byGrant(S.data.tranches,g.id), rec=tr.filter(t=>t.received_date).length,
+        nr=byGrant(S.data.reports,g.id).filter(r=>!r.submitted_date&&r.due_date).sort((x,y)=>String(x.due_date).localeCompare(y.due_date))[0];
+        return `<tr class="click" onclick="openGrant(${g.id})" style="${g.stage==='closed'?'opacity:.65':''}"><td class="nw sub">${esc(g.grant_code||'')}</td><td><b>${esc(g.project)}</b><div class="sub">${esc(g.funder||'')}</div>${a==null?' <span class="chip amber">needs award figures</span>':''}</td>
+        <td class="nw">${sp[0]&&sp[1]?fmtD(sp[0]).slice(3)+' – '+fmtD(sp[1]).slice(3):esc(g.period||'–')}${sp[0]&&sp[1]&&g.stage!=='closed'?`<div class="bar"><span style="width:${Math.min(100,Math.max(0,(today()-sp[0])/(sp[1]-sp[0])*100))}%"></span></div>`:''}</td>
+        <td class="n">${money(a,c)}</td><td class="n">${g.total_ngn?money(g.total_ngn,'NGN'):'–'}</td><td class="nw">${tr.length?rec+' of '+tr.length:'–'}</td>
+        <td class="nw">${nr?esc(nr.kind)+'<div class="sub">'+fmtD(nr.due_date)+'</div>'+when(nr.due_date):'–'}</td><td>${badge(g.status)}</td>${actions(g.id)}</tr>`; }).join('')}</tbody></table></div>`
+      : '<div class="card"><div class="empty">No active grants for '+yLabel()+'. Awarded pipeline entries appear here automatically.</div></div>');
+}
+function renderUnsuccessful(el){
+  const d = stage('unsuccessful');
+  el.innerHTML = head(yLabel()+' unsuccessful applications', d.length+' entr'+(d.length===1?'y':'ies')+' · capture lessons while they are fresh', S.canEdit?`<button class="btn pri" onclick="editGrant(null,'Not Awarded')">+ Add entry</button>`:'') +
+    (d.length ? `<div class="tw"><table><thead><tr><th>Project / funder</th><th>Theme</th><th>Requested</th><th>Funder feedback and lessons</th><th>Re-submission strategy</th>${S.canEdit?'<th></th>':''}</tr></thead><tbody>
+      ${d.map(a=>`<tr class="click" onclick="openGrant(${a.id})"><td><b>${esc(a.project)}</b><div class="sub">${esc(a.funder||'')}</div></td><td class="sub">${esc(a.thematic||'')}</td>
+        <td class="n">${a.amount_eur?money(a.amount_eur,'EUR'):money(a.amount,a.currency)}</td><td style="max-width:320px">${a.lessons?esc(a.lessons):'<span class="chip amber">not yet captured</span>'}</td><td style="max-width:260px">${esc(a.strategy||'')}</td>${actions(a.id)}</tr>`).join('')}</tbody></table></div>`
+      : '<div class="card"><div class="empty">No unsuccessful applications recorded for '+yLabel()+'.</div></div>');
+}
+function renderFunders(el){
+  const m = {};
+  S.data.grants.forEach(g=>{ const k=(g.funder||'Not set').trim(); const f = m[k] = m[k] || { name:k, type:'', web:'', contact:'', email:'', phone:'', focus:'', n:0, w:0, l:0, open:0, usd:0, ids:[] };
+    f.n++; f.ids.push(g.id); if(won(g)){f.w++; f.usd+=usdOf(g);} else if(g.stage==='unsuccessful') f.l++; else f.open++;
+    ['type:funder_type','web:funder_website','contact:contact_name','email:contact_email','phone:contact_phone','focus:focus_areas'].forEach(p=>{const [a,b]=p.split(':'); if(g[b]) f[a]=g[b];}); });
+  const q = S.f.q.toLowerCase();
+  const list = Object.values(m).filter(f=>!q||(f.name+' '+f.type+' '+f.focus+' '+f.contact).toLowerCase().includes(q)).sort((a,b)=>b.n-a.n);
+  el.innerHTML = head('Funders','Every funder you have applied to, all years, with contacts and results') +
+    `<div class="filters"><input placeholder="Search funder, type, focus, contact…" value="${esc(S.f.q)}" oninput="S.f.q=this.value;clearTimeout(window._fq);window._fq=setTimeout(()=>{render();const i=document.querySelector('.filters input');i.focus();i.setSelectionRange(i.value.length,i.value.length)},250)" style="min-width:280px"><span class="sub">${list.length} funder${list.length===1?'':'s'}</span></div>
+    <div class="tw"><table><thead><tr><th>Funder</th><th>Type</th><th>Programme officer</th><th>Focus areas</th><th class="n">Applied</th><th class="n">Won</th><th class="n">Lost</th><th class="n">Open</th><th class="n">Win rate</th><th class="n">Awarded (USD)</th></tr></thead><tbody>
+    ${list.map(f=>`<tr><td><b>${esc(f.name)}</b>${f.web?`<div><a class="sub" href="${esc(/^https?:/.test(f.web)?f.web:'https://'+f.web)}" target="_blank" rel="noopener">${esc(f.web)}</a></div>`:''}<div class="sub">${f.ids.map(id=>{const g=S.data.grants.find(x=>x.id===id);return `<button class="link" style="font-weight:500" onclick="openGrant(${id})">${esc((g.project||'').slice(0,40))}</button>`}).join(' · ')}</div></td>
+      <td class="sub">${esc(f.type||'–')}</td><td class="nw">${esc(f.contact||'–')}${f.email?`<div><a class="sub" href="mailto:${esc(f.email)}">${esc(f.email)}</a></div>`:''}${f.phone?`<div class="sub">${esc(f.phone)}</div>`:''}</td>
+      <td class="sub" style="max-width:240px">${esc(f.focus||'')}</td><td class="n">${f.n}</td><td class="n">${f.w}</td><td class="n">${f.l}</td><td class="n">${f.open}</td><td class="n">${f.w+f.l?Math.round(f.w/(f.w+f.l)*100)+'%':'–'}</td><td class="n">${f.usd?money(f.usd):'–'}</td></tr>`).join('')}
+    </tbody></table></div><p class="sub">Funder details come from the most recent grant record that has them. Edit a grant to add the funder's type, website and programme officer.</p>`;
 }
 
-function setYear(y) { STATE.year = Number(y); showTab(STATE.tab); }
-
-function addYear() {
-    const input = prompt('Add a year to the tracker (e.g. 2027):');
-    if (!input) return;
-    const y = parseInt(String(input).trim(), 10);
-    if (isNaN(y) || y < 2000 || y > 2100) { alert('Please enter a valid four-digit year.'); return; }
-    if (allYears().includes(y)) { alert(y + ' is already in the tracker.'); return; }
-    const extra = getExtraYears();
-    extra.push(y);
-    saveExtraYears(extra);
-    STATE.year = y;
-    refreshYearSelect();
-    showTab(STATE.tab);
+// ═════════ GRANT RECORD ═════════
+function dlRow(k,v){ return `<dt>${k}</dt><dd>${v==null||v===''?'<span class="sub">–</span>':v}</dd>`; }
+function renderGrant(el,id){
+  const g = S.data.grants.find(x=>x.id===id); if(!g){ S.grantId=null; return render(); }
+  const [a,c] = awardOf(g), sp = span(g), tr = byGrant(S.data.tranches,id), rp = byGrant(S.data.reports,id), ms = byGrant(S.data.milestones,id);
+  const recv = tr.reduce((s,t)=>s+(+t.received_amount||0),0), exp = tr.reduce((s,t)=>s+(+t.amount||0),0);
+  const link = u => u ? `<a href="${esc(/^https?:/.test(u)?u:'https://'+u)}" target="_blank" rel="noopener">${esc(u)}</a>` : '';
+  const ed = S.canEdit;
+  const sub = (title,kind,list,cols,row) => `<div style="margin-top:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:13px">${title}</b>${ed&&S.upgraded?`<button class="btn sm" onclick="editChild('${kind}',null,${id})">+ Add</button>`:''}</div>
+    ${list.length?`<div class="tw"><table><thead><tr>${cols.map(x=>`<th>${x}</th>`).join('')}${ed?'<th></th>':''}</tr></thead><tbody>${list.map(x=>`<tr>${row(x)}${ed?`<td class="nw"><button class="btn sm" onclick="editChild('${kind}',${x.id},${id})">Edit</button></td>`:''}</tr>`).join('')}</tbody></table></div>`:'<div class="sub">None added yet.</div>'}</div>`;
+  el.innerHTML = `<div class="rec-head"><div><button class="link" onclick="S.grantId=null;render()">← Back</button>
+      <h1>${esc(g.project)}</h1><div>${badge(g.status)} ${g.grant_code?`<span class="chip">${esc(g.grant_code)}</span>`:''} <span class="sub">${esc(g.funder||'')} · ${g.year||''}</span></div></div>
+    <div class="tools">${ed?`<button class="btn pri" onclick="editGrant(${id})">Edit record</button><button class="btn danger" onclick="delGrant(${id})">Delete</button>`:''}</div></div>
+  ${upgradeNote()}
+  <div class="grid">
+    <div class="card s6"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">1</i>Funder and prospect</span></h3><dl class="dl">
+      ${dlRow('Funder',esc(g.funder))}${dlRow('Type',esc(g.funder_type))}${dlRow('Website / guidelines',link(g.funder_website))}
+      ${dlRow('Programme officer',esc(g.contact_name))}${dlRow('Email',g.contact_email?`<a href="mailto:${esc(g.contact_email)}">${esc(g.contact_email)}</a>`:'')}${dlRow('Phone',esc(g.contact_phone))}
+      ${dlRow('Focus areas',esc(g.focus_areas))}${dlRow('Eligibility',esc(g.eligibility))}${dlRow('Theme',esc(g.thematic))}${dlRow('Geography',esc(g.geo))}</dl></div>
+    <div class="card s6"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">2</i>Application and pipeline</span></h3><dl class="dl">
+      ${dlRow('Grant code',esc(g.grant_code))}${dlRow('Stage',badge(g.status))}${dlRow('LOI due',g.loi_due?fmtD(g.loi_due)+' '+(g.stage==='pipeline'?when(g.loi_due):''):'')}
+      ${dlRow('Submission deadline',g.submission_date?fmtD(g.submission_date)+(g.submission_time?' · '+esc(g.submission_time):'')+(g.submission_tz?' '+esc(g.submission_tz):'')+' '+(g.stage==='pipeline'?when(g.submission_date):''):esc(g.deadline))}
+      ${dlRow('Decision expected',g.decision_expected?fmtD(g.decision_expected):'')}${dlRow('Requested',money(g.amount,g.currency))}${dlRow('Probability',g.prob!=null?Math.round(g.prob*100)+'%':'')}
+      ${dlRow('Weighted',g.amount!=null&&g.prob!=null?money(g.amount*g.prob,g.currency):'')}</dl></div>
+    <div class="card s12"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">3</i>Award and finance</span><span>${won(g)?'':'Filled in once the grant is awarded'}</span></h3>
+      <div class="grid" style="margin:0"><div class="s6"><dl class="dl">
+        ${dlRow('Awarded amount',money(a,c))}${dlRow('Requested vs awarded',a!=null&&g.amount?Math.round(a/g.amount*100)+'% of request'+(c!==(g.currency||'USD')?' (different currencies)':''):'')}
+        ${dlRow('Total (NGN)',g.total_ngn?money(g.total_ngn,'NGN'):'')}${dlRow('Grant period',sp[0]&&sp[1]?fmtD(sp[0])+' – '+fmtD(sp[1])+(sp[2]?' <span class="sub">(read from "'+esc(g.period)+'")</span>':''):esc(g.period))}
+        ${dlRow('Received (USD)',g.received_usd?money(g.received_usd):'')}${dlRow('Outstanding',[g.outstanding_usd?money(g.outstanding_usd):'',g.outstanding_ngn?money(g.outstanding_ngn,'NGN'):''].filter(Boolean).join(' · '))}
+        ${dlRow('Restrictions and compliance',esc(g.restrictions))}</dl></div>
+        <div class="s6" id="budgetBox"><div class="sub">Budget against spending loads from the Expense Tracker…</div></div></div>
+      ${sub('Payment schedule / tranches','tranche',tr,['Due','Expected','Received','Received on','Note'],t=>`<td class="nw">${fmtD(t.due_date)}<div>${t.received_date?'<span class="chip green">received</span>':when(t.due_date)}</div></td><td class="n">${money(t.amount,t.currency)}</td><td class="n">${t.received_amount!=null?money(t.received_amount,t.currency):'–'}</td><td class="nw">${t.received_date?fmtD(t.received_date):'–'}</td><td class="sub">${esc(t.note||'')}</td>`)}
+      ${tr.length?`<div class="sub" style="margin-top:6px">Received ${money(recv,(tr[0]||{}).currency)} of ${money(exp,(tr[0]||{}).currency)} scheduled.</div>`:''}</div>
+    <div class="card s12"><h3><span style="color:var(--text);font-size:14.5px;font-weight:700"><i class="secn">4</i>Reporting and deliverables</span></h3>
+      ${sub('Reports','report',rp,['Report','Due','Submitted','Note'],r=>`<td><b>${esc(r.kind)}</b>${r.title?`<div class="sub">${esc(r.title)}</div>`:''}</td><td class="nw">${fmtD(r.due_date)}<div>${r.submitted_date?'<span class="chip green">submitted</span>':when(r.due_date)}</div></td><td class="nw">${r.submitted_date?fmtD(r.submitted_date):'–'}</td><td class="sub">${esc(r.note||'')}</td>`)}
+      ${sub('Milestones and deliverables','milestone',ms,['Milestone','Due','Done','Note'],m=>`<td><b>${esc(m.title)}</b></td><td class="nw">${fmtD(m.due_date)}<div>${m.done_date?'<span class="chip green">done</span>':when(m.due_date)}</div></td><td class="nw">${m.done_date?fmtD(m.done_date):'–'}</td><td class="sub">${esc(m.note||'')}</td>`)}
+      <dl class="dl" style="margin-top:14px">${dlRow('Documents',link(g.doc_link))}${dlRow('Outcome and funder feedback',esc(g.lessons))}${dlRow('Re-submission strategy',esc(g.strategy))}
+        ${dlRow('Relationship notes',esc(g.relationship_notes))}${dlRow('Notes',esc(g.note))}</dl></div>
+  </div>
+  <p class="sub">Created ${g.created_at?fmtD(g.created_at):'–'}${g.updated_at?' · last changed '+fmtD(g.updated_at)+(g.updated_by?' by '+esc(g.updated_by):''):''}</p>`;
+  loadBudget(g);
+}
+async function loadBudget(g){
+  const box = document.getElementById('budgetBox'); if(!box) return;
+  if(!g.tracker_project){ box.innerHTML = `<b style="font-size:13px">Budget against spending</b><div class="sub" style="margin-top:6px">${S.canEdit?'Link this grant to its Expense Tracker project (Edit record → Award and finance) to see budget and spending here.':'Not linked to an Expense Tracker project.'}</div>`; return; }
+  try{
+    let rows=[], from=0; for(;;){ const {data,error} = await db.from('fin_expenses').select('amount,expense_type,category').eq('project_name',g.tracker_project).range(from,from+999); if(error) throw error; rows=rows.concat(data||[]); if(!data||data.length<1000) break; from+=1000; }
+    const [{data:p},{data:bl}] = await Promise.all([db.from('fin_projects').select('*').eq('project_name',g.tracker_project), db.from('fin_budget_lines').select('*').eq('project_name',g.tracker_project).order('category_key')]);
+    const pr = (p||[])[0];
+    if(!pr && !rows.length){ box.innerHTML = `<b style="font-size:13px">Budget against spending · ${esc(g.tracker_project)}</b><div class="sub" style="margin-top:6px">No figures visible. Spending is shown to people with Expense Tracker access.</div>`; return; }
+    const dir = rows.filter(r=>r.expense_type==='Direct').reduce((s,r)=>s+(+r.amount||0),0)+(+(pr&&pr.opening_spend)||0);
+    const idc = rows.filter(r=>r.expense_type==='IDC').reduce((s,r)=>s+(+r.amount||0),0), bud = +(pr&&pr.direct_budget)||0;
+    const byCat = {}; rows.filter(r=>r.expense_type==='Direct').forEach(r=>{const k=r.category||'None'; byCat[k]=(byCat[k]||0)+(+r.amount||0);});
+    box.innerHTML = `<b style="font-size:13px">Budget against spending · ${esc(g.tracker_project)}</b><span class="sub"> (from the Expense Tracker)</span>
+      <dl class="dl" style="margin-top:8px">${dlRow('Direct budget',bud?money(bud,'NGN'):'')}${dlRow('Direct spent',money(dir,'NGN')+(bud?` · ${Math.round(dir/bud*100)}%`:''))}${dlRow('IDC booked',money(idc,'NGN'))}${dlRow('Cash received',pr&&pr.cash_received?money(pr.cash_received,'NGN'):'')}</dl>
+      ${bud?`<div class="bar"><span style="width:${Math.min(100,dir/bud*100)}%;background:${dir>bud?'var(--danger)':'var(--accent)'}"></span></div>`:''}
+      ${(bl||[]).length?`<div class="tw" style="margin-top:10px;max-height:220px"><table><thead><tr><th>Line</th><th class="n">Budget</th><th class="n">Spent</th><th class="n">Used</th></tr></thead><tbody>${bl.map(b=>{const s=byCat[b.category_key]||0,u=b.budget?s/b.budget:0;
+        return `<tr><td>${esc(b.category_key)} <span class="sub">${esc((b.category_name||'').split(/[:(]/)[0])}</span></td><td class="n">${money(b.budget,'NGN')}</td><td class="n">${money(s,'NGN')}</td><td class="n"><span class="chip ${u>1?'red':u>.9?'amber':'green'}">${Math.round(u*100)}%</span></td></tr>`}).join('')}</tbody></table></div>`:''}`;
+  }catch(e){ box.innerHTML = `<b style="font-size:13px">Budget against spending</b><div class="sub" style="margin-top:6px">Could not read the Expense Tracker: ${esc(e.message)}</div>`; }
 }
 
-// ═══════════════════════════════════════════════════════
-// ROUTING
-// ═══════════════════════════════════════════════════════
-function showTab(tab) {
-    STATE.tab = tab;
-    document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-    const main = document.getElementById('mainContent');
-    switch (tab) {
-        case 'dashboard':    renderDashboard(main);    break;
-        case 'pipeline':     renderPipeline(main);     break;
-        case 'active':       renderActive(main);       break;
-        case 'unsuccessful': renderUnsuccessful(main); break;
-        case 'receivables':  renderReceivables(main);  break;
-        case 'audit':        renderAudit(main);        break;
-    }
+// ═════════ RECEIVABLES & CHANGE LOG ═════════
+function renderReceivables(el){
+  const d = S.data.receivables, open = d.filter(r=>r.status!=='Paid');
+  el.innerHTML = head('Receivables', d.length+' item'+(d.length===1?'':'s')+' · all years', S.canEdit?'<button class="btn pri" onclick="editRcv(null)">+ Add receivable</button>':'') +
+    (d.length ? `<div class="tw"><table><thead><tr><th>Grant / funder</th><th class="n">USD</th><th class="n">NGN</th><th>Due</th><th>Status</th><th>Priority</th><th>Action required</th><th>Owner</th><th>Target</th>${S.canEdit?'<th></th>':''}</tr></thead><tbody>
+      ${d.map(r=>`<tr style="${r.priority==='CRITICAL'&&r.status!=='Paid'?'background:#FDF3F1':''}"><td><b>${esc(r.grant_name)}</b><div class="sub">${esc(r.funder||'')}</div></td><td class="n">${r.amount_usd?money(r.amount_usd):'–'}</td><td class="n">${r.amount_ngn?money(r.amount_ngn,'NGN'):'–'}</td>
+        <td class="nw">${esc(r.due||'')}</td><td>${badge(r.status)}</td><td><b style="color:${r.priority==='CRITICAL'?'var(--danger)':'var(--warn)'}">${esc(r.priority||'')}</b></td><td style="max-width:240px">${esc(r.action||'')}</td><td class="nw">${esc(r.owner||'')}</td><td class="nw">${esc(r.target||'')}</td>
+        ${S.canEdit?`<td class="nw"><button class="btn sm" onclick="editRcv(${r.id})">Edit</button> <button class="btn sm danger" onclick="delRow('receivables',${r.id})">✕</button></td>`:''}</tr>`).join('')}</tbody>
+      <tfoot><tr><td>Open</td><td class="n">${money(open.reduce((s,r)=>s+(+r.amount_usd||0),0))}</td><td class="n">${money(open.reduce((s,r)=>s+(+r.amount_ngn||0),0),'NGN')}</td><td colspan="${S.canEdit?7:6}"></td></tr></tfoot></table></div>`
+      : '<div class="card"><div class="empty">No receivables recorded.</div></div>');
+}
+function renderAudit(el){
+  const nameOf = (a) => (a.after_data||a.before_data||{}).project || '';
+  const describe = a => {
+    if(a.action==='insert') return 'Created “'+esc(nameOf(a))+'”';
+    if(a.action==='delete') return 'Deleted “'+esc(nameOf(a))+'”';
+    const b=a.before_data||{}, n=a.after_data||{};
+    const ch = Object.keys(n).filter(k=>!['updated_at','updated_by','stage'].includes(k) && JSON.stringify(b[k])!==JSON.stringify(n[k]));
+    if(!ch.length) return 'Saved “'+esc(n.project)+'” with no changes';
+    const v = (k,x) => x==null||x==='' ? '(blank)' : k==='status' ? lab(x) : String(x).length>60 ? String(x).slice(0,60)+'…' : x;
+    return 'Updated “'+esc(n.project)+'”: '+ch.map(k=>'<b>'+esc(k.replace(/_/g,' '))+'</b> '+esc(v(k,b[k]))+' → '+esc(v(k,n[k]))).join('; ');
+  };
+  el.innerHTML = head('Change log','Last '+S.data.audit.length+' changes to the grants register, newest first') +
+    (S.data.audit.length ? `<div class="tw"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead><tbody>${S.data.audit.map(a=>`<tr><td class="nw">${esc(new Date(a.changed_at).toLocaleString('en-GB'))}</td><td class="nw">${esc(a.actor||'–')}</td>
+      <td><span class="chip ${a.action==='delete'?'red':a.action==='insert'?'green':''}">${esc(a.action)}</span></td><td>${describe(a)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card"><div class="empty">No changes recorded yet.</div></div>');
 }
 
-function showAccessDenied(reason) {
-    document.getElementById('userName').textContent = 'Not signed in';
-    const badge = document.getElementById('userRoleBadge');
-    badge.textContent = 'No Access';
-    badge.className = 'role-badge role-viewer';
-    const main = document.getElementById('mainContent');
-    main.innerHTML = reason === 'no-session' ? `
-        <div class="access-denied">
-            <div class="icon">🔐</div><h2>Please sign in first</h2>
-            <p>You need to log in through the FMS portal to access this tracker.</p><br>
-            <a href="index.html" style="background:var(--dark);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;">Go to Portal</a>
-        </div>` : `
-        <div class="access-denied">
-            <div class="icon">🚫</div><h2>Access Restricted</h2>
-            <p>The Project Tracker is only available to authorised staff.</p>
-            <p style="margin-top:8px;">Please contact the Executive Director if you need access.</p><br>
-            <a href="index.html" style="background:var(--dark);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;">← Back to Portal</a>
-        </div>`;
+// ═════════ FORMS ═════════
+function modal(title, body){ document.getElementById('modalHost').innerHTML = `<div class="modal" onclick="if(event.target===this)closeModal()"><div><div class="mh"><b>${title}</b><button onclick="closeModal()" aria-label="Close">×</button></div><div class="mb">${body}</div></div></div>`; }
+function closeModal(){ document.getElementById('modalHost').innerHTML=''; }
+const F = {
+  i:(n,l,v,t,x,w)=>`<label class="${w?'w':''}">${l}<input name="${n}" type="${t||'text'}" value="${esc(v)}" ${x||''}></label>`,
+  s:(n,l,v,opts,x,w)=>`<label class="${w?'w':''}">${l}<select name="${n}" ${x||''}>${opts.map(o=>{const [val,txt]=Array.isArray(o)?o:[o,o];return `<option value="${esc(val)}" ${String(val)===String(v??'')?'selected':''}>${esc(txt)}</option>`}).join('')}</select></label>`,
+  t:(n,l,v,x)=>`<label class="w">${l}<textarea name="${n}" ${x||''}>${esc(v)}</textarea></label>`,
+  h:t=>`<div class="fh">${t}</div>` };
+function editGrant(id, preset){
+  const g = id ? S.data.grants.find(x=>x.id===id) : { status:preset||'Prospect / Research', year: S.year==='all'?new Date().getFullYear():S.year, currency:'USD' };
+  const up = S.upgraded, st = g.status || 'Not Submitted';
+  const statusOpts = STATUS_OPTS.slice(); if(!statusOpts.some(o=>o[0]===st)) statusOpts.unshift([st,st]);
+  const fin = [['','Not linked']].concat(S.data.finProjects.map(p=>[p.project_name,p.project_name])); if(g.tracker_project && !fin.some(o=>o[0]===g.tracker_project)) fin.push([g.tracker_project,g.tracker_project]);
+  modal(id?'Edit record':'Add record', `<form class="form" id="gForm">
+    ${F.h('Identification')}${F.t('project','Project title',g.project,'required')}${F.i('funder','Funder',g.funder,'text','required')}
+    ${F.s('year','Year',g.year,yearsAll().concat(yearsAll().includes(+g.year)?[]:[+g.year]).filter(Boolean))}${F.s('status','Stage / status',st,statusOpts,'onchange="secs(this.value)"')}
+    ${up?F.i('grant_code','Grant code (unique)',g.grant_code,'text','placeholder="e.g. RAH-2026-GEPP"'):''}${F.i('thematic','Theme',g.thematic)}${F.i('geo','Geography',g.geo)}
+    ${up?F.h('1 · Funder and prospect')+F.s('funder_type','Funder type',g.funder_type,[['','–']].concat(FUNDER_TYPES))+F.i('funder_website','Website / guidelines link',g.funder_website,'url','placeholder="https://"')
+      +F.i('contact_name','Programme officer',g.contact_name)+F.i('contact_email','Officer email',g.contact_email,'email')+F.i('contact_phone','Officer phone',g.contact_phone,'tel')
+      +F.t('focus_areas','Focus areas',g.focus_areas)+F.t('eligibility','Eligibility (do we match?)',g.eligibility):''}
+    ${F.h('2 · Application')}${F.i('amount','Requested amount',g.amount,'number','step="any"')}${F.s('currency','Currency',g.currency||'USD',['USD','EUR','GBP','NGN'])}
+    ${F.i('prob','Probability (0–1)',g.prob,'number','step="0.05" min="0" max="1"')}${up?F.i('loi_due','LOI due',g.loi_due,'date'):F.i('deadline','Deadline',g.deadline)}
+    ${up?F.i('submission_date','Submission deadline (date)',g.submission_date,'date')+F.i('submission_time','Time',g.submission_time,'time')
+      +F.s('submission_tz','Time zone',g.submission_tz||'WAT (UTC+1)',['WAT (UTC+1)','GMT / UTC','CET / CEST (Europe)','EST / EDT (US East)','PST / PDT (US West)','EAT (UTC+3)','SAST (UTC+2)','Other (see notes)'])
+      +F.i('decision_expected','Decision expected',g.decision_expected,'date')+F.i('deadline','Deadline / quarter (old free text)',g.deadline):''}
+    <div class="w" id="secAward" style="display:contents">${F.h('3 · Award and finance')}
+      ${up?F.i('awarded_amount','Awarded amount',g.awarded_amount,'number','step="any"')+F.s('award_currency','Award currency',g.award_currency||g.currency||'USD',['USD','EUR','GBP','NGN'])
+        +F.i('start_date','Grant start',g.start_date,'date')+F.i('end_date','Grant end',g.end_date,'date'):''}
+      ${F.i('period','Grant period (text)',g.period)}${F.i('total_usd','Total grant (USD)',g.total_usd,'number','step="any"')}${F.i('total_ngn','Total grant (NGN)',g.total_ngn,'number','step="any"')}
+      ${F.i('received_usd','Received (USD)',g.received_usd,'number','step="any"')}${F.i('outstanding_usd','Outstanding (USD)',g.outstanding_usd,'number','step="any"')}${F.i('outstanding_ngn','Outstanding (NGN)',g.outstanding_ngn,'number','step="any"')}
+      ${up?F.s('tracker_project','Expense Tracker project',g.tracker_project||'',fin)+F.t('restrictions','Restrictions and compliance (e.g. indirect cost cap, equipment ban)',g.restrictions):''}</div>
+    ${F.h('4 · Reporting, outcome and documents')}${up?F.i('doc_link','Document folder link',g.doc_link,'url','placeholder="https:// (proposal, contract, award letter)"',1):''}
+    ${F.i('amount_eur','Amount (€/yr, old field)',g.amount_eur,'number','step="any"')}${F.i('years','Project years',g.years)}
+    ${F.t('lessons','Outcome and funder feedback / lessons learned',g.lessons)}${F.t('strategy','Re-submission strategy',g.strategy)}
+    ${up?F.t('relationship_notes','Relationship notes',g.relationship_notes):''}${F.t('note','Notes',g.note)}
+    <div class="w sub">Status decides where the record appears: Awarded or Active → Active grants; Not Awarded → Unsuccessful; Closed → shown under Active as closed. Reports, tranches and milestones are added on the grant's own page after saving.</div>
+    <div class="w fa"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>`);
+  const f = document.getElementById('gForm');
+  f.onsubmit = e => { e.preventDefault(); saveGrant(f, id); };
+}
+function secs(){}
+async function saveGrant(f, id){
+  const fd = new FormData(f), num = k => { if(!fd.has(k)) return undefined; const v=parseFloat(fd.get(k)); return isNaN(v)?null:v; }, txt = k => { if(!fd.has(k)) return undefined; const v=String(fd.get(k)).trim(); return v===''?null:v; };
+  const row = { year:parseInt(fd.get('year'),10), status:fd.get('status'), project:txt('project'), funder:txt('funder') };
+  ['thematic','geo','note','deadline','period','years','lessons','strategy','currency','grant_code','funder_type','funder_website','contact_name','contact_email','contact_phone','focus_areas','eligibility',
+   'loi_due','submission_date','submission_time','submission_tz','decision_expected','award_currency','start_date','end_date','restrictions','doc_link','relationship_notes','tracker_project'].forEach(k=>{const v=txt(k); if(v!==undefined) row[k]=v;});
+  ['amount','prob','total_usd','total_ngn','received_usd','outstanding_usd','outstanding_ngn','amount_eur','awarded_amount'].forEach(k=>{const v=num(k); if(v!==undefined) row[k]=v;});
+  if(row.prob!=null && (row.prob<0||row.prob>1)) return alert('Probability must be between 0 and 1 (e.g. 0.4 for 40%).');
+  if(row.start_date && row.end_date && row.end_date < row.start_date) return alert('The grant end date is before the start date.');
+  row.updated_by = (S.user && (S.user.email||S.user.name)) || 'unknown';
+  if(!id) row.created_by = row.updated_by;
+  const btn = f.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Saving…';
+  const res = id ? await db.from('grants_register').update(row).eq('id',id).select() : await db.from('grants_register').insert([row]).select();
+  if(res.error){ btn.disabled=false; btn.textContent='Save'; return alert('Not saved: '+(/grants_register_code_uq|duplicate/.test(res.error.message)?'that grant code is already used by another record.':res.error.message)); }
+  closeModal(); toast('Saved');
+  const saved = (res.data||[])[0];
+  if(saved && +saved.year !== +S.year && S.year!=='all') S.year = +saved.year;
+  await load(); if(saved){ S.grantId = saved.id; } render();
+}
+async function delGrant(id){
+  const g = S.data.grants.find(x=>x.id===id);
+  if(!confirm('Delete "'+(g&&g.project)+'"?\n\nIts tranches, reports and milestones are deleted with it. The record itself stays in the Change log.')) return;
+  const { error } = await db.from('grants_register').delete().eq('id',id); if(error) return alert('Not deleted: '+error.message);
+  S.grantId=null; toast('Deleted'); await reload();
+}
+async function delRow(t,id){ if(!confirm('Delete this entry?')) return; const { error } = await db.from(t).delete().eq('id',id); if(error) return alert('Not deleted: '+error.message); toast('Deleted'); await reload(); }
+const CHILD = {
+  tranche:{ t:'grant_tranches', title:'payment tranche', list:'tranches', form:x=>F.i('due_date','Expected date',x.due_date,'date','required')+F.i('amount','Expected amount',x.amount,'number','step="any" required')
+     +F.s('currency','Currency',x.currency||'USD',['USD','EUR','GBP','NGN'])+F.i('received_date','Received on',x.received_date,'date')+F.i('received_amount','Amount received',x.received_amount,'number','step="any"')+F.t('note','Note (milestone it depends on, conditions…)',x.note) },
+  report:{ t:'grant_reports', title:'report', list:'reports', form:x=>F.s('kind','Type',x.kind||'Interim narrative',REPORT_KINDS)+F.i('title','Title (optional)',x.title)+F.i('due_date','Due date',x.due_date,'date','required')
+     +F.i('submitted_date','Submitted on',x.submitted_date,'date')+F.t('note','Note',x.note) },
+  milestone:{ t:'grant_milestones', title:'milestone', list:'milestones', form:x=>F.i('title','Milestone or deliverable',x.title,'text','required',1)+F.i('due_date','Due date',x.due_date,'date')
+     +F.i('done_date','Done on',x.done_date,'date')+F.t('note','Note',x.note) } };
+function editChild(kind, id, grantId){
+  const c = CHILD[kind], x = id ? S.data[c.list].find(r=>r.id===id) : {};
+  modal((id?'Edit ':'Add ')+c.title, `<form class="form" id="cForm">${c.form(x)}<div class="w fa">${id?`<button type="button" class="btn danger" style="margin-right:auto" id="cDel">Delete</button>`:''}<button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>`);
+  const f = document.getElementById('cForm');
+  f.onsubmit = async e => { e.preventDefault(); const fd=new FormData(f), row={ grant_id:grantId };
+    for(const [k,v] of fd.entries()){ const s=String(v).trim(); row[k] = s==='' ? null : ['amount','received_amount'].includes(k) ? parseFloat(s) : s; }
+    const res = id ? await db.from(c.t).update(row).eq('id',id) : await db.from(c.t).insert([row]);
+    if(res.error) return alert('Not saved: '+res.error.message); closeModal(); toast('Saved'); await reload(); };
+  if(id) document.getElementById('cDel').onclick = async () => { if(!confirm('Delete this '+c.title+'?')) return; const { error } = await db.from(c.t).delete().eq('id',id); if(error) return alert('Not deleted: '+error.message); closeModal(); toast('Deleted'); await reload(); };
+}
+function editRcv(id){
+  const r = id ? S.data.receivables.find(x=>x.id===id) : {};
+  modal(id?'Edit receivable':'Add receivable', `<form class="form" id="rForm">${F.i('grant_name','Grant',r.grant_name,'text','required')}${F.i('funder','Funder',r.funder)}
+    ${F.i('amount_usd','Amount (USD)',r.amount_usd,'number','step="any"')}${F.i('amount_ngn','Amount (NGN)',r.amount_ngn,'number','step="any"')}${F.i('due','Due',r.due)}
+    ${F.s('status','Status',r.status||'Overdue / Pending',RCV_STATUSES)}${F.s('priority','Priority',r.priority||'HIGH',['CRITICAL','HIGH','MEDIUM','LOW'])}${F.i('owner','Action owner',r.owner)}${F.i('target','Target date',r.target)}
+    ${F.t('action','Action required',r.action)}<div class="w fa"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn pri" type="submit">Save</button></div></form>`);
+  const f = document.getElementById('rForm');
+  f.onsubmit = async e => { e.preventDefault(); const fd=new FormData(f), n=k=>{const v=parseFloat(fd.get(k));return isNaN(v)?null:v};
+    const row = { grant_name:fd.get('grant_name'), funder:fd.get('funder'), amount_usd:n('amount_usd'), amount_ngn:n('amount_ngn'), due:fd.get('due'), status:fd.get('status'), priority:fd.get('priority'), owner:fd.get('owner'), target:fd.get('target'), action:fd.get('action') };
+    const res = id ? await db.from('receivables').update(row).eq('id',id) : await db.from('receivables').insert([row]);
+    if(res.error) return alert('Not saved: '+res.error.message); closeModal(); toast('Saved'); await reload(); };
 }
 
-// ═══════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════
-const fmtUSD = n => n != null ? '$' + Number(n).toLocaleString('en-NG', {minimumFractionDigits:2, maximumFractionDigits:2}) : '–';
-const fmtNGN = n => n != null ? '₦' + Number(n).toLocaleString('en-NG', {minimumFractionDigits:2, maximumFractionDigits:2}) : '–';
-const pct    = n => (n != null ? (n * 100).toFixed(0) + '%' : '–');
-const symOf  = c => c === 'EUR' ? '€' : c === 'NGN' ? '₦' : c === 'GBP' ? '£' : '$';
-const esc    = s => (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-const STATUS_META = {
-    'Awarded':            { bg: '#D4EDDA', fg: '#155724' },
-    'Active':             { bg: '#D4EDDA', fg: '#1E4D2B' },
-    'Awaiting Outcome':   { bg: '#FFF3CD', fg: '#856404' },
-    'Not Awarded':        { bg: '#F8D7DA', fg: '#721C24' },
-    'Not Submitted':      { bg: '#E8F4F8', fg: '#0C5460' },
-    'Submitted':          { bg: '#E8F0FE', fg: '#1a3c8f' },
-    'Closed':             { bg: '#E2E3E5', fg: '#383D41' },
-    'On Hold':            { bg: '#E2E3E5', fg: '#555555' },
-    'Overdue / Pending':  { bg: '#FFF3CD', fg: '#856404' },
-    'Overdue / CRITICAL': { bg: '#F8D7DA', fg: '#8B1A1A' },
-};
-
-function badge(status) {
-    const m = STATUS_META[status] || { bg: '#eee', fg: '#333' };
-    return `<span class="badge" style="background:${m.bg};color:${m.fg}">${esc(status)}</span>`;
-}
-const editBtn = oc => STATE.canEdit ? `<button class="btn-edit" onclick="${oc}">✏</button>` : '';
-const delBtn  = oc => STATE.canEdit ? `<button class="btn-del" onclick="${oc}">✕</button>` : '';
-const addBtn  = (l, oc) => STATE.canEdit ? `<button class="btn-add" onclick="${oc}">${l}</button>` : '';
-
-// Status drives stage. Mirrors the database trigger exactly.
-const STAGE_OF = s => s === 'Awarded' || s === 'Active' ? 'active'
-                    : s === 'Not Awarded' ? 'unsuccessful'
-                    : s === 'Closed' ? 'closed'
-                    : 'pipeline';
-
-const ALL_STATUSES   = ['Not Submitted','Submitted','Awaiting Outcome','On Hold','Awarded','Active','Not Awarded','Closed'];
-const RCVBL_STATUSES = ['Overdue / Pending','Overdue / CRITICAL','Paid','Partially Paid'];
-
-const emptyBlock = msg =>
-    `<div style="padding:48px 24px;text-align:center;color:var(--text-muted);background:white;border-radius:12px;border:1px solid var(--border)">${esc(msg)}</div>`;
-
-// ═══════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════
-function renderDashboard(el) {
-    const y    = STATE.year;
-    const pipe = byStage('pipeline');
-    const act  = byStage('active');
-    const uns  = byStage('unsuccessful');
-    const rcv  = STATE.data.receivables;
-
-    const pipeTotal    = pipe.reduce((s, p) => s + (p.amount || 0), 0);
-    const pipeWeighted = pipe.reduce((s, p) => s + (p.amount || 0) * (p.prob || 0), 0);
-    const actUsd       = act.reduce((s, g) => s + (g.total_usd || 0), 0);
-    const actNgn       = act.reduce((s, g) => s + (g.total_ngn || 0), 0);
-    const outUsd       = rcv.reduce((s, r) => s + (r.amount_usd || 0), 0);
-    const outNgn       = rcv.reduce((s, r) => s + (r.amount_ngn || 0), 0);
-    const hasCritical  = rcv.some(r => r.priority === 'CRITICAL');
-
-    // Awarded but not yet costed — the records that need attention after a win
-    const incomplete = act.filter(g => !g.total_usd && !g.total_ngn);
-
-    const statusChips = arr => {
-        const counts = {};
-        arr.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
-        return Object.entries(counts).map(([st, n]) => {
-            const m = STATUS_META[st] || { bg: '#eee', fg: '#333' };
-            return `<span class="chip" style="background:${m.bg};color:${m.fg}">${esc(st)}: ${n}</span>`;
-        }).join('');
-    };
-
-    let html = '';
-
-    if (hasCritical) {
-        const crit = rcv.filter(r => r.priority === 'CRITICAL');
-        html += `
-        <div class="alert-banner critical">
-            <span style="font-size:20px">⚠️</span>
-            <div>
-                <div>CRITICAL: Outstanding Receivables Require Immediate Action</div>
-                <div style="font-weight:400;margin-top:2px">${crit.length} critical item${crit.length === 1 ? '' : 's'} · See Receivables tab</div>
-            </div>
-        </div>`;
-    }
-
-    if (incomplete.length) {
-        html += `
-        <div class="alert-banner" style="background:#FFF3CD;color:#856404;border-left:4px solid #856404">
-            <span style="font-size:20px">📝</span>
-            <div>
-                <div>${incomplete.length} awarded grant${incomplete.length === 1 ? '' : 's'} still without budget figures</div>
-                <div style="font-weight:400;margin-top:2px">${incomplete.map(g => esc(g.project)).join(' · ')}</div>
-            </div>
-        </div>`;
-    }
-
-    html += `
-        <div class="section-title">${y} Overview</div>
-        <div class="metrics-grid">
-            <div class="metric-card green"><div class="label">Pipeline Projects</div><div class="value">${pipe.length}</div></div>
-            <div class="metric-card mid"><div class="label">Pipeline Value</div><div class="value">${fmtUSD(pipeTotal)}</div></div>
-            <div class="metric-card mid"><div class="label">Weighted Value</div><div class="value">${fmtUSD(Math.round(pipeWeighted))}</div></div>
-            <div class="metric-card green"><div class="label">Active Grants</div><div class="value">${act.length}</div></div>
-            <div class="metric-card green"><div class="label">Active Budget (USD)</div><div class="value">${fmtUSD(actUsd)}</div></div>
-            <div class="metric-card green"><div class="label">Active Budget (NGN)</div><div class="value">₦${Math.round(actNgn / 1000000)}M</div></div>
-            <div class="metric-card red"><div class="label">⚠ Overdue (USD)</div><div class="value">${fmtUSD(outUsd)}</div></div>
-            <div class="metric-card red"><div class="label">⚠ Overdue (NGN)</div><div class="value">${fmtNGN(outNgn)}</div></div>
-        </div>
-
-        <div style="margin-bottom:16px">${statusChips(yearGrants())}</div>
-
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
-            <div style="flex:1;min-width:200px;background:#f0faf4;border-radius:8px;padding:12px 16px;font-size:13px">
-                <strong style="color:var(--dark)">${y} Weighted Pipeline:</strong> ~${fmtUSD(Math.round(pipeWeighted))}
-            </div>
-            <div style="flex:1;min-width:200px;background:#fdf2f2;border-radius:8px;padding:12px 16px;font-size:13px">
-                <strong style="color:#721C24">${y} Unsuccessful:</strong> ${uns.length} application${uns.length === 1 ? '' : 's'}
-            </div>
-        </div>
-
-        <div style="padding:20px 24px;background:white;border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-            <div>
-                <div style="font-weight:700;font-size:14px;color:var(--dark)">⬇ Export Full Tracker Report</div>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Colour-coded Excel workbook — one sheet per year, plus receivables</div>
-            </div>
-            <button onclick="exportToExcel()" style="background:linear-gradient(135deg,#1E4D2B,#2E7D47);color:white;border:none;border-radius:8px;padding:12px 24px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
-                Download Excel Report
-            </button>
-        </div>`;
-
-    el.innerHTML = html;
-}
-
-// ═══════════════════════════════════════════════════════
-// PIPELINE
-// ═══════════════════════════════════════════════════════
-function renderPipeline(el) {
-    const data     = byStage('pipeline');
-    const total    = data.reduce((s, p) => s + (p.amount || 0), 0);
-    const weighted = data.reduce((s, p) => s + (p.amount || 0) * (p.prob || 0), 0);
-
-    el.innerHTML = `
-        <div class="page-header">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div><h2>${STATE.year} Pipeline</h2><p>${data.length} project${data.length === 1 ? '' : 's'} · set status to Awarded or Not Awarded to move a record</p></div>
-                ${addBtn('+ Add Project', 'openGrantModal(null)')}
-            </div>
-        </div>` + (data.length === 0 ? emptyBlock('No pipeline entries for ' + STATE.year + ' yet.') : `
-        <div class="table-wrap">
-            <table>
-                <thead><tr>
-                    <th>#</th><th>Project</th><th>Thematic</th><th>Geography</th>
-                    <th>Funder</th><th>Amount</th><th>Prob</th><th>Weighted</th>
-                    <th>Deadline</th><th>Status</th><th>Notes</th>
-                    ${STATE.canEdit ? '<th></th>' : ''}
-                </tr></thead>
-                <tbody>
-                    ${data.map((p, i) => {
-                        const s = symOf(p.currency);
-                        return `<tr>
-                            <td><strong style="color:var(--dark)">${i + 1}</strong></td>
-                            <td class="td-project">${esc(p.project)}</td>
-                            <td style="white-space:nowrap;font-size:11px">${esc(p.thematic)}</td>
-                            <td style="white-space:nowrap">${esc(p.geo)}</td>
-                            <td>${esc(p.funder)}</td>
-                            <td style="white-space:nowrap;font-weight:600">${s}${Number(p.amount || 0).toLocaleString()}</td>
-                            <td style="text-align:center">${pct(p.prob)}</td>
-                            <td style="white-space:nowrap;font-weight:700">${s}${Math.round((p.amount || 0) * (p.prob || 0)).toLocaleString()}</td>
-                            <td style="white-space:nowrap">${esc(p.deadline)}</td>
-                            <td>${badge(p.status)}</td>
-                            <td class="td-note">${esc(p.note)}</td>
-                            ${STATE.canEdit ? `<td style="white-space:nowrap">
-                                ${editBtn('openGrantModal(' + p.id + ')')}
-                                ${delBtn('deleteRow(\'grants_register\', ' + p.id + ')')}
-                            </td>` : ''}
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-                <tfoot><tr>
-                    <td colspan="5">TOTAL</td>
-                    <td>$${total.toLocaleString()}</td>
-                    <td></td>
-                    <td>$${Math.round(weighted).toLocaleString()}</td>
-                    <td colspan="${STATE.canEdit ? 4 : 3}"></td>
-                </tr></tfoot>
-            </table>
-        </div>`);
-}
-
-// ═══════════════════════════════════════════════════════
-// ACTIVE GRANTS
-// ═══════════════════════════════════════════════════════
-function renderActive(el) {
-    const live   = byStage('active');
-    const closed = byStage('closed');
-    const data   = live.concat(closed);
-    // Portfolio share is computed on live grants only — closed grants are
-    // shown for completeness but would distort the current-year percentages.
-    const totalNgn = live.reduce((s, g) => s + (g.total_ngn || 0), 0);
-
-    el.innerHTML = `
-        <div class="page-header">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div><h2>${STATE.year} Active Grants</h2><p>${live.length} active${closed.length ? ' · ' + closed.length + ' closed' : ''}</p></div>
-                ${addBtn('+ Add Active Grant', 'openGrantModal(null, \'Active\')')}
-            </div>
-        </div>` + (data.length === 0 ? emptyBlock('No active grants for ' + STATE.year + ' yet. Awarded pipeline entries appear here automatically.') : `
-        <div class="table-wrap">
-            <table>
-                <thead><tr>
-                    <th>Grant Name</th><th>Funder</th><th>Thematic</th><th>Period</th>
-                    <th>Total (USD)</th><th>Total (NGN)</th><th>% Portfolio</th>
-                    <th>Received (USD)</th><th>Outstanding (USD)</th><th>Outstanding (NGN)</th>
-                    <th>Status</th><th>Notes</th>
-                    ${STATE.canEdit ? '<th></th>' : ''}
-                </tr></thead>
-                <tbody>
-                    ${data.map(g => {
-                        const isClosed    = g.stage === 'closed';
-                        const needsBudget = !isClosed && !g.total_usd && !g.total_ngn;
-                        const rowStyle    = needsBudget ? ' style="background:#FFFBF0"'
-                                          : isClosed    ? ' style="opacity:.62"' : '';
-                        return `<tr${rowStyle}>
-                            <td><strong>${esc(g.project)}</strong>${needsBudget ? ' <span class="chip" style="background:#FFF3CD;color:#856404">needs budget</span>' : ''}</td>
-                            <td>${esc(g.funder)}</td>
-                            <td style="font-size:11px">${esc(g.thematic)}</td>
-                            <td style="white-space:nowrap">${esc(g.period)}</td>
-                            <td style="white-space:nowrap">${g.total_usd ? fmtUSD(g.total_usd) : '–'}</td>
-                            <td style="white-space:nowrap">${g.total_ngn ? fmtNGN(g.total_ngn) : '–'}</td>
-                            <td style="text-align:center">${totalNgn > 0 && g.total_ngn ? ((g.total_ngn / totalNgn) * 100).toFixed(1) + '%' : '–'}</td>
-                            <td style="white-space:nowrap">${g.received_usd ? fmtUSD(g.received_usd) : '–'}</td>
-                            <td class="${g.outstanding_usd ? 'td-warn' : ''}" style="white-space:nowrap">${g.outstanding_usd ? fmtUSD(g.outstanding_usd) : '–'}</td>
-                            <td class="${g.outstanding_ngn ? 'td-warn' : ''}" style="white-space:nowrap">${g.outstanding_ngn ? fmtNGN(g.outstanding_ngn) : '–'}</td>
-                            <td>${badge(g.status)}</td>
-                            <td class="td-note" style="${g.outstanding_usd || g.outstanding_ngn ? 'color:#721C24' : ''}">${esc(g.note)}</td>
-                            ${STATE.canEdit ? `<td style="white-space:nowrap">
-                                ${editBtn('openGrantModal(' + g.id + ')')}
-                                ${delBtn('deleteRow(\'grants_register\', ' + g.id + ')')}
-                            </td>` : ''}
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-                <tfoot><tr>
-                    <td colspan="5">GRAND TOTAL</td>
-                    <td>${fmtNGN(totalNgn)}</td>
-                    <td colspan="${STATE.canEdit ? 7 : 6}"></td>
-                </tr></tfoot>
-            </table>
-        </div>`);
-}
-
-// ═══════════════════════════════════════════════════════
-// UNSUCCESSFUL
-// ═══════════════════════════════════════════════════════
-function renderUnsuccessful(el) {
-    const data = byStage('unsuccessful');
-
-    el.innerHTML = `
-        <div class="page-header">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div><h2>${STATE.year} Unsuccessful Applications</h2><p>${data.length} entr${data.length === 1 ? 'y' : 'ies'} · capture lessons while they are fresh</p></div>
-                ${addBtn('+ Add Entry', 'openGrantModal(null, \'Not Awarded\')')}
-            </div>
-        </div>` + (data.length === 0 ? emptyBlock('No unsuccessful applications recorded for ' + STATE.year + '. Pipeline entries marked Not Awarded appear here automatically.') : `
-        <div class="table-wrap">
-            <table>
-                <thead><tr>
-                    <th>Project</th><th>Funder</th><th>Thematic</th><th>Geo</th>
-                    <th>Amount</th><th>Project Years</th><th>Status</th>
-                    <th>Lessons Learned</th><th>Re-submission Strategy</th>
-                    ${STATE.canEdit ? '<th></th>' : ''}
-                </tr></thead>
-                <tbody>
-                    ${data.map(a => {
-                        const amt = a.amount_eur ? '€' + Number(a.amount_eur).toLocaleString()
-                                  : a.amount ? symOf(a.currency) + Number(a.amount).toLocaleString() : '–';
-                        const noLessons = !a.lessons;
-                        return `<tr>
-                            <td class="td-project">${esc(a.project)}</td>
-                            <td>${esc(a.funder)}</td>
-                            <td style="font-size:11px">${esc(a.thematic)}</td>
-                            <td style="white-space:nowrap">${esc(a.geo)}</td>
-                            <td style="white-space:nowrap">${amt}</td>
-                            <td style="white-space:nowrap">${esc(a.years)}</td>
-                            <td>${badge(a.status)}</td>
-                            <td class="td-note"${noLessons ? ' style="color:#856404"' : ''}>${noLessons ? '⚠ not yet captured' : esc(a.lessons)}</td>
-                            <td class="td-note">${esc(a.strategy)}</td>
-                            ${STATE.canEdit ? `<td style="white-space:nowrap">
-                                ${editBtn('openGrantModal(' + a.id + ')')}
-                                ${delBtn('deleteRow(\'grants_register\', ' + a.id + ')')}
-                            </td>` : ''}
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-            </table>
-        </div>`);
-}
-
-// ═══════════════════════════════════════════════════════
-// RECEIVABLES
-// ═══════════════════════════════════════════════════════
-function renderReceivables(el) {
-    const data   = STATE.data.receivables;
-    const totUsd = data.reduce((s, r) => s + (r.amount_usd || 0), 0);
-    const totNgn = data.reduce((s, r) => s + (r.amount_ngn || 0), 0);
-
-    el.innerHTML = `
-        <div class="page-header">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <div><h2 style="color:#8B1A1A">⚠ Outstanding Receivables</h2><p>${data.length} item${data.length === 1 ? '' : 's'} · across all years</p></div>
-                ${addBtn('+ Add Receivable', 'openReceivableModal(null)')}
-            </div>
-        </div>` + (data.length === 0 ? emptyBlock('No outstanding receivables recorded.') : `
-        <div class="table-wrap">
-            <table>
-                <thead style="background:#8B1A1A"><tr>
-                    <th>Grant</th><th>Funder</th><th>USD</th><th>NGN</th>
-                    <th>Due</th><th>Status</th><th>Priority</th>
-                    <th>Action Required</th><th>Owner</th><th>Target Date</th>
-                    ${STATE.canEdit ? '<th></th>' : ''}
-                </tr></thead>
-                <tbody>
-                    ${data.map(r => {
-                        const rowClass = r.priority === 'CRITICAL' ? 'rcv-critical' : 'rcv-pending';
-                        const fg = r.priority === 'CRITICAL' ? '#721C24' : '#856404';
-                        return `<tr class="${rowClass}">
-                            <td><strong style="color:${fg}">${esc(r.grant_name)}</strong></td>
-                            <td>${esc(r.funder)}</td>
-                            <td style="white-space:nowrap;font-weight:700">${r.amount_usd ? fmtUSD(r.amount_usd) : '–'}</td>
-                            <td style="white-space:nowrap;font-weight:700">${r.amount_ngn ? fmtNGN(r.amount_ngn) : '–'}</td>
-                            <td style="white-space:nowrap">${esc(r.due)}</td>
-                            <td>${badge(r.status)}</td>
-                            <td style="font-weight:700;color:${fg}">${esc(r.priority)}</td>
-                            <td style="max-width:200px;line-height:1.4">${esc(r.action)}</td>
-                            <td style="white-space:nowrap">${esc(r.owner)}</td>
-                            <td style="white-space:nowrap;font-weight:600">${esc(r.target)}</td>
-                            ${STATE.canEdit ? `<td style="white-space:nowrap">
-                                ${editBtn('openReceivableModal(' + r.id + ')')}
-                                ${delBtn('deleteRow(\'receivables\', ' + r.id + ')')}
-                            </td>` : ''}
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-            </table>
-        </div>
-        <div style="background:var(--dark);border-radius:8px;padding:12px 20px;display:flex;gap:32px;flex-wrap:wrap;margin-top:12px">
-            <span style="color:white;font-size:13px;font-weight:700">Total Outstanding USD: ${fmtUSD(totUsd)}</span>
-            <span style="color:white;font-size:13px;font-weight:700">Total Outstanding NGN: ${fmtNGN(totNgn)}</span>
-        </div>`);
-}
-
-// ═══════════════════════════════════════════════════════
-// CHANGE LOG
-// ═══════════════════════════════════════════════════════
-function renderAudit(el) {
-    const data = STATE.data.audit;
-
-    const describe = a => {
-        if (a.action === 'insert') return 'Created “' + esc((a.after_data || {}).project) + '”';
-        if (a.action === 'delete') return 'Deleted “' + esc((a.before_data || {}).project) + '”';
-        const b = a.before_data || {}, n = a.after_data || {};
-        const changed = Object.keys(n).filter(k =>
-            !['updated_at','updated_by'].includes(k) && JSON.stringify(b[k]) !== JSON.stringify(n[k]));
-        if (!changed.length) return 'Saved “' + esc(n.project) + '” with no changes';
-        return 'Updated “' + esc(n.project) + '” — ' + changed.map(k =>
-            esc(k) + ': ' + esc(b[k] == null || b[k] === '' ? '(blank)' : b[k]) +
-            ' → ' + esc(n[k] == null || n[k] === '' ? '(blank)' : n[k])).join(', ');
-    };
-
-    el.innerHTML = `
-        <div class="page-header">
-            <div><h2>Change Log</h2><p>Last ${data.length} changes to the grants register, newest first</p></div>
-        </div>` + (data.length === 0 ? emptyBlock('No changes recorded yet.') : `
-        <div class="table-wrap">
-            <table>
-                <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
-                <tbody>
-                    ${data.map(a => `<tr>
-                        <td style="white-space:nowrap">${esc(new Date(a.changed_at).toLocaleString('en-GB'))}</td>
-                        <td style="white-space:nowrap">${esc(a.actor || '–')}</td>
-                        <td>${badge(a.action === 'insert' ? 'Submitted' : a.action === 'delete' ? 'Not Awarded' : 'Awaiting Outcome')}</td>
-                        <td class="td-note">${describe(a)}</td>
-                    </tr>`).join('')}
-                </tbody>
-            </table>
-        </div>`);
-}
-
-// ═══════════════════════════════════════════════════════
-// MODALS
-// ═══════════════════════════════════════════════════════
-function openModal(title, bodyHTML) {
-    document.getElementById('modalContainer').innerHTML = `
-        <div class="modal-backdrop" onclick="closeModalIfBackdrop(event)">
-            <div class="modal">
-                <div class="modal-header"><span>${title}</span><button onclick="closeModal()">×</button></div>
-                <div class="modal-body">${bodyHTML}</div>
-            </div>
-        </div>`;
-}
-function closeModal() { document.getElementById('modalContainer').innerHTML = ''; }
-function closeModalIfBackdrop(e) { if (e.target.classList.contains('modal-backdrop')) closeModal(); }
-
-const inp = (name, label, val, type, extra) =>
-    '<div class="form-group"><label>' + label + '</label><input name="' + name + '" type="' + (type||'text') + '" value="' + esc(val) + '" ' + (extra||'') + '></div>';
-const sel = (name, label, val, opts, extra) =>
-    '<div class="form-group"><label>' + label + '</label><select name="' + name + '" ' + (extra||'') + '>' + opts.map(o => '<option value="' + esc(o) + '"' + (String(o)===String(val)?' selected':'') + '>' + esc(o) + '</option>').join('') + '</select></div>';
-const ta  = (name, label, val, extra) =>
-    '<div class="form-group form-full"><label>' + label + '</label><textarea name="' + name + '" ' + (extra||'') + '>' + esc(val) + '</textarea></div>';
-const groupHead = t =>
-    '<div class="form-full" style="font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--dark);border-bottom:1px solid var(--border);padding-bottom:5px;margin:6px 0 2px">' + t + '</div>';
-
-// ── Unified grant modal ────────────────────────────────
-function openGrantModal(id, presetStatus) {
-    const item   = id ? STATE.data.grants.find(x => x.id === id) : null;
-    const status = (item && item.status) || presetStatus || 'Not Submitted';
-
-    const body = '<form class="form-grid" onsubmit="saveGrant(event,' + (id || 'null') + ')">'
-        + groupHead('Identification')
-        + ta('project','Project Title', item && item.project, 'required')
-        + inp('funder','Funder', item && item.funder, 'text', 'required')
-        + sel('year','Year', (item && item.year) || STATE.year, allYears())
-        + sel('status','Status', status, ALL_STATUSES, 'onchange="toggleGrantSections(this.value)"')
-        + inp('thematic','Thematic Area', item && item.thematic)
-        + inp('geo','Geography', item && item.geo)
-
-        + '<div class="form-full" id="secPipeline"><div class="form-grid" style="padding:0">'
-            + groupHead('Application')
-            + inp('amount','Requested Amount', item && item.amount, 'number', 'step="any"')
-            + sel('currency','Currency', (item && item.currency) || 'USD', ['USD','EUR','NGN','GBP'])
-            + inp('prob','Probability (0–1)', item && item.prob, 'number', 'step="0.05" min="0" max="1"')
-            + inp('deadline','Deadline / Quarter', item && item.deadline)
-        + '</div></div>'
-
-        + '<div class="form-full" id="secAward"><div class="form-grid" style="padding:0">'
-            + groupHead('Award Details')
-            + inp('period','Grant Period', item && item.period)
-            + inp('total_usd','Total Grant (USD)', item && item.total_usd, 'number', 'step="any"')
-            + inp('total_ngn','Total Grant (NGN)', item && item.total_ngn, 'number', 'step="any"')
-            + inp('received_usd','Amount Received (USD)', item && item.received_usd, 'number', 'step="any"')
-            + inp('outstanding_usd','Outstanding (USD)', item && item.outstanding_usd, 'number', 'step="any"')
-            + inp('outstanding_ngn','Outstanding (NGN)', item && item.outstanding_ngn, 'number', 'step="any"')
-        + '</div></div>'
-
-        + '<div class="form-full" id="secOutcome"><div class="form-grid" style="padding:0">'
-            + groupHead('Outcome & Learning')
-            + inp('amount_eur','Amount (€/yr)', item && item.amount_eur, 'number', 'step="any"')
-            + inp('years','Project Years', item && item.years)
-            + ta('lessons','Key Lessons Learned', item && item.lessons)
-            + ta('strategy','Re-submission Strategy', item && item.strategy)
-        + '</div></div>'
-
-        + ta('note','Notes', item && item.note)
-        + '<div class="form-full" style="font-size:11px;color:var(--text-muted);line-height:1.5;background:#f7f9f8;border-radius:6px;padding:9px 11px">'
-        + 'Status decides where this record appears. <strong>Awarded</strong> or <strong>Active</strong> moves it to Active Grants; '
-        + '<strong>Not Awarded</strong> moves it to Unsuccessful. The record is never copied — it keeps its full history.'
-        + '</div>'
-        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
-        + '</form>';
-
-    openModal(id ? 'Edit Record' : 'Add Record', body);
-    toggleGrantSections(status);
-}
-
-function toggleGrantSections(status) {
-    const stage = STAGE_OF(status);
-    const show = (elId, on) => {
-        const node = document.getElementById(elId);
-        if (node) node.style.display = on ? '' : 'none';
-    };
-    show('secPipeline', stage === 'pipeline');
-    show('secAward',    stage === 'active' || stage === 'closed');
-    show('secOutcome',  stage === 'unsuccessful');
-}
-
-async function saveGrant(e, id) {
-    e.preventDefault();
-    const fd  = new FormData(e.target);
-    const num = k => { const v = parseFloat(fd.get(k)); return isNaN(v) ? null : v; };
-    const txt = k => { const v = fd.get(k); return v == null || v === '' ? null : v; };
-
-    const row = {
-        year:     parseInt(fd.get('year'), 10),
-        status:   fd.get('status'),
-        project:  fd.get('project'),
-        funder:   txt('funder'),
-        thematic: txt('thematic'),
-        geo:      txt('geo'),
-        note:     txt('note'),
-        amount:   num('amount'),
-        currency: txt('currency') || 'USD',
-        prob:     num('prob'),
-        deadline: txt('deadline'),
-        period:   txt('period'),
-        total_usd:       num('total_usd'),
-        total_ngn:       num('total_ngn'),
-        received_usd:    num('received_usd'),
-        outstanding_usd: num('outstanding_usd'),
-        outstanding_ngn: num('outstanding_ngn'),
-        amount_eur: num('amount_eur'),
-        years:      txt('years'),
-        lessons:    txt('lessons'),
-        strategy:   txt('strategy'),
-    };
-
-    const movedTo = STAGE_OF(row.status);
-    await upsertRow('grants_register', id, row);
-    closeModal();
-
-    // Follow the record to wherever it now lives
-    if (Number(row.year) !== Number(STATE.year)) STATE.year = Number(row.year);
-    const tabFor = { pipeline: 'pipeline', active: 'active', unsuccessful: 'unsuccessful', closed: 'active' };
-    STATE.tab = tabFor[movedTo] || STATE.tab;
-
-    await reload();
-}
-
-// ── Receivable modal ───────────────────────────────────
-function openReceivableModal(id) {
-    const item = id ? STATE.data.receivables.find(x => x.id === id) : null;
-    const body = '<form class="form-grid" onsubmit="saveReceivable(event,' + (id || 'null') + ')">'
-        + inp('grant_name','Grant Name', item && item.grant_name, 'text', 'required')
-        + inp('funder','Funder', item && item.funder)
-        + inp('amount_usd','Amount (USD)', item && item.amount_usd, 'number', 'step="any"')
-        + inp('amount_ngn','Amount (NGN)', item && item.amount_ngn, 'number', 'step="any"')
-        + inp('due','Due Date', item && item.due)
-        + sel('status','Status', (item && item.status) || 'Overdue / Pending', RCVBL_STATUSES)
-        + sel('priority','Priority', (item && item.priority) || 'HIGH', ['CRITICAL','HIGH','MEDIUM','LOW'])
-        + inp('owner','Action Owner', item && item.owner)
-        + inp('target','Target Date', item && item.target)
-        + ta('action','Required Action', item && item.action)
-        + '<div class="form-actions form-full"><button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>'
-        + '</form>';
-    openModal(id ? 'Edit Receivable' : 'Add Receivable', body);
-}
-
-async function saveReceivable(e, id) {
-    e.preventDefault();
-    const fd  = new FormData(e.target);
-    const num = k => { const v = parseFloat(fd.get(k)); return isNaN(v) ? null : v; };
-    await upsertRow('receivables', id, {
-        grant_name: fd.get('grant_name'), funder: fd.get('funder'),
-        amount_usd: num('amount_usd'), amount_ngn: num('amount_ngn'),
-        due: fd.get('due'), status: fd.get('status'), priority: fd.get('priority'),
-        owner: fd.get('owner'), target: fd.get('target'), action: fd.get('action'),
-    });
-    closeModal();
-    await reload();
-}
-
-// ═══════════════════════════════════════════════════════
-// EXCEL EXPORT — one section per year, automatically
-// ═══════════════════════════════════════════════════════
-const C = {
-    green: '1E4D2B', greenLight: 'D4EDDA', gold: '856404', goldLight: 'FFF3CD',
-    red: '8B1A1A', redLight: 'F8D7DA', redDark: '721C24', dark: '1E4D2B'
-};
-
-function makeWS(title, headers, rows, widths, rowStyles) {
-    const aoa = [[title], [], headers, ...rows];
-    const ws  = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = (widths || headers.map(() => 18)).map(w => ({ wch: w }));
-
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    for (let R = range.s.r; R <= range.e.r; R++) {
-        for (let Ci = range.s.c; Ci <= range.e.c; Ci++) {
-            const addr = XLSX.utils.encode_cell({ r: R, c: Ci });
-            if (!ws[addr]) continue;
-            if (R === 0) {
-                ws[addr].s = { font: { bold: true, sz: 14, color: { rgb: 'FFFFFF' } },
-                               fill: { fgColor: { rgb: C.dark } } };
-            } else if (R === 2) {
-                ws[addr].s = { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
-                               fill: { fgColor: { rgb: C.green } },
-                               alignment: { wrapText: true, vertical: 'center' } };
-            } else if (R > 2 && rowStyles && rowStyles[R - 3]) {
-                const st = rowStyles[R - 3];
-                ws[addr].s = {
-                    font: { sz: 10, bold: !!st.bold, color: { rgb: st.color || '000000' } },
-                    fill: st.bg ? { fgColor: { rgb: st.bg } } : undefined,
-                    alignment: { wrapText: true, vertical: 'top' }
-                };
-            } else {
-                ws[addr].s = { font: { sz: 10 }, alignment: { wrapText: true, vertical: 'top' } };
-            }
-        }
-    }
-    return ws;
-}
-
-function exportToExcel() {
-    const wb = XLSX.utils.book_new();
-
-    allYears().slice().reverse().forEach(y => {
-        const rows = STATE.data.grants.filter(g => Number(g.year) === y);
-        if (!rows.length) return;
-
-        const pipe = rows.filter(g => g.stage === 'pipeline');
-        const act  = rows.filter(g => g.stage === 'active' || g.stage === 'closed');
-        const uns  = rows.filter(g => g.stage === 'unsuccessful');
-
-        if (pipe.length) {
-            const h = ['#','Project','Funder','Thematic','Geography','Amount','Currency','Prob','Weighted','Deadline','Status','Notes'];
-            const r = pipe.map((p, i) => [i + 1, p.project, p.funder, p.thematic, p.geo,
-                        p.amount || 0, p.currency, ((p.prob || 0) * 100).toFixed(0) + '%',
-                        Math.round((p.amount || 0) * (p.prob || 0)), p.deadline, p.status, p.note]);
-            const s = pipe.map(p => p.status === 'Awaiting Outcome' ? { bg: C.goldLight } : {});
-            XLSX.utils.book_append_sheet(wb, makeWS(y + ' Pipeline', h, r, [4,44,28,22,18,12,10,8,14,14,18,34], s), y + ' Pipeline');
-        }
-
-        if (act.length) {
-            const h = ['Grant','Funder','Thematic','Geography','Period','Total USD','Total NGN','Received USD','Outstanding USD','Outstanding NGN','Status','Notes'];
-            const r = act.map(g => [g.project, g.funder, g.thematic, g.geo, g.period,
-                        g.total_usd || '', g.total_ngn || '', g.received_usd || '',
-                        g.outstanding_usd || '', g.outstanding_ngn || '', g.status, g.note]);
-            const s = act.map(g => (g.outstanding_usd || g.outstanding_ngn)
-                        ? { bg: C.redLight, bold: true, color: C.redDark } : { bg: C.greenLight });
-            XLSX.utils.book_append_sheet(wb, makeWS(y + ' Active Grants', h, r, [36,30,24,20,16,14,16,14,16,16,14,38], s), y + ' Active Grants');
-        }
-
-        if (uns.length) {
-            const h = ['Project','Funder','Thematic','Geography','Amount','Project Years','Lessons Learned','Re-submission Strategy'];
-            const r = uns.map(a => [a.project, a.funder, a.thematic, a.geo,
-                        a.amount_eur || a.amount || '', a.years, a.lessons, a.strategy]);
-            const s = uns.map(() => ({ bg: C.redLight, color: C.redDark }));
-            XLSX.utils.book_append_sheet(wb, makeWS(y + ' Unsuccessful', h, r, [44,28,22,18,14,16,44,44], s), y + ' Unsuccessful');
-        }
-    });
-
-    const rcv = STATE.data.receivables;
-    if (rcv.length) {
-        const h = ['Grant','Funder','USD','NGN','Due','Status','Priority','Action Required','Owner','Target'];
-        const r = rcv.map(x => [x.grant_name, x.funder, x.amount_usd || '', x.amount_ngn || '',
-                    x.due, x.status, x.priority, x.action, x.owner, x.target]);
-        const s = rcv.map(x => x.priority === 'CRITICAL'
-                    ? { bg: C.redLight, bold: true, color: C.redDark } : { bg: C.goldLight, color: C.gold });
-        XLSX.utils.book_append_sheet(wb, makeWS('Outstanding Receivables', h, r, [34,26,16,18,16,20,12,44,20,16], s), 'Receivables');
-    }
-
-    if (!wb.SheetNames.length) { alert('Nothing to export yet.'); return; }
-
-    XLSX.writeFile(wb, 'RAHAMA_Grants_Tracker_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+// ═════════ EXCEL ═════════
+function sheet(wb, name, head, rows, widths){ const ws = XLSX.utils.aoa_to_sheet([head].concat(rows)); ws['!cols'] = (widths||head.map(()=>18)).map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31)); }
+function exportExcel(){
+  const wb = XLSX.utils.book_new(), gs = S.data.grants.slice().sort((a,b)=>(b.year-a.year)||String(a.stage).localeCompare(b.stage));
+  const wins = gs.filter(won).length, losses = gs.filter(g=>g.stage==='unsuccessful').length;
+  const ys = yearsAll().slice().reverse();
+  sheet(wb,'Summary',['Year','Applications','Won','Not awarded','Open','Win rate'], ys.map(y=>{const r=gs.filter(g=>+g.year===y),w=r.filter(won).length,l=r.filter(g=>g.stage==='unsuccessful').length;
+    return [y,r.length,w,l,r.filter(g=>g.stage==='pipeline').length,w+l?Math.round(w/(w+l)*100)+'%':'–'];}).concat([['All years',gs.length,wins,losses,gs.filter(g=>g.stage==='pipeline').length,wins+losses?Math.round(wins/(wins+losses)*100)+'%':'–']]),[12,14,8,12,8,10]);
+  sheet(wb,'Grants register',['Code','Year','Project','Funder','Funder type','Website','Programme officer','Email','Phone','Focus areas','Eligibility','Theme','Geography','Stage','Status',
+    'Requested','Currency','Probability','LOI due','Submission date','Time','Time zone','Decision expected','Awarded','Award currency','Start','End','Period (text)','Total USD','Total NGN','Received USD','Outstanding USD','Outstanding NGN',
+    'Restrictions','Expense Tracker project','Documents','Outcome / lessons','Re-submission strategy','Relationship notes','Notes'],
+    gs.map(g=>[g.grant_code,g.year,g.project,g.funder,g.funder_type,g.funder_website,g.contact_name,g.contact_email,g.contact_phone,g.focus_areas,g.eligibility,g.thematic,g.geo,g.stage,lab(g.status),
+      g.amount,g.currency,g.prob,g.loi_due,g.submission_date,g.submission_time,g.submission_tz,g.decision_expected,g.awarded_amount,g.award_currency,g.start_date,g.end_date,g.period,g.total_usd,g.total_ngn,g.received_usd,g.outstanding_usd,g.outstanding_ngn,
+      g.restrictions,g.tracker_project,g.doc_link,g.lessons,g.strategy,g.relationship_notes,g.note]));
+  const pn = id => (S.data.grants.find(g=>g.id===id)||{}).project||'';
+  if(S.data.tranches.length) sheet(wb,'Tranches',['Grant','Due','Expected','Currency','Received on','Received','Note'], S.data.tranches.map(t=>[pn(t.grant_id),t.due_date,t.amount,t.currency,t.received_date,t.received_amount,t.note]),[40,12,14,9,12,14,40]);
+  if(S.data.reports.length) sheet(wb,'Reports',['Grant','Type','Title','Due','Submitted','Note'], S.data.reports.map(r=>[pn(r.grant_id),r.kind,r.title,r.due_date,r.submitted_date,r.note]),[40,18,30,12,12,40]);
+  if(S.data.milestones.length) sheet(wb,'Milestones',['Grant','Milestone','Due','Done','Note'], S.data.milestones.map(m=>[pn(m.grant_id),m.title,m.due_date,m.done_date,m.note]),[40,40,12,12,40]);
+  const dl = allDeadlines().filter(d=>!d.done);
+  if(dl.length) sheet(wb,'Open deadlines',['Date','What','Grant','Funder','Detail','Days left'], dl.map(d=>[d.date,d.kind,d.g.project,d.g.funder,d.text,days(d.date)]),[12,16,40,28,40,10]);
+  if(S.data.receivables.length) sheet(wb,'Receivables',['Grant','Funder','USD','NGN','Due','Status','Priority','Action','Owner','Target'], S.data.receivables.map(x=>[x.grant_name,x.funder,x.amount_usd,x.amount_ngn,x.due,x.status,x.priority,x.action,x.owner,x.target]),[34,26,14,16,14,18,10,44,18,14]);
+  XLSX.writeFile(wb, 'RAHAMA_Grants_Tracker_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
 init();
