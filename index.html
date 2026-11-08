@@ -538,6 +538,7 @@
                 <li><button onclick="app.showView('settings')" data-view="settings">Settings</button></li>
                 <li><button data-icon="key" onclick="app.changeFmsPassword()">🔑 Change Password</button></li>
                 <li><button data-icon="tracker" onclick="window.location.href='grants-tracker.html'">📊 Project Tracker</button></li>
+                <li><button id="expenseTrackerBtn" data-icon="money" onclick="window.location.href='expense-tracker.html'" style="display:none;">💰 Expense Tracker</button></li>
             </ul>
             <a href="https://rahamaorg.github.io/appraisal-system/" class="portal-link" target="_blank">← Back to Staff Portal</a>
         </div>
@@ -818,6 +819,8 @@
                     const quarterlyBtn  = document.getElementById('quarterlyReportBtn');
                     const reconcBtn     = document.getElementById('reconciliationBtn');
                     const donorBtn      = document.getElementById('donorPortalBtn');
+                    // Expense Tracker: BO, ED, finance, finance manager, Grants & Compliance
+                    if (['budgetOwner','ed','finance','finance_manager','GrantsCompliance'].includes(role)) { const etb = document.getElementById('expenseTrackerBtn'); if (etb) etb.style.display = ''; }
                     // BO + ED: full access
                     if (role === 'budgetOwner' || role === 'ed') {
                         [auditBtn, superBtn, quarterlyBtn].forEach(b => b && (b.style.display = ''));
@@ -1004,28 +1007,37 @@
             async _lightCols(table) {
                 this._colCache = this._colCache || {};
                 if (this._colCache[table]) return this._colCache[table];
+                // The column list is remembered on this device for a day, so a login
+                // no longer reads a full sample row (signatures included) per table.
+                // The key includes this page's version, so uploading a new index.html refreshes it.
+                if (!this._buildTag) { let n = 0; document.querySelectorAll('script:not([src])').forEach(x => n += x.textContent.length); this._buildTag = String(n); }
+                const key = 'fms_cols_' + this._buildTag + '_' + table;
+                try { const c = JSON.parse(localStorage.getItem(key) || 'null');
+                      if (c && c.cols && Date.now() - c.at < 864e5) return (this._colCache[table] = c.cols); } catch (e) {}
                 try {
                     const { data, error } = await supabaseClient.from(table).select('*').limit(1);
                     if (error || !data || !data.length) return '*';
-                    const cols = Object.keys(data[0]).filter(k => !this.SIGNATURE_IMAGE_COLUMNS.includes(k));
-                    return (this._colCache[table] = cols.join(','));
+                    const cols = Object.keys(data[0]).filter(k => !this.SIGNATURE_IMAGE_COLUMNS.includes(k)).join(',');
+                    try { localStorage.setItem(key, JSON.stringify({ cols, at: Date.now() })); } catch (e) {}
+                    return (this._colCache[table] = cols);
                 } catch (e) { return '*'; }
             },
 
             async loadData() {
-                await this._loadPoRounds();
+                // These used to load one after another; they don't depend on each other.
+                const _safe = q => Promise.resolve(q).then(r => r || { data: null }, () => ({ data: null }));
+                const poRoundsP = this._loadPoRounds();
+                const projectsP = _safe(supabaseClient.from('projects').select('*').eq('active', true).order('code'));
+                const rolesP = _safe(supabaseClient.from('user_roles').select('*'));
                 try {
                     // Signature images are left out of list loads (they were ~27 MB of
                     // every login). Screens that show a signature fetch the record fresh.
                     const [cnCols, payCols, retCols] = await Promise.all([
                         this._lightCols('concept_notes'), this._lightCols('payments'), this._lightCols('retirements')]);
+                    await poRoundsP;
                     // Load projects from DB (falls back to hardcoded if table doesn't exist)
                     try {
-                        const { data: dbProjects } = await supabaseClient
-                            .from('projects')
-                            .select('*')
-                            .eq('active', true)
-                            .order('code');
+                        const { data: dbProjects } = await projectsP;
                         if (dbProjects && dbProjects.length > 0) {
                             this.data.projects = dbProjects.map(p => ({
                                 code: p.code, name: p.name, budget: Number(p.budget||0),
@@ -1038,7 +1050,7 @@
 
                     // Load roles from DB if available
                     try {
-                        const { data: dbRoles } = await supabaseClient.from('user_roles').select('*');
+                        const { data: dbRoles } = await rolesP;
                         if (dbRoles && dbRoles.length > 0) {
                             dbRoles.forEach(r => {
                                 this.data.roles[r.name] = r.role;
@@ -1134,14 +1146,45 @@
                         this.data.retirements = retirements;
                     }
                     if (['budgetOwner','ed','finance','finance_manager','GrantsCompliance'].includes(this.getUserRole())) {
-                        const { data: allPaymentsForReports } = await supabaseClient.from('payments').select(payCols);
+                        // The full history (for reports) loads at most every 10 minutes. On the
+                        // reloads in between (e.g. after each approval) only records that can still
+                        // change are fetched: anything waiting in Finance now, plus anything that was
+                        // waiting last time (so a record that has just been paid or rejected updates).
+                        const ACTIVE = ['pending','reviewed','finance_approved'];
+                        const fullDue = !this._histAt || Date.now() - this._histAt > 10 * 60 * 1000 || !this._histPay || !this._histRet;
+                        if (fullDue) {
+                            const [{ data: ap, error: e1 }, { data: ar, error: e2 }] = await Promise.all([
+                                supabaseClient.from('payments').select(payCols), supabaseClient.from('retirements').select(retCols)]);
+                            if (!e1 && ap && !e2 && ar) {
+                                this._histPay = new Map(ap.map(x => [x.refNumber, x]));
+                                this._histRet = new Map(ar.map(x => [x.id || x.refNumber, x]));
+                                this._histAt = Date.now();
+                            }
+                        } else {
+                            const chunk = (arr, n) => { const o = []; for (let i = 0; i < arr.length; i += n) o.push(arr.slice(i, i + n)); return o; };
+                            const wasPay = [...this._histPay.values()].filter(x => ACTIVE.includes(x.status)).map(x => x.refNumber).filter(Boolean);
+                            const wasRet = [...this._histRet.values()].filter(x => ACTIVE.includes(x.status)).map(x => x.refNumber).filter(Boolean);
+                            const res = await Promise.all([
+                                supabaseClient.from('payments').select(payCols).in('status', ACTIVE),
+                                supabaseClient.from('retirements').select(retCols).in('status', ACTIVE),
+                                ...chunk(wasPay, 150).map(c => supabaseClient.from('payments').select(payCols).in('refNumber', c)),
+                                ...chunk(wasRet, 150).map(c => supabaseClient.from('retirements').select(retCols).in('refNumber', c))]);
+                            if (res.some(r => r.error)) { this._histAt = 0; }   // something failed: do a full load next time
+                            // Order of results: [payments now waiting, retirements now waiting, payment chunks…, retirement chunks…]
+                            const payChunks = chunk(wasPay, 150).length;
+                            res.forEach((r, i) => (r.data || []).forEach(x => {
+                                const isPay = i === 0 || (i >= 2 && i < 2 + payChunks);
+                                if (isPay) this._histPay.set(x.refNumber, x); else this._histRet.set(x.id || x.refNumber, x);
+                            }));
+                        }
+                        const allPaymentsForReports = this._histPay ? [...this._histPay.values()] : null;
+                        const allRetsForReports = this._histRet ? [...this._histRet.values()] : null;
                         if (allPaymentsForReports) {
                             const paymentMap = new Map();
                             [...this.data.payments, ...allPaymentsForReports].forEach(p => paymentMap.set(p.refNumber, p));
                             this.data.payments = Array.from(paymentMap.values());
                         }
-                        // Also load ALL retirements so reports are complete
-                        const { data: allRetsForReports } = await supabaseClient.from('retirements').select(retCols);
+                        // ALL retirements (loaded above, alongside payments) so reports are complete
                         if (allRetsForReports) {
                             const retMap = new Map();
                             [...this.data.retirements, ...allRetsForReports].forEach(r => retMap.set(r.id||r.refNumber, r));
@@ -1150,23 +1193,24 @@
                     }
                     if (['finance','finance_manager','GrantsCompliance'].includes(this.getUserRole())) {
                         // Load ALL pending payments (includes procurement)
-                        const { data: allPendingPay } = await supabaseClient.from('payments').select(payCols).in('status', ['pending','reviewed','finance_approved']);
+                        const [{ data: allPendingPay }, { data: allPendingRet }, { data: allFinancePay }, { data: allFinanceRejPay }, { data: allFinanceRet }] = await Promise.all([
+                            supabaseClient.from('payments').select(payCols).in('status', ['pending','reviewed','finance_approved']),
+                            supabaseClient.from('retirements').select(retCols).in('status', ['pending','reviewed','finance_approved']),
+                            supabaseClient.from('payments').select(payCols).eq('processedBy', this.currentUser),
+                            supabaseClient.from('payments').select(payCols).eq('rejectedBy', this.currentUser),
+                            supabaseClient.from('retirements').select(retCols).eq('approvedBy', this.currentUser)]);
                         if (allPendingPay) {
                             const pMap = new Map();
                             [...this.data.payments, ...allPendingPay].forEach(p => pMap.set(p.refNumber, p));
                             this.data.payments = Array.from(pMap.values());
                         }
                         // Load ALL pending retirements (includes procurement)
-                        const { data: allPendingRet } = await supabaseClient.from('retirements').select(retCols).in('status', ['pending','reviewed','finance_approved']);
                         if (allPendingRet) {
                             const rMap = new Map();
                             [...this.data.retirements, ...allPendingRet].forEach(r => rMap.set(r.id||r.refNumber, r));
                             this.data.retirements = Array.from(rMap.values());
                         }
                         // Load ALL concept notes that Finance has ever touched (paid or rejected payments, approved retirements)
-                        const { data: allFinancePay } = await supabaseClient.from('payments').select(payCols).eq('processedBy', this.currentUser);
-                        const { data: allFinanceRejPay } = await supabaseClient.from('payments').select(payCols).eq('rejectedBy', this.currentUser);
-                        const { data: allFinanceRet } = await supabaseClient.from('retirements').select(retCols).eq('approvedBy', this.currentUser);
                         const allFinancePayments = [...(allFinancePay||[]), ...(allFinanceRejPay||[])];
                         if (allFinancePayments.length) {
                             const pMap = new Map();
@@ -3577,17 +3621,17 @@
                     if (userRole === 'procurement') {
     const { data: allPaid } = await supabaseClient
         .from('payments')
-        .select('*')
+        .select(await app._lightCols('payments'))
         .eq('status', 'paid')
         .or(`retirementresponsibility.eq.procurement,staffName.eq.${this.currentUser}`);
     freshPayments = allPaid || [];
                     } else {
-                        const { data: staffPay } = await supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).eq('status', 'paid');
+                        const { data: staffPay } = await supabaseClient.from('payments').select(await app._lightCols('payments')).eq('staffName', this.currentUser).eq('status', 'paid');
                         freshPayments = staffPay || [];
                     }
                     const payRefs = freshPayments.map(p => p.refNumber);
                     if (payRefs.length > 0) {
-                        const { data: rets } = await supabaseClient.from('retirements').select('*').in('paymentRef', payRefs);
+                        const { data: rets } = await supabaseClient.from('retirements').select(await app._lightCols('retirements')).in('paymentRef', payRefs);
                         freshRetirements = rets || [];
                     }
                 } catch(e) {
@@ -3613,7 +3657,7 @@
                     try {
                         const { data: _freshCNs } = await supabaseClient
                             .from('concept_notes')
-                            .select('*')
+                            .select(await app._lightCols('concept_notes'))
                             .in('refNumber', _cnRefs);
                         this._freshRetirementCNs = _freshCNs || [];
                     } catch(e) { this._freshRetirementCNs = []; }
@@ -3985,6 +4029,8 @@
             
             async renderApprovals(content) {
                 const role = this.getUserRole();
+                // Procurement's "staff requests" box is independent of the rest: start it now.
+                const procReqP = role === 'procurement' ? this._procReqApprovalsHtml() : null;
                 const [cnCols, payCols, retCols] = await Promise.all([
                     this._lightCols('concept_notes'), this._lightCols('payments'), this._lightCols('retirements')]);
                 // Also fetch variance_review CNs from Supabase (not in local cache)
@@ -4109,9 +4155,14 @@ if (role === 'procurement') {
                 let pendingPOSignatures = []; // CNs where BO needs to sign PO
                 try {
                     if (['budgetOwner', 'ed'].includes(role)) {
-                        const { data: approved } = await supabaseClient.from('concept_notes').select(cnCols).eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50);
-                        const { data: rejected } = await supabaseClient.from('concept_notes').select(cnCols).eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50);
-                        const { data: forwarded } = role === 'budgetOwner' ? await supabaseClient.from('concept_notes').select(cnCols).not('forwardedToED', 'is', null).eq('currentApprover', 'ed').order('forwardedToED', { ascending: false }).limit(50) : { data: [] };
+                        const [{ data: approved }, { data: rejected }, { data: forwarded }, { data: cnsWithPO }] = await Promise.all([
+                            supabaseClient.from('concept_notes').select(cnCols).eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50),
+                            supabaseClient.from('concept_notes').select(cnCols).eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50),
+                            role === 'budgetOwner' ? supabaseClient.from('concept_notes').select(cnCols).not('forwardedToED', 'is', null).eq('currentApprover', 'ed').order('forwardedToED', { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
+                            // POs the Budget Owner may still need to sign (see note below). Only the
+                            // reference and PO number here; full notes are read for the unsigned ones only.
+                            supabaseClient.from('concept_notes').select('refNumber,poNumber').not('poNumber', 'is', null).eq('requiresProcurement', 'yes')
+                                .not('status', 'in', '("rejected","variance_rejected","variance_review","security_review")')]);
                         const seen = new Set();
                         [...(approved || []), ...(rejected || []), ...(forwarded || [])].forEach(cn => { if (!seen.has(cn.refNumber)) { seen.add(cn.refNumber); historyCNs.push(cn); } });
                         // Sort history by most recent action date
@@ -4127,28 +4178,32 @@ if (role === 'procurement') {
                         // the very end, after the purchase is already done. That meant Budget Owner would
                         // never see a PO here while it actually needed pre-purchase authorization. Now this
                         // only excludes concept notes that are genuinely dead-ended.
-                        const { data: cnsWithPO } = await supabaseClient
-                            .from('concept_notes').select(cnCols)
-                            .not('poNumber', 'is', null)
-                            .eq('requiresProcurement', 'yes')
-                            .not('status', 'in', '("rejected","variance_rejected","variance_review","security_review")');
                         if (cnsWithPO && cnsWithPO.length > 0) {
-                            const poNumbers = cnsWithPO.map(c => c.poNumber).filter(Boolean);
-                            const { data: existingSigs } = await supabaseClient
+                            const poNumbers = [...new Set(cnsWithPO.map(c => c.poNumber).filter(Boolean))];
+                            const sigParts = [];
+                            for (let i = 0; i < poNumbers.length; i += 150) sigParts.push(poNumbers.slice(i, i + 150));
+                            const sigRes = await Promise.all(sigParts.map(part => supabaseClient
                                 .from('document_signatures').select('docRef,pageContext')
-                                .in('docRef', poNumbers)
-                                .in('pageContext', ['staff_po', 'budget_owner_po']);
+                                .eq('pageContext', 'budget_owner_po').in('docRef', part)));
+                            const existingSigs = sigRes.flatMap(r => r.data || []);
                             const sigsMap = {};
                             (existingSigs || []).forEach(s => {
                                 if (!sigsMap[s.docRef]) sigsMap[s.docRef] = [];
                                 sigsMap[s.docRef].push(s.pageContext);
                             });
-                            pendingPOSignatures = cnsWithPO.filter(cn => {
+                            const unsignedRefs = cnsWithPO.filter(cn => {
                                 const sigs = sigsMap[cn.poNumber] || [];
                                 // Show if: staff has signed BUT BO has not yet signed
                                 // Also show if staff hasn't signed yet (so BO is aware it's coming)
                                 return !sigs.includes('budget_owner_po');
-                            });
+                            }).map(cn => cn.refNumber);
+                            if (unsignedRefs.length) {
+                                const parts = [];
+                                for (let i = 0; i < unsignedRefs.length; i += 150) parts.push(unsignedRefs.slice(i, i + 150));
+                                const full = await Promise.all(parts.map(part => supabaseClient.from('concept_notes').select(cnCols)
+                                    .in('refNumber', part).not('status', 'in', '("rejected","variance_rejected","variance_review","security_review")')));
+                                pendingPOSignatures = full.flatMap(r => r.data || []);
+                            }
                         }
                     }
                     if (role === 'procurement') {
@@ -4170,12 +4225,13 @@ if (role === 'procurement') {
                         historyCNs.sort((a, b) => lastP(b) - lastP(a));
                     }
                     if (['finance','finance_manager','GrantsCompliance'].includes(role)) {
-                        const { data: processedPay } = await supabaseClient.from('payments').select(payCols).eq('processedBy', this.currentUser).order('paidDate', { ascending: false }).limit(50);
-                        const { data: rejectedPay } = await supabaseClient.from('payments').select(payCols).eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50);
-                        const { data: approvedRet } = await supabaseClient.from('retirements').select(retCols).eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50);
-                        const { data: rejectedRet } = await supabaseClient.from('retirements').select(retCols).eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50);
-                        const { data: reviewedPaid } = await supabaseClient.from('payments').select(payCols).eq('reviewedBy', this.currentUser).eq('status', 'paid').order('paidDate', { ascending: false }).limit(50);
-const { data: approvedPaid } = await supabaseClient.from('payments').select(payCols).eq('financeApprovedBy', this.currentUser).eq('status', 'paid').order('paidDate', { ascending: false }).limit(50);
+                        const [{ data: processedPay }, { data: rejectedPay }, { data: approvedRet }, { data: rejectedRet }, { data: reviewedPaid }, { data: approvedPaid }] = await Promise.all([
+                            supabaseClient.from('payments').select(payCols).eq('processedBy', this.currentUser).order('paidDate', { ascending: false }).limit(50),
+                            supabaseClient.from('payments').select(payCols).eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50),
+                            supabaseClient.from('retirements').select(retCols).eq('approvedBy', this.currentUser).order('approvedDate', { ascending: false }).limit(50),
+                            supabaseClient.from('retirements').select(retCols).eq('rejectedBy', this.currentUser).order('rejectedDate', { ascending: false }).limit(50),
+                            supabaseClient.from('payments').select(payCols).eq('reviewedBy', this.currentUser).eq('status', 'paid').order('paidDate', { ascending: false }).limit(50),
+                            supabaseClient.from('payments').select(payCols).eq('financeApprovedBy', this.currentUser).eq('status', 'paid').order('paidDate', { ascending: false }).limit(50)]);
 const _seenPay = new Set();
 historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approvedPaid || []), ...(rejectedPay || [])].filter(p => { if (_seenPay.has(p.refNumber)) return false; _seenPay.add(p.refNumber); return true; });
                         historyRetirements = [...(approvedRet || []), ...(rejectedRet || [])];
@@ -4192,7 +4248,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     }
                 } catch (e) { console.error('History load error:', e); }
                 
-                const procReqHtml = role === 'procurement' ? (await this._procReqApprovalsHtml()) + this._grrSignBox() : '';
+                const procReqHtml = role === 'procurement' ? (await procReqP) + this._grrSignBox() : '';
                 content.innerHTML = `
                     <div class="header"><h2>My Approvals</h2><p>Items requiring your review and approval</p></div>
                     ${this._ppWaitingBox()}${this._fleetWaitingBox()}${this._storeWaitingBox()}
@@ -6867,8 +6923,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     ? this.data.projects.filter(p => p.donor === this.currentUser || p.donorContact === this.currentUser)
                     : this.data.projects;
 
-                const { data: allPay } = await supabaseClient.from('payments').select('*').eq('status','paid');
-                const { data: allCNs } = await supabaseClient.from('concept_notes').select('*').eq('status','approved');
+                const { data: allPay } = await supabaseClient.from('payments').select(await app._lightCols('payments')).eq('status','paid');
+                const { data: allCNs } = await supabaseClient.from('concept_notes').select(await app._lightCols('concept_notes')).eq('status','approved');
 
                 const rows = donorProjects.map(proj => {
                     const spent = (allPay||[]).filter(p => p.projectCode === proj.code).reduce((s,p)=>s+(p.amount||0),0);
@@ -6909,7 +6965,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     content.innerHTML = '<div class="empty-state"><h3>Access Denied</h3></div>'; return;
                 }
                 content.innerHTML = '<div class="header"><h2>🏦 Bank Reconciliation</h2><p>Loading…</p></div><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>';
-                const { data: payments } = await supabaseClient.from('payments').select('*').eq('status','paid').order('paidDate',{ascending:false});
+                const { data: payments } = await supabaseClient.from('payments').select(await app._lightCols('payments')).eq('status','paid').order('paidDate',{ascending:false});
                 const unreconciled = (payments||[]).filter(p => !p.bankReconciled);
                 const reconciled   = (payments||[]).filter(p => p.bankReconciled);
                 content.innerHTML = `
@@ -7107,7 +7163,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
 
     let pays = [];
     try {
-        const { data, error } = await supabaseClient.from('payments').select('*').limit(5000);
+        const { data, error } = await supabaseClient.from('payments').select(await app._lightCols('payments')).limit(5000);
         if (error) throw new Error(error.message);
         pays = data || [];
     } catch(e) { alert('Could not load payments: ' + e.message); return; }
@@ -7204,12 +7260,13 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
          // Reads named columns of a table in batches of 500 (up to 5,000 rows).
          // A column that does not exist in this database is dropped and the read
          // retried, so the report never fails over one missing field.
-         async _fetchReportRows(table, cols, orderCol, ascending) {
+         async _fetchReportRows(table, cols, orderCol, ascending, where) {
     let use = cols.slice(); const out = []; const size = 500;
     for (let from = 0; from < 5000; from += size) {
         let res, tries = 0;
         while (true) {
             let q = supabaseClient.from(table).select(use.join(','));
+            if (where) q = where(q);
             if (orderCol && use.includes(orderCol)) q = q.order(orderCol, { ascending: !!ascending, nullsFirst: false });
             if (use.includes('refNumber')) q = q.order('refNumber', { ascending: true });
             res = await q.range(from, from + size - 1);
@@ -11716,31 +11773,35 @@ ${vendors.length > 1 ? `
                 </div>
                 <div id="auditTabContent"><div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div></div>`;
 
-                // Load all data upfront
-                const [
-                    { data: allPayments },
-                    { data: allRetirements },
-                    { data: auditRaw }
-                ] = await Promise.all([
-                    isAdmin
-                        ? supabaseClient.from('payments').select('*').order('requestDate', { ascending: false })
-                        : supabaseClient.from('payments').select('*').eq('staffName', this.currentUser).order('requestDate', { ascending: false }),
-                    isAdmin
-                        ? supabaseClient.from('retirements').select('*').order('submittedDate', { ascending: false })
-                        : supabaseClient.from('retirements').select('*').eq('staffName', this.currentUser).order('submittedDate', { ascending: false }),
-                    supabaseClient.from('audit_log').select('*')
+                // Only the columns the ledgers show are read (no signatures, files or
+                // breakdowns), in pages of 500, so large tables load quickly and a
+                // read never stops at the 1,000-row limit. Each part loads on its
+                // own, so one slow or failed read no longer blanks the other tabs.
+                const PAY_COLS = ['refNumber','conceptNoteRef','staffName','projectCode','amount','accountName','accountNumber','bankName','status','paidDate','processedBy','requestDate'];
+                const RET_COLS = ['refNumber','paymentRef','staffName','actualSpent','amountReturned','amountAdvanced','status','approvedBy','rejectedBy','approvedDate','rejectedDate','rejectionReason','submittedDate'];
+                // Non-admins (who can reach this page by keyboard shortcut) only ever receive their own rows
+                const own = isAdmin ? null : (q => q.eq('staffName', this.currentUser));
+                const mineOnly = rows => isAdmin ? rows : rows.filter(r => r.staffName === this.currentUser);
+                const t0 = Date.now();
+                const [payRes, retRes, auditRes] = await Promise.all([
+                    this._fetchReportRows('payments', PAY_COLS, 'requestDate', false, own),
+                    this._fetchReportRows('retirements', RET_COLS, 'submittedDate', false, own),
+                    supabaseClient.from('audit_log').select('id,action,tableName,refNumber,details,changedBy,changedAt')
                         .not('action', 'in', '("INSERT","UPDATE","DELETE")')
                         .order('changedAt', { ascending: false }).limit(500)
+                        .then(r => r.error && /column/i.test(r.error.message || '')
+                            ? supabaseClient.from('audit_log').select('*').not('action', 'in', '("INSERT","UPDATE","DELETE")').order('changedAt', { ascending: false }).limit(500)
+                            : r)
                 ]);
+                this._auditErrors = { payments: payRes.error && payRes.error.message, retirements: retRes.error && retRes.error.message, activity: auditRes.error && auditRes.error.message };
+                console.log('[audit] loaded in', Date.now() - t0, 'ms', this._auditErrors);
+                const allPayments = mineOnly(payRes.data || []), allRetirements = mineOnly(retRes.data || []), auditRaw = auditRes.data || [];
 
                 // Also load CNs for cross-referencing
-                const cnRefs = [...new Set([
-                    ...(allPayments||[]).map(p => p.conceptNoteRef),
-                    ...(allRetirements||[]).map(r => r.paymentRef)
-                ].filter(Boolean))];
+                const cnRefs = [...new Set((allPayments||[]).map(p => p.conceptNoteRef).filter(Boolean))];
                 let cnMap = new Map();
-                if (cnRefs.length) {
-                    const { data: cns } = await supabaseClient.from('concept_notes').select('refNumber,activityTitle,projectCode,requiresProcurement,poNumber,grrNumber').in('refNumber', cnRefs);
+                for (let k = 0; k < cnRefs.length; k += 200) {
+                    const { data: cns } = await supabaseClient.from('concept_notes').select('refNumber,activityTitle,projectCode,requiresProcurement,poNumber,grrNumber').in('refNumber', cnRefs.slice(k, k + 200));
                     (cns||[]).forEach(c => cnMap.set(c.refNumber, c));
                 }
 
@@ -11786,6 +11847,8 @@ ${vendors.length > 1 ? `
                     btn.style.color = t === tab ? 'var(--primary)' : 'var(--text-muted)';
                 });
                 const el = document.getElementById('auditTabContent');
+                const err = (this._auditErrors || {})[tab];
+                if (err && tab !== 'activity') { el.innerHTML = `<div style="padding:16px;border-left:4px solid #e53935;background:#fff5f5;border-radius:8px;">Could not load the ${tab} ledger: ${escHtml(err)}<br><button class="action-btn" style="margin-top:10px" onclick="app.renderAuditTrail(document.getElementById('mainContent'))">Try again</button></div>`; return; }
                 if (tab === 'activity')    this._renderAuditActivity(el);
                 if (tab === 'payments')    this._renderAuditPayments(el);
                 if (tab === 'retirements') this._renderAuditRetirements(el);
