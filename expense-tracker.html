@@ -103,7 +103,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const catOf=l=>!l?'':(/^[14]\./.test(l)?l.slice(0,3):l[0]);
 const SB=supabase.createClient("https://sqygmoxpegbfxddglhbx.supabase.co","sb_publishable__nPBgo9IeeU4Mrk_ggEeTg_YEkWrB24");
 let CAN_WRITE=false,PROJ_LIST=[],QUEUE=[];
-const fromDb=r=>({p:r.project_name,d:r.expense_date||'',m:r.cost_month||0,l:r.budget_line||'',c:r.category||catOf(r.budget_line||''),v:r.voucher_ref||'',n:r.description||'',s:r.payee||'',a:Number(r.amount||0),t:r.expense_type,r:r.retirement_status||'',o:r.source||'',k:r.comment||''});
+const fromDb=r=>({id:r.id,p:r.project_name,d:r.expense_date||'',m:r.cost_month||0,l:r.budget_line||'',c:r.category||catOf(r.budget_line||''),v:r.voucher_ref||'',n:r.description||'',s:r.payee||'',a:Number(r.amount||0),t:r.expense_type,r:r.retirement_status||'',o:r.source||'',k:r.comment||''});
 async function pageAll(q){let out=[],from=0;for(;;){const {data,error}=await q().range(from,from+999);if(error)throw error;out=out.concat(data||[]);if(!data||data.length<1000)break;from+=1000}return out}
 async function loadAll(){
  const [ex,pr,bl,qu]=await Promise.all([pageAll(()=>SB.from('fin_expenses').select('*').order('id')),SB.from('fin_projects').select('*'),SB.from('fin_budget_lines').select('*').order('category_key'),
@@ -121,13 +121,18 @@ const cfg=p=>Object.assign({budget:0,start:0,dur:0,idc:0,cash:0,opening:0,cats:[
 const all=()=>BASE.concat(dbRows);
 function toast(t){const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),2600)}
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-function setMonths(){const a=all().map(r=>r.m).filter(Boolean);let lo=Math.min(...a,202602),hi=Math.max(...a,202611),o=[];for(let m=lo;m<=hi;m=nextM(m))o.push(m);st.months=o;if(!st.from)st.from=o[0];if(!st.to)st.to=o.filter(m=>m<=202611).pop()}
+const NOWM=(()=>{const d=new Date();return d.getFullYear()*100+d.getMonth()+1})();
+// The month range covers all the data, from the earliest month to the current month (or later, if later rows exist).
+// Until the data has loaded the range is provisional, and it is reset to the full range once the data arrives.
+function setMonths(){const a=all().map(r=>r.m).filter(Boolean);let lo=a.length?Math.min(...a):NOWM,hi=Math.max(...a,NOWM),o=[];for(let m=lo;m<=hi;m=nextM(m))o.push(m);st.months=o;
+ if(!st.from||!st._full&&a.length)st.from=o[0];if(!st.to||!st._full&&a.length)st.to=o.filter(m=>m<=NOWM).pop()||o[o.length-1];if(a.length)st._full=true;
+ if(!o.includes(st.from))st.from=o[0];if(!o.includes(st.to))st.to=o.filter(m=>m<=NOWM).pop()||o[o.length-1]}
 function base(){return all().filter(r=>st.proj.includes(r.p)&&(!r.m||(r.m>=st.from&&r.m<=st.to)))}
 function filt(skip){let q=st.q.toLowerCase();return base().filter(r=>(skip==='types'||!st.types.length||st.types.includes(r.t))&&(!st.status.length||st.status.includes(r.r||'No status'))&&(!st.src.length||st.src.includes(r.o))&&(skip==='cats'||!st.cats.length||st.cats.includes(r.c||'None'))&&(!q||(r.n+' '+r.s+' '+r.v+' '+r.l).toLowerCase().includes(q)))}
 const sum=(a,f)=>a.reduce((s,r)=>s+(f?f(r):r.a),0);
 const grp=(a,k,v)=>{const o={};a.forEach(r=>{const x=k(r);o[x]=(o[x]||0)+(v?v(r):r.a)});return o};
 // ---------- UI shell
-const NAV=[['dash','Dashboard'],['ledger','Expense list'],['confirm','To confirm'],['budget','Budgets and cash'],['notes','Data notes']];
+const NAV=[['dash','Dashboard'],['ledger','Expense list'],['confirm','To confirm'],['budget','Budgets and cash'],['history','Change history'],['notes','Data notes']];
 function drawNav(){document.getElementById('nav').innerHTML=NAV.map(([k,l])=>`<button data-v="${k}" aria-current="${st.view===k}">${k==='confirm'&&QUEUE.length?l+' ('+QUEUE.length+')':l}</button>`).join('');document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{st.view=b.dataset.v;save();render()})}
 function save(){try{localStorage.setItem('rahama_slicers',JSON.stringify({proj:st.proj,view:st.view}))}catch(e){}}
 function tog(arr,v){const i=arr.indexOf(v);i<0?arr.push(v):arr.splice(i,1)}
@@ -146,7 +151,7 @@ function drawSlicers(){
  document.getElementById('mt').onchange=e=>{st.to=+e.target.value;if(st.to<st.from)st.from=st.to;render()};
  const q=document.getElementById('q');q.oninput=e=>{st.q=e.target.value;st.page=0;clearTimeout(window._qt);window._qt=setTimeout(()=>{render(true)},250)};
 }
-document.getElementById('resetBtn').onclick=()=>{Object.assign(st,{from:st.months[0],to:st.months.filter(m=>m<=202611).pop(),types:[],status:[],src:[],cats:[],q:'',page:0});render()};
+document.getElementById('resetBtn').onclick=()=>{Object.assign(st,{from:st.months[0],to:st.months.filter(m=>m<=NOWM).pop()||st.months[st.months.length-1],types:[],status:[],src:[],cats:[],q:'',page:0});render()};
 // ---------- charts
 let CH={};
 function mk(id,cfg){if(CH[id])CH[id].destroy();const c=document.getElementById(id);if(!c)return;CH[id]=new Chart(c,cfg)}
@@ -227,6 +232,7 @@ function view(){const v=document.getElementById('view');
  if(st.view==='ledger')ledger(v);
  if(st.view==='budget')budgetView(v);
  if(st.view==='notes')notes(v);
+ if(st.view==='history')historyView(v);
  if(st.view==='confirm')confirmView(v);
 }
 // ---------- FMS payments waiting for Finance to confirm
@@ -256,9 +262,10 @@ function ledger(v){
  const PS=60,pages=Math.max(1,Math.ceil(F.length/PS));st.page=Math.min(st.page,pages-1);
  const rows=F.slice(st.page*PS,st.page*PS+PS);
  v.innerHTML=`<div class="card"><h3>${F.length} entries · ₦${N(sum(F))}<span>${st.proj.join(', ')}</span></h3>
- <div class="tw"><table><thead><tr>${cols.map(c=>`<th data-s="${c[0]}" class="${c[0]==='a'?'n':''}">${c[1]}${st.sort===c[0]?(st.dir>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr class="${r.t==='IDC'?'idc':r.t==='Outside budget'?'out':''}"><td>${r.d}</td><td>${esc(r.p)}</td><td>${esc(r.l)}</td><td>${esc(r.v)}</td><td>${esc(r.n)}</td><td>${esc(r.s)}</td><td class="n">${N(r.a)}</td><td>${esc(r.t)}</td><td>${r.r?`<span class="pill ${r.r==='Retired'?'ok':r.r==='Retirement rejected'?'bd':'wa'}">${esc(r.r)}</span>`:''}</td><td>${esc(r.o)}</td><td>${esc(r.k)}</td></tr>`).join('')||`<tr><td colspan="11" class="empty">No entries match these slicers.</td></tr>`}</tbody></table></div>
+ <div class="tw"><table><thead><tr>${cols.map(c=>`<th data-s="${c[0]}" class="${c[0]==='a'?'n':''}">${c[1]}${st.sort===c[0]?(st.dir>0?' ▲':' ▼'):''}</th>`).join('')}${CAN_WRITE?'<th></th>':''}</tr></thead><tbody>${rows.map(r=>`<tr class="${r.t==='IDC'?'idc':r.t==='Outside budget'?'out':''}"><td>${r.d}</td><td>${esc(r.p)}</td><td>${esc(r.l)}</td><td>${esc(r.v)}</td><td>${esc(r.n)}</td><td>${esc(r.s)}</td><td class="n">${N(r.a)}</td><td>${esc(r.t)}</td><td>${r.r?`<span class="pill ${r.r==='Retired'?'ok':r.r==='Retirement rejected'?'bd':'wa'}">${esc(r.r)}</span>`:''}</td><td>${esc(r.o)}</td><td>${esc(r.k)}</td>${CAN_WRITE?`<td><button class="btn" style="padding:3px 10px;font-size:12px" data-ed="${r.id}">Edit</button></td>`:''}</tr>`).join('')||`<tr><td colspan="12" class="empty">No entries match these slicers.</td></tr>`}</tbody></table></div>
  <div class="srow" style="margin-top:10px"><button class="btn" id="pv">Previous</button><span class="sub">Page ${st.page+1} of ${pages}</span><button class="btn" id="nx">Next</button></div></div>`;
- v.querySelectorAll('th').forEach(h=>h.onclick=()=>{const k=h.dataset.s;st.dir=st.sort===k?-st.dir:1;st.sort=k;render(true)});
+ v.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>expenseForm(BASE.find(x=>x.id===+b.dataset.ed)));
+ v.querySelectorAll('th[data-s]').forEach(h=>h.onclick=()=>{const k=h.dataset.s;st.dir=st.sort===k?-st.dir:1;st.sort=k;render(true)});
  document.getElementById('pv').onclick=()=>{st.page=Math.max(0,st.page-1);render(true)};document.getElementById('nx').onclick=()=>{st.page=Math.min(pages-1,st.page+1);render(true)};
 }
 function budgetView(v){
@@ -289,32 +296,53 @@ function editCfg(p){const c=cfg(p);const h=document.getElementById('modalHost');
 }
 function notes(v){v.innerHTML=`<div class="card"><h3>How this works</h3><ul class="note">
 <li><b>Finance only.</b> Figures are read from the FMS database after sign-in. Nothing is stored in this page.</li>
-<li><b>Add expenses each month</b> with Add expense. Budgets, cash received, start month, duration and IDC rate are edited under Budgets and cash.</li>
+<li><b>Add expenses each month</b> with Add expense. <b>Correct a mistake</b> with Edit on the Expense list (Finance only); every edit and deletion is kept under Change history. Budgets, cash received, start month, duration and IDC rate are edited under Budgets and cash.</li>
 <li><b>Type</b>: Direct is programme cost. IDC is the indirect cost row. Outside budget is spend with no budget line in the grant.</li>
 <li><b>Source</b> shows where each row came from: MdM tracker, Financial Tracker (pre-FMS), FMS, or Finance entry.</li>
 <li><b>FMS payments</b> paid from now on wait under To confirm. Finance confirms each one (it then joins the tracker and its retirement status updates by itself) or removes it with a reason.</li>
 <li><b>Pace</b>: utilisation is compared with the grant's own duration. Ahead of pace means spend is 15 points above time elapsed.</li></ul></div>`}
-// ---------- add expense
-document.getElementById('addBtn').onclick=()=>{const h=document.getElementById('modalHost'),today=new Date().toISOString().slice(0,10);
- h.innerHTML=`<div class="modal"><div><h3 style="margin:0 0 10px;font-family:var(--f1)">Add expense</h3><form class="form" id="f">
- <label>Project<select id="fp">${PROJECTS.map(p=>`<option ${p===st.proj[0]?'selected':''}>${p}</option>`).join('')}</select></label><label>Date<input id="fd" type="date" value="${today}" required></label>
- <label>Budget line (e.g. 4.1.14)<input id="fl"></label><label>Voucher / CN number<input id="fv"></label>
- <label class="w">Description<input id="fn" required></label><label>Staff / supplier<input id="fs"></label><label>Amount (₦)<input id="fa" type="number" step="0.01" required></label>
- <label>Type<select id="ft">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select></label><label>Retirement status<select id="fr"><option value="">Not applicable</option>${RST.map(t=>`<option>${t}</option>`).join('')}</select></label>
- <label class="w">Comment<input id="fk"></label>
- <div class="w srow"><button class="btn pri" type="submit">Save expense</button><button class="btn" type="button" id="cn">Cancel</button><span class="sub" id="msg"></span></div></form></div></div>`;
+// ---------- change history of expenses (edits and deletions)
+async function historyView(v){v.innerHTML='<div class="card"><div class="empty">Loading…</div></div>';
+ const {data,error}=await SB.from('fin_expenses_audit').select('*').order('changed_at',{ascending:false}).limit(300);
+ if(error){v.innerHTML='<div class="card"><div class="empty">The change history is switched on by expense_tracker_edit_history.sql. Run it once in the FMS SQL editor.</div></div>';return}
+ const F=['project_name','expense_date','budget_line','voucher_ref','description','payee','amount','expense_type','retirement_status','comment','cost_month'];
+ const lab={project_name:'project',expense_date:'date',budget_line:'line',voucher_ref:'voucher',expense_type:'type',retirement_status:'retirement',cost_month:'month'};
+ const what=a=>{const b=a.before_data||{},n=a.after_data||{};if(a.action==='delete')return `Deleted: ${esc(b.description||'')} · ₦${N(b.amount)} (${esc(b.project_name||'')})`;
+  const ch=F.filter(k=>JSON.stringify(b[k])!==JSON.stringify(n[k]));return `${esc(n.description||'')}: `+(ch.length?ch.map(k=>`<b>${lab[k]||k}</b> ${esc(b[k]==null||b[k]===''?'(blank)':b[k])} → ${esc(n[k]==null||n[k]===''?'(blank)':n[k])}`).join('; '):'saved with no changes')};
+ v.innerHTML=`<div class="card"><h3>Expense changes<span>${(data||[]).length} shown</span></h3>${(data||[]).length?`<div class="tw"><table><thead><tr><th>When</th><th>Who</th><th>Change</th></tr></thead><tbody>${data.map(a=>`<tr><td style="white-space:nowrap">${esc(new Date(a.changed_at).toLocaleString('en-GB'))}</td><td style="white-space:nowrap">${esc(a.changed_by||'–')}</td><td>${what(a)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No edits or deletions yet.</div>'}</div>`}
+// ---------- add or edit an expense (Finance only)
+const ym=d=>d&&/^\d{4}-\d{2}/.test(d)?(+d.slice(0,4))*100+ +d.slice(5,7):null;
+function expenseForm(rec){const h=document.getElementById('modalHost'),x=rec||{},today=new Date().toISOString().slice(0,10),ed=!!rec;
+ if(!CAN_WRITE){toast('Only Finance can '+(ed?'edit':'add')+' expenses');return}
+ const projs=[...new Set(PROJECTS.concat(PROJ_LIST).concat(x.p?[x.p]:[]))];
+ h.innerHTML=`<div class="modal"><div><h3 style="margin:0 0 10px;font-family:var(--f1)">${ed?'Edit expense':'Add expense'}</h3>${ed?`<p class="sub" style="margin:0 0 10px">Source: ${esc(x.o||'–')}. Every change is kept in the change history with who made it.</p>`:''}<form class="form" id="f">
+ <label>Project<select id="fp">${projs.map(p=>`<option ${p===(x.p||st.proj[0])?'selected':''}>${esc(p)}</option>`).join('')}</select></label><label>Date<input id="fd" type="date" value="${esc(x.d||today)}" required></label>
+ <label>Budget line (e.g. 4.1.14)<input id="fl" value="${esc(x.l||'')}"></label><label>Voucher / CN number<input id="fv" value="${esc(x.v||'')}"></label>
+ <label class="w">Description<input id="fn" required value="${esc(x.n||'')}"></label><label>Staff / supplier<input id="fs" value="${esc(x.s||'')}"></label><label>Amount (₦)<input id="fa" type="number" step="0.01" required value="${x.a!=null&&ed?x.a:''}"></label>
+ <label>Type<select id="ft">${TYPES.map(t=>`<option ${t===x.t?'selected':''}>${t}</option>`).join('')}</select></label><label>Retirement status<select id="fr"><option value="">Not applicable</option>${RST.map(t=>`<option ${t===x.r?'selected':''}>${t}</option>`).join('')}</select></label>
+ <label class="w">${ed?'Comment (say what was corrected)':'Comment'}<input id="fk" value="${esc(x.k||'')}"></label>
+ <div class="w srow"><button class="btn pri" type="submit">${ed?'Save changes':'Save expense'}</button><button class="btn" type="button" id="cn">Cancel</button>${ed?'<button class="btn" type="button" id="dl" style="margin-left:auto;color:var(--bad)">Delete</button>':''}<span class="sub" id="msg"></span></div></form></div></div>`;
+ const msg=t=>document.getElementById('msg').textContent=t;
  document.getElementById('cn').onclick=()=>h.innerHTML='';
- document.getElementById('f').onsubmit=async e=>{e.preventDefault();const g=i=>document.getElementById(i).value.trim();const d=g('fd');
-  const row={p:g('fp'),d,m:(+d.slice(0,4)-2000)*100+ +d.slice(5,7),l:g('fl'),c:catOf(g('fl')),v:g('fv'),n:g('fn'),s:g('fs'),a:+g('fa'),t:g('ft'),r:g('fr'),o:'Added in tracker',k:g('fk'),ts:Date.now()};
-  if(!CAN_WRITE){document.getElementById('msg').textContent='Only Finance can add expenses.';return}
-  try{const {error}=await SB.from('fin_expenses').insert({project_name:row.p,expense_date:row.d||null,budget_line:row.l||null,category:row.c||null,voucher_ref:row.v||null,description:row.n,payee:row.s||null,amount:row.a,expense_type:row.t,retirement_status:row.r||null,source:'Finance entry',comment:row.k||null});if(error)throw error;h.innerHTML='';toast('Expense saved');await loadAll()}catch(err){document.getElementById('msg').textContent='Not saved: '+(err.message||'your role cannot add expenses')}};
-};
+ document.getElementById('f').onsubmit=async e=>{e.preventDefault();const g=i=>document.getElementById(i).value.trim();const d=g('fd'),l=g('fl'),amt=parseFloat(g('fa'));
+  if(isNaN(amt)){msg('Enter the amount.');return}
+  const row={project_name:g('fp'),expense_date:d||null,budget_line:l||null,category:catOf(l)||null,voucher_ref:g('fv')||null,description:g('fn'),payee:g('fs')||null,amount:amt,expense_type:g('ft'),retirement_status:g('fr')||null,comment:g('fk')||null};
+  // the month follows the date for new rows, and for edited rows only when the date is changed
+  if(!ed||d!==x.d)row.cost_month=ym(d);
+  if(ed&&(x.c||'')===catOf(x.l||'')&&l===(x.l||''))delete row.category;
+  try{const r=ed?await SB.from('fin_expenses').update(row).eq('id',x.id).select('id'):await SB.from('fin_expenses').insert({...row,source:'Finance entry'}).select('id');
+   if(r.error)throw r.error;if(!r.data||!r.data.length)throw new Error('the database did not accept the change (check your Finance access)');
+   h.innerHTML='';toast(ed?'Expense updated':'Expense saved');await loadAll()}catch(err){msg('Not saved: '+(err.message||'error'))}};
+ if(ed)document.getElementById('dl').onclick=async()=>{if(!confirm('Delete this expense?\n\n'+(x.n||'')+' · ₦'+N(x.a)+'\n\nIt stays in the change history.'))return;
+  const r=await SB.from('fin_expenses').delete().eq('id',x.id).select('id');if(r.error||!r.data||!r.data.length){msg('Not deleted: '+((r.error&&r.error.message)||'not allowed'));return}h.innerHTML='';toast('Expense deleted');await loadAll()};
+}
+document.getElementById('addBtn').onclick=()=>expenseForm(null);
 document.getElementById('csvBtn').onclick=async()=>{const F=filt();const cols=['p','d','m','l','v','n','s','a','t','r','o','k'];const csv=[['Project','Date','Month','Line','Voucher','Description','Supplier','Amount','Type','Retirement','Source','Comment'].join(',')].concat(F.map(r=>cols.map(c=>'"'+String(r[c]==null?'':r[c]).replace(/"/g,'""')+'"').join(','))).join('\n');
  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='rahama_expenses.csv';a.click();toast('CSV ready')}catch(e){toast('Download failed')}};
-function render(light){document.getElementById('ttl').textContent={dash:'Expense dashboard',ledger:'Expense list',confirm:'FMS payments to confirm',budget:'Budgets and cash',notes:'Data notes'}[st.view];
+function render(light){document.getElementById('ttl').textContent={dash:'Expense dashboard',ledger:'Expense list',confirm:'FMS payments to confirm',history:'Change history',budget:'Budgets and cash',notes:'Data notes'}[st.view];
  document.getElementById('sub').textContent=st.proj.join(' · ')+' · '+ML(st.from)+' to '+ML(st.to);
- drawNav();if(!light||true){drawSlicers()}const qv=st.view==='confirm';document.getElementById('slicers').style.display=qv?'none':'';['csvBtn','resetBtn'].forEach(id=>document.getElementById(id).style.display=qv?'none':'');
- if(qv)document.getElementById('sub').textContent='Payments marked paid in the FMS, waiting for Finance';view();
+ drawNav();if(!light||true){drawSlicers()}const qv=st.view==='confirm'||st.view==='history';document.getElementById('slicers').style.display=qv?'none':'';['csvBtn','resetBtn'].forEach(id=>document.getElementById(id).style.display=qv?'none':'');
+ if(qv)document.getElementById('sub').textContent=st.view==='history'?'Every edit and deletion of an expense, newest first':'Payments marked paid in the FMS, waiting for Finance';view();
  const q=document.getElementById('q');if(q&&light&&document.activeElement===document.body){}
 }
 // ---------- boot
