@@ -518,6 +518,7 @@
                 <li><button onclick="app.showView('dashboard')" class="active" data-view="dashboard">Dashboard</button></li>
                 <li class="nav-group">My work</li>
                 <li><button onclick="app.showView('conceptNote')" data-view="conceptNote">Create Concept Note</button></li>
+                <li><button onclick="app.showView('myConceptNotes')" data-view="myConceptNotes">My Concept Notes</button></li>
                 <li><button onclick="app.showView('payment')" data-view="payment">Request Payment</button></li>
                 <li><button onclick="app.showView('retirement')" data-view="retirement">Submit Retirement</button></li>
                 <li><button onclick="app._nextMode=null;app.showView('approvals')" data-view="approvals">My Approvals</button></li>
@@ -1622,6 +1623,7 @@
                         case 'reconciliation': this.renderReconciliation(content).catch(e => console.error(e)); break;
                         case 'quarterlyReport': this.renderQuarterlyReport(content); break;
                         case 'conceptNote': this.renderConceptNoteForm(content).catch(e => console.error(e)); break;
+                        case 'myConceptNotes': this.renderMyConceptNotes(content); break;
                         case 'payment': this.renderPaymentForm(content).catch(e => console.error(e)); break;
                         case 'retirement': this.renderRetirementForm(content).catch(e => console.error(e)); break;
                         case 'approvals': this.renderApprovals(content).catch(e => console.error(e)); break;
@@ -1658,6 +1660,7 @@
             
             // Line icons for the menu and dashboard (stroke icons, inherit the text colour)
             _ICONS: {
+                myConceptNotes: '<path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2"/>',
                 dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
                 conceptNote: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
                 payment: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
@@ -1755,7 +1758,9 @@
             },
             _dashStatusPill(st) {
                 const m = { paid: ['Paid', '#E8F3EC', '#1B5E20'], finance_approved: ['Approved', '#E3F2FD', '#1B4D8E'], reviewed: ['Reviewed', '#EDE7F6', '#4527A0'], pending: ['Pending', '#FFF4E5', '#92400E'],
-                    rejected: ['Rejected', '#FDECEA', '#A8321C'], approved: ['Approved', '#E3F2FD', '#1B4D8E'], closed: ['Closed', '#F3F4F6', '#4B5563'] }[st] || [st || '—', '#F3F4F6', '#4B5563'];
+                    rejected: ['Rejected', '#FDECEA', '#A8321C'], approved: ['Approved', '#E3F2FD', '#1B4D8E'], closed: ['Closed', '#F3F4F6', '#4B5563'],
+                    returned: ['Returned', '#FEF3C7', '#B45309'], security_review: ['Security review', '#EDE7F6', '#4527A0'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'], withdrawn: ['Withdrawn', '#F3F4F6', '#6B7280'],
+                    variance_review: ['Cost review', '#FFF4E5', '#92400E'], variance_rejected: ['Cost rejected', '#FDECEA', '#A8321C'] }[st] || [st || '—', '#F3F4F6', '#4B5563'];
                 return `<span class="st-pill" style="background:${m[1]};color:${m[2]};">${escHtml(m[0])}</span>`;
             },
             _dashRecent(mgr) {
@@ -1984,7 +1989,7 @@
                 const sum = a => a.reduce((s, p) => s + Number(p.amount || 0), 0);
                 if (!['budgetOwner', 'ed', 'finance', 'finance_manager', 'GrantsCompliance'].includes(role)) {
                     return `<div class="kpis">
-                        ${this._dashKpi('conceptNote', 'My concept notes', myCNs.length, myCNs.filter(c => c.status === 'pending').length + ' waiting for approval', '', "app.showView('conceptNote')")}
+                        ${this._dashKpi('conceptNote', 'My concept notes', myCNs.length, myCNs.filter(c => c.status === 'returned').length ? myCNs.filter(c => c.status === 'returned').length + ' returned to you' : myCNs.filter(c => c.status === 'pending').length + ' waiting for approval', myCNs.some(c => c.status === 'returned') ? 'warn' : '', "app.showView('myConceptNotes')")}
                         ${this._dashKpi('payment', 'Advances to retire', unretired.length, unretired.length ? this._nairaShort(sum(unretired)) + ' to account for' : 'All retired', unretired.length ? 'warn' : '', "app.showView('retirement')")}
                         ${this._dashKpi('clock', 'Overdue retirements', overdue.length, overdue.length ? 'Retire these first' : 'None overdue', overdue.length ? 'bad' : '', "app.showView('retirement')")}
                         ${this._dashKpi('money', 'Paid to me', this._nairaShort(sum(myPays.filter(p => p.status === 'paid'))), 'All time')}
@@ -2007,6 +2012,54 @@
                 </div>`;
             },
             // Staff: latest concept notes, payments and retirements, each opening its note
+            // ── My Concept Notes: every note the user raised, with where it is and what they can do ──
+            _mcnWhere(c) {
+                const who = { budgetOwner: 'Budget Owner', ed: 'ED', procurement: 'Procurement', security: 'Security', finance: 'Finance' };
+                if (c.status === 'returned') return 'With you to correct';
+                if (c.status === 'pending') return 'With the ' + (who[c.currentApprover] || c.currentApprover || 'approver');
+                if (c.status === 'security_review') return 'Security clearance';
+                if (c.status === 'variance_review') return 'Cost above approved: with the ' + (who[c.currentApprover] || 'approver');
+                return '';
+            },
+            _mcnGroup(c) {
+                if (c.status === 'returned') return 'action';
+                if (['pending', 'security_review', 'variance_review', 'variance_rejected'].includes(c.status)) return 'waiting';
+                if (['rejected', 'cancelled', 'withdrawn'].includes(c.status)) return 'stopped';
+                if (c.status === 'closed') return 'closed';
+                return 'approved';
+            },
+            renderMyConceptNotes(content) {
+                content = content || document.getElementById('mainContent');
+                const f = this._mcnF = this._mcnF || { g: 'all', q: '', p: '' };
+                const all = (this.data.conceptNotes || []).filter(c => c.staffName === this.currentUser)
+                    .sort((a, b) => new Date(b.submittedDate || 0) - new Date(a.submittedDate || 0));
+                const paid = ref => (this.data.payments || []).filter(p => p.conceptNoteRef === ref && p.status === 'paid').reduce((t, p) => t + Number(p.amount || 0), 0);
+                const groups = [['all', 'All'], ['action', 'Returned to me'], ['waiting', 'Waiting for approval'], ['approved', 'Approved / in progress'], ['closed', 'Closed'], ['stopped', 'Rejected / cancelled']];
+                const count = g => g === 'all' ? all.length : all.filter(c => this._mcnGroup(c) === g).length;
+                const q = f.q.trim().toLowerCase();
+                const list = all.filter(c => (f.g === 'all' || this._mcnGroup(c) === f.g) && (!f.p || c.projectCode === f.p)
+                    && (!q || [c.refNumber, c.activityTitle, c.projectCode].some(x => String(x || '').toLowerCase().includes(q))));
+                const projects = [...new Set(all.map(c => c.projectCode).filter(Boolean))].sort();
+                const N = n => '₦' + Number(n || 0).toLocaleString();
+                const act = c => {
+                    if (c.status === 'returned') return `<button class="action-btn approve" onclick="event.stopPropagation();app.editReturnedCN('${c.refNumber}')">✏️ Edit &amp; resubmit</button>`;
+                    if (c.status === 'pending' && ['budgetOwner', 'ed'].includes(c.currentApprover) && !c.budgetOwnerApprovedBy) return `<button class="action-btn" onclick="event.stopPropagation();app.staffTakeBackCN('${c.refNumber}')">✏️ Edit</button>`;
+                    return '';
+                };
+                content.innerHTML = `<div class="header" style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+                        <div><h2>My Concept Notes</h2><p>Every concept note you raised: where it is, and what you can still do.</p></div>
+                        <button class="btn btn-primary" onclick="app.showView('conceptNote')">+ New concept note</button></div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${groups.map(([g, l]) => `<button type="button" onclick="app._mcnF.g='${g}';app.renderMyConceptNotes()" style="padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${f.g === g ? '#285B3C' : '#D1D5DB'};background:${f.g === g ? '#285B3C' : '#fff'};color:${f.g === g ? '#fff' : (g === 'action' && count(g) ? '#B45309' : '#374151')};${count(g) || g === 'all' ? '' : 'opacity:.5;'}">${l} (${count(g)})</button>`).join('')}</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                        <input id="mcnQ" placeholder="Search reference or title" value="${escHtml(f.q)}" oninput="app._mcnF.q=this.value;clearTimeout(app._mcnT);app._mcnT=setTimeout(()=>{app.renderMyConceptNotes();const e=document.getElementById('mcnQ');if(e){e.focus();e.setSelectionRange(e.value.length,e.value.length);}},250)" style="flex:1;min-width:200px;padding:9px 12px;border:1px solid var(--border,#ddd);border-radius:8px;">
+                        <select onchange="app._mcnF.p=this.value;app.renderMyConceptNotes()" style="padding:9px 12px;border:1px solid var(--border,#ddd);border-radius:8px;"><option value="">All projects</option>${projects.map(p => `<option ${f.p === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}</select></div>
+                    ${list.length ? `<div class="table-container"><table><thead><tr><th>Reference</th><th>Activity</th><th>Project</th><th>Amount</th><th>Paid</th><th>Submitted</th><th>Status</th><th></th></tr></thead><tbody>
+                        ${list.map(c => `<tr style="cursor:pointer;" onclick="app.viewConceptNoteDetails('${c.refNumber}')"><td><b>${escHtml(c.refNumber)}</b></td><td>${escHtml(c.activityTitle || '')}</td><td>${escHtml(c.projectCode || '')}</td>
+                            <td>${N(c.estimatedCost)}</td><td>${paid(c.refNumber) ? N(paid(c.refNumber)) : '—'}</td><td>${c.submittedDate ? new Date(c.submittedDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</td>
+                            <td>${this._dashStatusPill(c.status)}${this._mcnWhere(c) ? `<div style="font-size:11px;color:${c.status === 'returned' ? '#B45309' : '#6B7280'};margin-top:3px;">${escHtml(this._mcnWhere(c))}</div>` : ''}${c.status === 'returned' && c.returnReason ? `<div style="font-size:11px;color:#92400E;margin-top:2px;max-width:220px;">"${escHtml(c.returnReason)}"</div>` : ''}</td>
+                            <td style="white-space:nowrap;">${act(c)}</td></tr>`).join('')}</tbody></table></div>`
+                        : `<div style="padding:30px;text-align:center;color:#6B7280;background:#fff;border-radius:12px;">${all.length ? 'No concept notes match.' : 'You have not raised any concept notes yet.'}</div>`}`;
+            },
             _dashRecentList() {
                 const list = this.getRecentActivity().slice(0, 5);
                 if (!list.length) return '<div style="font-size:13px;color:var(--text-muted);padding:20px 0;">Nothing yet. Create a concept note to get started.</div>';
@@ -2169,7 +2222,7 @@
                         <div class="panel"><h3>${seesBudget ? 'Spending, all projects' : ['finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? 'Payments, all projects' : 'Paid to you'} <span class="h-note">last 6 months</span></h3>${this._dashTrend(['budgetOwner', 'ed', 'finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? this.data.payments : myPayments)}</div>
                         ${seesBudget ? `<div class="panel"><h3><span class="dash-tabs"><button type="button" class="on" onclick="app._dashTab(this,'q')">Waiting for you</button><button type="button" onclick="app._dashTab(this,'p')">Recent payments</button></span> <a href="#" onclick="app._nextMode=null;app.showView('approvals');return false;">View all ›</a></h3><div data-tab="q"><div id="dashQueue">${this._dashQueueHtml()}</div></div><div data-tab="p" style="display:none;">${this._dashRecent(true)}</div></div>`
                         : approver ? `<div class="panel"><h3>Waiting for you <a href="#" onclick="app._nextMode=null;app.showView('approvals');return false;">View all ›</a></h3><div id="dashQueue">${this._dashQueueHtml()}</div></div>`
-                                   : `<div class="panel"><h3>My recent activity <a href="#" onclick="app.showView('conceptNote');return false;">New concept note ›</a></h3>${this._dashRecentList()}</div>`}
+                                   : `<div class="panel"><h3>My recent activity <span><a href="#" onclick="app.showView('myConceptNotes');return false;">All my concept notes ›</a> &nbsp; <a href="#" onclick="app.showView('conceptNote');return false;">New ›</a></span></h3>${this._dashRecentList()}</div>`}
                     </div>
                     ${seesBudget ? `<div class="panel" style="margin-bottom:16px;"><h3>Project budgets <span class="h-note">used = paid + approved and held</span></h3>${this._dashBudget()}</div>` : ''}
                     ${['procurement', 'finance', 'finance_manager', 'GrantsCompliance', 'budgetOwner', 'ed'].includes(role) ? `<details class="panel" id="dashAlertDetails" style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;">Vendor signatures and procurement retirements</summary><div style="margin-top:12px;">${this._grrSignBox()}${this._procRetDueBox()}</div></details>` : ''}
@@ -4563,6 +4616,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     const a = k === 'implementation_date' ? norm(pv[k]).slice(0, 10) : norm(pv[k]), b = k === 'implementation_date' ? norm(cn[k]).slice(0, 10) : norm(cn[k]);
                     if (a !== b) rows.push(`<tr><td style="padding:4px 8px;font-weight:600;vertical-align:top;">${l}</td><td style="padding:4px 8px;color:#B71C1C;text-decoration:line-through;vertical-align:top;">${escHtml(a) || '—'}</td><td style="padding:4px 8px;color:#1B5E20;vertical-align:top;">${escHtml(b) || '—'}</td></tr>`);
                 });
+                if (pv.requiresProcurement && cn.requiresProcurement && pv.requiresProcurement !== cn.requiresProcurement) rows.push(`<tr><td style="padding:4px 8px;font-weight:600;">Procurement needed</td><td style="padding:4px 8px;color:#B71C1C;text-decoration:line-through;">${pv.requiresProcurement === 'yes' ? 'Yes' : 'No'}</td><td style="padding:4px 8px;color:#1B5E20;font-weight:700;">${cn.requiresProcurement === 'yes' ? 'Yes' : 'No'}</td></tr>`);
                 if (Number(pv.estimatedCost) !== Number(cn.estimatedCost)) rows.push(`<tr><td style="padding:4px 8px;font-weight:600;">Amount</td><td style="padding:4px 8px;color:#B71C1C;text-decoration:line-through;">₦${Number(pv.estimatedCost || 0).toLocaleString()}</td><td style="padding:4px 8px;color:#1B5E20;font-weight:700;">₦${Number(cn.estimatedCost || 0).toLocaleString()}</td></tr>`);
                 const L = t => norm(t).split('\n').map(x => x.replace(/^\s*\d+\.\s*/, '').trim()).filter(Boolean);
                 const was = L(pv.budgetBreakdown), now = L(cn.budgetBreakdown);
@@ -4827,8 +4881,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 set('#objective', cn.objective); set('#description', cn.description);
                 set('#implementation_date', cn.implementation_date ? String(cn.implementation_date).slice(0, 10) : '');
                 set('[name="requiresProcurement"]', cn.requiresProcurement || 'yes'); set('#travelRequiredSelect', cn.travelRequired || 'no');
-                // Project, procurement and travel stay as approved: changing them needs a new concept note
-                ['#projectCode', '[name="requiresProcurement"]', '#travelRequiredSelect'].forEach(q => { const el = document.querySelector(q); if (el) { el.disabled = true; el.title = 'Cannot be changed when correcting'; } });
+                // Project and travel stay as they were: changing them needs a new concept note. Procurement can change (it goes back for approval).
+                ['#projectCode', '#travelRequiredSelect'].forEach(q => { const el = document.querySelector(q); if (el) { el.disabled = true; el.title = 'Cannot be changed when correcting'; } });
                 try { if (cn.travelDetailsJson) { app._travelDetails = JSON.parse(cn.travelDetailsJson); this._refreshTravelSummary(); const b = document.getElementById('travelSummaryBox'); if (b && cn.travelRequired === 'yes') b.style.display = ''; } } catch (e) {}
                 const lines = String(cn.budgetBreakdown || '').split('\n').map(l => l.match(/^\s*\d+\.\s*(?:\[(.+?)\]\s*)?(.+?):\s*₦([\d,.]+)\s*×\s*([\d.]+)\s*qty\s*×\s*([\d.]+)\s*freq/)).filter(Boolean);
                 lines.forEach((m, k) => {
@@ -4848,11 +4902,12 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const fields = {
                     activityTitle: formData.get('activityTitle') || '', objective: formData.get('objective') || '', description: formData.get('description') || '',
                     costClassification: formData.get('costClassification') || '', implementation_date: formData.get('implementation_date') || '',
-                    budgetBreakdown: this.getCNBudgetLinesText() || '', estimatedCost: String(amount), staffSignatureData: sigData
+                    budgetBreakdown: this.getCNBudgetLinesText() || '', estimatedCost: String(amount), staffSignatureData: sigData,
+                    requiresProcurement: formData.get('requiresProcurement') || cn.requiresProcurement || ''
                 };
                 const { data: target, error } = await supabaseClient.rpc('staff_resubmit_cn', { p_ref: cn.refNumber, p_fields: fields });
                 if (error) { if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Resubmit Corrected Concept Note'; } alert(error.message); return; }
-                await this._logAudit('concept_notes', cn.refNumber, 'resubmitted_after_return', `Corrected and resubmitted by ${this.currentUser}. Amount ₦${Number(cn.estimatedCost).toLocaleString()} → ₦${amount.toLocaleString()}. Sent to ${target}.`);
+                await this._logAudit('concept_notes', cn.refNumber, 'resubmitted_after_return', `Corrected and resubmitted by ${this.currentUser}. Amount ₦${Number(cn.estimatedCost).toLocaleString()} → ₦${amount.toLocaleString()}.${fields.requiresProcurement && fields.requiresProcurement !== cn.requiresProcurement ? ' Procurement needed: ' + (cn.requiresProcurement || '—') + ' → ' + fields.requiresProcurement + '.' : ''} Sent to ${target}.`);
                 for (const n of Object.entries(this.data.roles).filter(([, r]) => r === target).map(([n]) => n))
                     await this.createNotification(n, `Concept note ${cn.refNumber} was corrected and resubmitted by ${this.currentUser}.`, 'info', cn.refNumber);
                 this._editingCN = null; app._travelDetails = null;
