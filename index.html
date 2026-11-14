@@ -2130,7 +2130,7 @@
                 const safe = p => p.then(r => (r && !r.error && Array.isArray(r.data)) ? r.data : [], () => []);
                 const [plans, fleet, store, gaps] = await Promise.all([
                     this._ppRoles().includes(role) ? safe(supabaseClient.from('procurement_plans').select('ref,status,created_by')) : [],
-                    safe(supabaseClient.from('fleet_requests').select('ref,status,approver,excess_approver,requested_by').in('status', ['pending', 'approved', 'returned', 'excess_review', 'completed'])),
+                    safe(supabaseClient.from('fleet_requests').select('ref,status,approver,excess_approver,requested_by').in('status', ['pending', 'security_review', 'approved', 'returned', 'excess_review', 'completed'])),
                     safe(supabaseClient.from('store_requests').select('ref,status,approver,requested_by').in('status', ['pending', 'approved', 'released'])),
                     ['procurement', 'budgetOwner', 'ed'].includes(role) ? safe(supabaseClient.from('fleet_gaps').select('id,status,approver').in('status', ['open', 'explained', 'rejected'])) : []]);
                 const extra = [];
@@ -7718,7 +7718,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                                     + `<div style="font-size:10px;color:#777;margin-top:3px;">${D(x.signedAt)}${x.usedAt && new Date(x.signedAt) - new Date(x.usedAt) > 3600000 ? `<br><i>Signed after the step (step done ${D(x.usedAt)})</i>` : ''}</div></div>`;
                             }).join('') + '</div>';
                         };
-                        if (fr.length) reqSection += '<h2>VEHICLE REQUEST: SIGNED APPROVALS</h2>' + fr.map(r => `<p style="font-size:12px;margin:8px 0 2px;"><b>${escHtml(r.ref)}</b> · ${escHtml(r.purpose || '')}${r.destination ? ' (' + escHtml(r.destination) + ')' : ''} · ${D(r.depart_at)} to ${D(r.return_at)} · requested ${N(r.amount)}${r.actual_cost != null ? ' · actual ' + N(r.actual_cost) : ''}${r.charge_amount != null ? ' · charged ' + N(r.charge_amount) : ''}</p>` + boxes(r.ref)).join('');
+                        if (fr.length) reqSection += '<h2>VEHICLE REQUEST: SIGNED APPROVALS</h2>' + fr.map(r => `<p style="font-size:12px;margin:8px 0 2px;"><b>${escHtml(r.ref)}</b> · ${escHtml(r.purpose || '')}${r.destination ? ' (' + escHtml(r.destination) + ')' : ''} · ${D(r.depart_at)} to ${D(r.return_at)} · requested ${N(r.amount)}${r.actual_cost != null ? ' · actual ' + N(r.actual_cost) : ''}${r.charge_amount != null ? ' · charged ' + N(r.charge_amount) : ''}${r.security_status === 'cleared' ? ' · security: ' + escHtml(r.security_risk || '') + ' risk, route ' + escHtml(r.security_route || '') : ''}</p>` + boxes(r.ref)).join('');
                         if (sr.length) reqSection += '<h2>STORE ITEMS USED FOR THIS ACTIVITY: SIGNED APPROVALS</h2>' + sr.map(r => { const it = items[r.item_id] || {}; return `<p style="font-size:12px;margin:8px 0 2px;"><b>${escHtml(r.ref)}</b> · ${Number(r.released_qty ?? r.quantity).toLocaleString()} ${escHtml(it.unit || '')} of ${escHtml(it.name || 'item')} · ${escHtml(r.purpose || '')} · requested by ${escHtml(r.requested_by)} · ${escHtml(r.status)}${r.evidence_url ? ` · <a href="${escHtml(r.evidence_url)}">evidence of use</a>` : ''}</p>` + boxes(r.ref); }).join('');
                     }
                 } catch (e) { reqSection = ''; }
@@ -9260,7 +9260,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             _fleetAccountEditor() { return this.getUserRole() === 'budgetOwner'; },                     // RAHAMA's receiving account
             _fleetOverseer() { return ['procurement', 'ed', 'budgetOwner', 'finance', 'finance_manager', 'GrantsCompliance'].includes(this.getUserRole()); },
             _frStatus(s) {
-                return ({ pending: ['Waiting for approval', '#FFF8E1', '#B45309'], approved: ['Approved: waiting for a vehicle', '#E3F2FD', '#1B4D8E'],
+                return ({ pending: ['Waiting for approval', '#FFF8E1', '#B45309'], security_review: ['With Security for clearance', '#EDE7F6', '#4527A0'], approved: ['Approved: waiting for a vehicle', '#E3F2FD', '#1B4D8E'],
                     assigned: ['Vehicle assigned', '#E8F5E9', '#1B5E20'], out: ['On the road', '#EDE7F6', '#4527A0'], returned: ['Back: cost to record', '#FFF8E1', '#B45309'],
                     excess_review: ['Excess waiting for approval', '#FFF3E0', '#E65100'], completed: ['Completed: charge to send', '#E3F2FD', '#1B4D8E'], charged: ['Charged to Finance', '#F1F8E9', '#33691E'],
                     rejected: ['Not approved', '#FFEBEE', '#B91C1C'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] })[s] || [s, '#F3F4F6', '#6B7280'];
@@ -9269,10 +9269,17 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     : s === 'excess_review' && r ? [r.excess_approver === 'ed' ? 'Excess with ED (pre-signed by BO)' : 'Excess with Budget Owner', '#FFF3E0', '#E65100'] : this._frStatus(s); return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;">${t}</span>`; },
             _dt(v) { return v ? new Date(v).toLocaleString('en-NG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''; },
             // What is waiting for the person logged in
+            // Security clears the trip; the ED does it for a security officer's own trip when there is no other officer
+            _frCanClear(r) {
+                if (r.status !== 'security_review' || r.requested_by === this.currentUser) return false;
+                if (this._isSecurityOfficer()) return true;
+                return this.getUserRole() === 'ed' && !(this.data.securityOfficers || []).some(n => n !== r.requested_by);
+            },
             _frWaitsForMe(r) {
                 const role = this.getUserRole();
                 if (r.status === 'pending') return r.requested_by !== this.currentUser && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver);
                 if (r.status === 'excess_review') return role === r.excess_approver && r.requested_by !== this.currentUser;
+                if (r.status === 'security_review') return this._frCanClear(r);
                 if (role === 'procurement') return ['approved', 'returned', 'completed'].includes(r.status);
                 return false;
             },
@@ -9424,8 +9431,17 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 if (r.status === 'pending' && !mine && (r.approver === 'procurement' ? this._procStepMine(r.proc_reviewed_by) : role === r.approver)) actions += panel(procReview ? 'Your review' : 'Your decision', `<div style="display:flex;gap:10px;flex-wrap:wrap;">
                     <button class="btn btn-primary" ${!procReview && r.approver === 'procurement' && !(r.vehicle_id && r.driver_id) ? 'disabled style="opacity:.55;cursor:not-allowed;"' : ''} onclick="app.decideVehicleRequest('${r.ref}','approve'${procReview ? ",true" : ''})">${procReview ? '✓ Reviewed: send to ' + escHtml(this._procNames('approver')) : r.approver === 'procurement' ? (r.vehicle_id && r.driver_id ? '✓ Checked: send to the Budget Owner' : 'Assign the vehicle and driver below first') : `✓ Approve (holds ${this._money(r.amount)} on ${escHtml(r.project_code)})`}</button>
                     <button class="btn btn-secondary" style="color:#B91C1C;border-color:#B91C1C;" onclick="app.decideVehicleRequest('${r.ref}','reject')">✗ Not approved</button></div>`);
-                const preAssign = isProc && r.status === 'pending' && ((r.approver === 'procurement' && !procReview && this._procStepMine(r.proc_reviewed_by)) || (['budgetOwner', 'ed'].includes(r.approver) && r.proc_approved_by));
-                if (isProc && (preAssign || ['approved', 'assigned'].includes(r.status))) actions += panel(preAssign ? (r.vehicle_id ? '🚙 Vehicle and driver for the Budget Owner (change if needed)' : '🚙 Assign the vehicle and driver (the Budget Owner sees them before approving)') : r.status === 'approved' ? '🚙 Assign a vehicle and driver' : '🚙 Change vehicle or driver', `
+                if (this._frCanClear(r)) actions += panel('🛡️ Security clearance for this trip', `
+                    <div style="font-size:12px;color:#555;margin-bottom:10px;">Approved by ${escHtml(r.decided_by || '')}. Check the destination, dates, passengers and the vehicle, then clear it with your advice or deny it. On clearance the trip is booked and the requester gets your advice.</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div><label style="font-size:12px;font-weight:600;">Risk level *</label><select id="frSecRisk" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Select risk level</option><option value="Low">🟢 Low: routine travel, no known threat</option><option value="Medium">🟡 Medium: proceed with stated precautions</option><option value="High">🔴 High: significant risk</option></select></div>
+                        <div><label style="font-size:12px;font-weight:600;">Approved route *</label><input id="frSecRoute" value="${escHtml(r.destination ? 'Office → ' + r.destination + ' → Office' : '')}" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"></div></div>
+                    <label style="font-size:12px;font-weight:600;display:block;margin-top:10px;">Security advice *</label>
+                    <textarea id="frSecAdvice" rows="4" placeholder="Movement times, checkpoints, contacts, check-in times, no-go areas, curfew…" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"></textarea>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"><button class="btn btn-primary" onclick="app.clearVehicleTrip('${r.ref}','clear')">🛡️ Clear and sign</button>
+                    <button class="btn btn-secondary" style="color:#B91C1C;border-color:#B91C1C;" onclick="app.clearVehicleTrip('${r.ref}','deny')">✗ Deny clearance</button></div>`);
+                const preAssign = (isProc && r.status === 'security_review') || isProc && r.status === 'pending' && ((r.approver === 'procurement' && !procReview && this._procStepMine(r.proc_reviewed_by)) || (['budgetOwner', 'ed'].includes(r.approver) && r.proc_approved_by));
+                if (isProc && (preAssign || ['approved', 'assigned'].includes(r.status))) actions += panel(preAssign ? (r.status === 'security_review' ? '🚙 Vehicle and driver (trip waiting for security clearance; change if needed)' : r.vehicle_id ? '🚙 Vehicle and driver for the Budget Owner (change if needed)' : '🚙 Assign the vehicle and driver (the Budget Owner sees them before approving)') : r.status === 'approved' ? '🚙 Assign a vehicle and driver' : '🚙 Change vehicle or driver', `
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <select id="frVeh" style="padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Vehicle…</option>${freeV.map(x => `<option value="${x.id}" ${x.id === r.vehicle_id ? 'selected' : ''}>${escHtml(x.name)}${x.plate ? ' (' + escHtml(x.plate) + ')' : ''}</option>`).join('')}</select>
                     <select id="frDrv" style="padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Driver…</option>${freeD.map(x => `<option value="${x.id}" ${x.id === r.driver_id ? 'selected' : ''}>${escHtml(x.name)}</option>`).join('')}</select></div>
@@ -9451,7 +9467,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     <button class="btn btn-secondary" style="color:#B91C1C;border-color:#B91C1C;" onclick="app.decideVehicleExcess('${r.ref}','reject')">✗ Charge only what was requested</button></div>`);
                 if (isProc && r.status === 'completed') actions += panel('💳 Send the charge to Finance', `<div style="font-size:13px;margin-bottom:8px;">${this._money(r.charge_amount)} on ${escHtml(r.cn_ref || '')}, paid to RAHAMA's account as a normal payment (no retirement).</div>
                     <button class="btn btn-primary" onclick="app.pushVehicleCharge('${r.ref}')">Send to Finance</button>`);
-                if ((mine || role === 'procurement' || role === 'budgetOwner') && ['pending', 'approved', 'assigned'].includes(r.status)) actions += `<div style="margin-top:14px;"><button class="btn btn-secondary" style="font-size:12px;" onclick="app.decideVehicleRequest('${r.ref}','cancel')">Cancel this request</button></div>`;
+                if ((mine || role === 'procurement' || role === 'budgetOwner') && ['pending', 'security_review', 'approved', 'assigned'].includes(r.status)) actions += `<div style="margin-top:14px;"><button class="btn btn-secondary" style="font-size:12px;" onclick="app.decideVehicleRequest('${r.ref}','cancel')">Cancel this request</button></div>`;
                 const stageName = { depart: 'Leaving', arrive: 'Arrived at destination', leave: 'Leaving destination', return: 'Back' };
                 const logsHtml = logs.length ? `<h3 style="font-family:'Plus Jakarta Sans',sans-serif;margin:20px 0 8px;">Odometer log</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;">
                     ${logs.map(l => `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;"><a href="${l.photo}" target="_blank"><img src="${l.photo}" alt="odometer" style="width:100%;height:110px;object-fit:cover;border-radius:6px;"></a>
@@ -9476,6 +9492,10 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                         ${r.actual_cost != null ? kv('Actual cost charged', this._money(r.actual_cost)) : ''}
                         ${kv('Staff Portal trip', r.portal_trip_id ? '🔗 ' + escHtml(r.portal_trip_label || ('Trip ' + r.portal_trip_id)) : '—')}
                     </div>
+                    ${r.security_status === 'cleared' ? `<div style="background:#EDE7F6;border:1px solid #B39DDB;border-radius:12px;padding:12px 16px;margin-top:14px;font-size:13px;">
+                        <div style="font-weight:700;color:#4527A0;margin-bottom:6px;">🛡️ Security clearance: ${escHtml(r.security_risk || '')} risk</div>
+                        <div><b>Approved route:</b> ${escHtml(r.security_route || '')}</div><div style="margin-top:4px;white-space:pre-wrap;"><b>Advice:</b> ${escHtml(r.security_advice || '')}</div>
+                        <div style="font-size:11px;color:#6B7280;margin-top:6px;">Cleared by ${escHtml(r.security_by || '')} · ${this._dt(r.security_at)}</div></div>` : ''}
                     ${r.trip_notes ? `<div style="font-size:13px;margin-top:12px;"><b>Notes:</b> ${escHtml(r.trip_notes)}</div>` : ''}
                     ${r.cn_ref || r.payment_ref ? `<div style="font-size:13px;margin-top:10px;">${r.cn_ref ? `Concept note: <a href="#" onclick="app.viewConceptNoteDetails('${escHtml(r.cn_ref)}');return false;">${escHtml(r.cn_ref)}</a>` : ''}${r.payment_ref ? ` · Payment to RAHAMA: <b>${escHtml(r.payment_ref)}</b>` : ''}${r.excess_note ? `<div style="color:#555;">${escHtml(r.excess_note)}</div>` : ''}</div>` : ''}
                     ${logsHtml}
@@ -9498,7 +9518,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 return true;
             },
             _stepLabels() { return { vr_request: 'Requested by', vr_proc_review: 'Procurement: reviewed', vr_proc_approve: 'Procurement: checked, vehicle and driver assigned',
-                            vr_bo: 'Budget Owner: approved', vr_ed: 'Executive Director: approved', vr_reject: 'Not approved', vr_trip_cost: 'Procurement: actual trip cost',
+                            vr_bo: 'Budget Owner: approved', vr_ed: 'Executive Director: approved', vr_reject: 'Not approved', vr_trip_cost: 'Procurement: actual trip cost', vr_security: 'Security: cleared', vr_security_deny: 'Security: clearance denied',
                             vr_excess_bo: 'Budget Owner: excess cost approved', vr_excess_ed: 'Executive Director: excess cost approved', vr_excess_reject: 'Excess cost not approved',
                             sr_request: 'Requested by', sr_bo: 'Budget Owner: approved', sr_ed: 'Executive Director: approved', sr_proc_review: 'Procurement: reviewed',
                             sr_proc_release: 'Procurement: released', sr_reject: 'Declined', sr_received: 'Requester: items received', sr_ev_submit: 'Requester: evidence of use',
@@ -9523,6 +9543,26 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     await this._logAudit(ref.startsWith('VR-') ? 'fleet_requests' : 'store_requests', ref, 'signature_added', ctx);
                     if (ref.startsWith('VR-')) await this.viewFleetRequest(ref); else await this.renderStore(document.getElementById('mainContent'), 'requests');
                 } catch (e) { alert('Could not add the signature: ' + (e.message || e)); }
+            },
+            async clearVehicleTrip(ref, decision) {
+                const risk = this._fVal('frSecRisk'), route = (this._fVal('frSecRoute') || '').trim();
+                let advice = (this._fVal('frSecAdvice') || '').trim();
+                if (decision === 'clear') {
+                    if (!risk || !route || !advice) { alert('Risk level, approved route and security advice are all required.'); return; }
+                } else {
+                    const why = prompt('Reason for denying security clearance (shown to the requester):\n\nThe trip is cancelled, the vehicle freed and the concept note cancelled.', advice);
+                    if (why === null) return; if (!why.trim()) { alert('Give the reason.'); return; }
+                    advice = why.trim();
+                }
+                if (!await this._signStep(ref, decision === 'clear' ? 'vr_security' : 'vr_security_deny', 'Security Clearance',
+                    decision === 'clear' ? `have assessed trip ${ref} and grant clearance at ${risk} risk, subject to the route and advice stated.` : `deny security clearance for trip ${ref}: ${advice}`)) return;
+                try {
+                    const { error } = await supabaseClient.rpc('clear_vehicle_trip', { p_ref: ref, p_decision: decision, p_risk: risk || null, p_route: route || null, p_advice: advice });
+                    if (error) throw error;
+                    await this._logAudit('fleet_requests', ref, 'vehicle_security_' + decision, decision === 'clear' ? `${risk} risk. Route: ${route}` : advice);
+                    alert(decision === 'clear' ? 'Cleared. The trip is booked and the requester has your advice.' : 'Clearance denied. The trip is cancelled.');
+                    await this._loadFleet(); await this.viewFleetRequest(ref);
+                } catch (e) { alert('Could not save: ' + (e.message || e)); }
             },
             async decideVehicleRequest(ref, decision, isReview) {
                 let note = '';
@@ -9762,7 +9802,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
             _fleetWaitingBox() {
                 setTimeout(async () => {
                     const el = document.getElementById('fleetWaitingBox'); if (!el) return;
-                    const { data } = await supabaseClient.from('fleet_requests').select('*').in('status', ['pending', 'approved', 'returned', 'excess_review', 'completed']).order('depart_at');
+                    const { data } = await supabaseClient.from('fleet_requests').select('*').in('status', ['pending', 'security_review', 'approved', 'returned', 'excess_review', 'completed']).order('depart_at');
                     const list = (data || []).filter(r => this._frWaitsForMe(r));
                     const role = this.getUserRole();
                     const { data: gd } = ['procurement', 'budgetOwner', 'ed'].includes(role) ? await supabaseClient.from('fleet_gaps').select('id,status,approver,km').in('status', ['open', 'explained', 'rejected']).then(r => r, () => ({ data: [] })) : { data: [] };
@@ -10031,23 +10071,43 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     await this.renderStore(document.getElementById('mainContent'), 'stock');
                 } catch (e) { alert('Could not add to the store: ' + (e.message || e)); }
             },
-            openStoreRequestForm(itemId) {
+            async openStoreRequestForm(itemId) {
                 const it = ((this._store && this._store.stock) || []).find(x => x.item_id === itemId); if (!it) return;
-                const mine = this.data.conceptNotes.filter(c => c.projectCode === it.project_code && !['rejected', 'cancelled', 'withdrawn', 'closed'].includes(c.status)
-                    && (c.staffName === this.currentUser || this._storeOverseer())).slice(0, 80);
+                // Own approved activities; a colleague's activity is added by typing its reference (no browsing)
+                const own = this.data.conceptNotes.filter(c => c.projectCode === it.project_code && ['approved', 'variance_review'].includes(c.status) && c.staffName === this.currentUser).slice(0, 80);
+                this._srOtherRef = null;
+                const cnOptions = (own.length ? `<optgroup label="My activities">${own.map(c => `<option value="${escHtml(c.refNumber)}">${escHtml(c.refNumber)} · ${escHtml((c.activityTitle || '').slice(0, 60))}</option>`).join('')}</optgroup>` : '')
+                    + `<option value="__other">A colleague's activity: I have its reference…</option>`;
                 const inner = `<p style="font-size:13px;margin:0 0 12px;"><b>${escHtml(it.name)}</b> · ${escHtml(it.project_code)} · ${this._qty(it.available)} ${escHtml(it.unit || '')} can be requested (${this._qty(it.balance)} in the store, ${this._qty(it.pending_requests)} already asked for)</p>
                     <p style="font-size:12px;color:#555;margin:0 0 10px;">The Budget Owner approves, Procurement releases, and you confirm when you have the items. The store is updated when you confirm.</p>
                     ${this._fIn('srQty', 'How many? *', '', 'number', `min="0" max="${Number(it.available)}" step="any"`)}${this._fIn('srPurpose', 'What are they for? *', '')}
-                    <div style="margin-bottom:10px;"><label style="font-size:13px;font-weight:600;">Activity (concept note under ${escHtml(it.project_code)}) *</label><select id="srCn" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Choose…</option>${mine.map(c => `<option value="${escHtml(c.refNumber)}">${escHtml(c.refNumber)} · ${escHtml((c.activityTitle || '').slice(0, 60))}</option>`).join('')}</select></div>`;
+                    <div style="margin-bottom:10px;"><label style="font-size:13px;font-weight:600;">Activity (concept note under ${escHtml(it.project_code)}) *</label><select id="srCn" style="width:100%;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;"><option value="">Choose…</option>${cnOptions}</select>
+                        <div style="font-size:11px;color:#6B7280;margin-top:4px;">Only approved ${escHtml(it.project_code)} activities. For a colleague's activity, ask the activity lead for the concept note reference; they are told about your request.</div>
+                        <div id="srOtherBox" style="display:none;margin-top:8px;"><div style="display:flex;gap:6px;"><input id="srOtherRef" placeholder="Concept note reference, e.g. CN1781234567" style="flex:1;padding:9px;border:1px solid #ccc;border-radius:8px;font-size:13px;" onkeydown="if(event.key==='Enter'){event.preventDefault();app._srCheckRef('${escHtml(it.project_code)}');}">
+                        <button type="button" class="btn btn-secondary" style="padding:8px 14px;font-size:12px;" onclick="app._srCheckRef('${escHtml(it.project_code)}')">Check</button></div><div id="srOtherMsg" style="font-size:12px;margin-top:6px;"></div></div></div>`;
                 this._fleetModal('srOverlay', '📦 Ask for items from the store', inner, `app._submitStoreRequest(${itemId})`, 'Send for approval');
+                const sel = document.getElementById('srCn');
+                if (sel) sel.onchange = () => { const o = sel.value === '__other'; document.getElementById('srOtherBox').style.display = o ? '' : 'none'; if (o) document.getElementById('srOtherRef').focus(); };
             },
+            async _srCheckRef(project) {
+                const ref = (this._fVal('srOtherRef') || '').trim(), msg = document.getElementById('srOtherMsg');
+                this._srOtherRef = null; if (!ref) { msg.innerHTML = ''; return; }
+                msg.innerHTML = '<span style="color:#6B7280;">Checking…</span>';
+                const { data, error } = await supabaseClient.rpc('store_activity_lookup', { p_ref: ref, p_project: project });
+                const c = !error && data && data[0];
+                if (!c) { msg.innerHTML = `<span style="color:#B91C1C;">✗ No approved ${escHtml(project)} activity with that reference. Check it with the activity lead.</span>`; return; }
+                this._srOtherRef = c.refNumber;
+                msg.innerHTML = `<span style="color:#1B5E20;">✓ <b>${escHtml(c.refNumber)}</b> · ${escHtml(c.activityTitle || '')} (activity lead: ${escHtml(c.staffName || '')})</span>`;
+            },
+            _srCnRef() { const v = this._fVal('srCn'); return v === '__other' ? this._srOtherRef : v; },
             async _submitStoreRequest(itemId) {
                 const q = parseFloat(this._fVal('srQty')), purpose = this._fVal('srPurpose');
                 if (!(q > 0) || !purpose) { alert('Enter the quantity and what they are for.'); return; }
-                if (!this._fVal('srCn')) { alert('Choose the activity (concept note) the items are for. Items can only be used for activities under the same project.'); return; }
-                if (!await this._signStep('pending:sr', 'sr_request', 'Requester Signature', `request ${q} item(s) from the store for ${purpose} (${this._fVal('srCn')}).`)) return;
+                if (this._fVal('srCn') === '__other' && !this._srOtherRef) { alert('Type the colleague\'s concept note reference and press Check.'); return; }
+                if (!this._srCnRef()) { alert('Choose the activity (concept note) the items are for. Items can only be used for approved activities under the same project.'); return; }
+                if (!await this._signStep('pending:sr', 'sr_request', 'Requester Signature', `request ${q} item(s) from the store for ${purpose} (${this._srCnRef()}).`)) return;
                 try {
-                    const { data, error } = await supabaseClient.rpc('request_store_items', { p_item: itemId, p_qty: q, p_purpose: purpose, p_cn_ref: this._fVal('srCn') });
+                    const { data, error } = await supabaseClient.rpc('request_store_items', { p_item: itemId, p_qty: q, p_purpose: purpose, p_cn_ref: this._srCnRef() });
                     if (error) throw error;
                     await this._logAudit('store_requests', data, 'store_requested', `${q} of item ${itemId}`);
                     document.getElementById('srOverlay')?.remove();
