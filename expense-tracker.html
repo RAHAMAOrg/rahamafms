@@ -440,7 +440,7 @@ function expenseForm(rec){const h=document.getElementById('modalHost'),x=rec||{}
   if(isNaN(amt)){msg('Enter the amount.');return}
   const row={project_name:g('fp'),expense_date:d||null,budget_line:l||null,category:catOf(l)||null,voucher_ref:g('fv')||null,description:g('fn'),payee:g('fs')||null,amount:amt,expense_type:g('ft'),retirement_status:g('fr')||null,comment:g('fk')||null};
   // the month follows the date for new rows, and for edited rows only when the date is changed
-  if(!ed||d!==x.d)row.cost_month=ym(d);
+  // cost_month is worked out by the database from the date
   if(ed&&(x.c||'')===catOf(x.l||'')&&l===(x.l||''))delete row.category;
   try{const r=ed?await SB.from('fin_expenses').update(row).eq('id',x.id).select('id'):await SB.from('fin_expenses').insert({...row,source:'Finance entry'}).select('id');
    if(r.error)throw r.error;if(!r.data||!r.data.length)throw new Error('the database did not accept the change (check your Finance access)');
