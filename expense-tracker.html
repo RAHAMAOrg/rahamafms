@@ -104,13 +104,13 @@ const nextM=m=>m%100===12?m+89:m+1;
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const catOf=l=>!l?'':/^admin/i.test(l)?'ADMIN':(/^[14]\./.test(l)?l.slice(0,3):l[0]);
 const SB=supabase.createClient("https://sqygmoxpegbfxddglhbx.supabase.co","sb_publishable__nPBgo9IeeU4Mrk_ggEeTg_YEkWrB24");
-let CAN_WRITE=false,PROJ_LIST=[],QUEUE=[];
+let CAN_WRITE=false,PROJ_LIST=[],QUEUE=[],QERR='';
 const fromDb=r=>({id:r.id,p:r.project_name,d:r.expense_date||'',m:r.cost_month||0,l:r.budget_line||'',c:r.category||catOf(r.budget_line||''),v:r.voucher_ref||'',n:r.description||'',s:r.payee||'',a:Number(r.amount||0),t:r.expense_type,r:r.retirement_status||'',o:r.source||'',k:r.comment||''});
 async function pageAll(q){let out=[],from=0;for(;;){const {data,error}=await q().range(from,from+999);if(error)throw error;out=out.concat(data||[]);if(!data||data.length<1000)break;from+=1000}return out}
 async function loadAll(){
  const [ex,pr,bl,qu]=await Promise.all([pageAll(()=>SB.from('fin_expenses').select('*').order('id')),SB.from('fin_projects').select('*'),SB.from('fin_budget_lines').select('*').order('sort_order',{nullsFirst:false}).order('category_key'),
   SB.from('fin_fms_queue').select('*').eq('status','pending').order('queued_at').then(r=>r,()=>({data:[]}))]);
- QUEUE=(qu&&!qu.error&&qu.data)||[];
+ QUEUE=(qu&&!qu.error&&qu.data)||[];QERR=qu&&qu.error?(qu.error.message||String(qu.error)):'';
  if(pr.error)throw pr.error;
  BASE=ex.map(fromDb);dbRows=[];SET={};PROJ_LIST=(pr.data||[]).map(p=>p.project_name);
  (pr.data||[]).forEach(p=>{SET[p.project_name]={project:p.project_name,budget:Number(p.direct_budget||0),cash:Number(p.cash_received||0),start:p.start_month||0,dur:p.duration_months||0,idc:Number(p.indirect_rate||0),opening:Number(p.opening_spend||0),cats:[]}});
@@ -143,7 +143,7 @@ function filt(skip){let q=st.q.toLowerCase();return base().filter(r=>(skip==='ty
 const sum=(a,f)=>a.reduce((s,r)=>s+(f?f(r):r.a),0);
 const grp=(a,k,v)=>{const o={};a.forEach(r=>{const x=k(r);o[x]=(o[x]||0)+(v?v(r):r.a)});return o};
 // ---------- UI shell
-const NAV=[['dash','Dashboard'],['ledger','Expense list'],['confirm','To confirm'],['budget','Budgets and cash'],['history','Change history'],['notes','Data notes']];
+const NAV=[['dash','Dashboard'],['ledger','Expense list'],['week','Weekly'],['confirm','To confirm'],['budget','Budgets and cash'],['history','Change history'],['notes','Data notes']];
 function drawNav(){document.getElementById('nav').innerHTML=NAV.map(([k,l])=>`<button data-v="${k}" aria-current="${st.view===k}">${k==='confirm'&&QUEUE.length?l+' ('+QUEUE.length+')':l}</button>`).join('');document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{st.view=b.dataset.v;save();render()})}
 function save(){try{localStorage.setItem('rahama_slicers',JSON.stringify({proj:st.proj,view:st.view}))}catch(e){}}
 function tog(arr,v){const i=arr.indexOf(v);i<0?arr.push(v):arr.splice(i,1)}
@@ -246,6 +246,53 @@ function view(){const v=document.getElementById('view');
  if(st.view==='notes')notes(v);
  if(st.view==='history')historyView(v);
  if(st.view==='confirm')confirmView(v);
+ if(st.view==='week')weekView(v);
+}
+// ---------- Weekly transactions (Monday to Sunday, by expense date)
+const isoD=t=>new Date(t).toISOString().slice(0,10);
+const dUTC=s=>{const [y,m,d]=String(s).slice(0,10).split('-').map(Number);return Date.UTC(y,(m||1)-1,d||1)};
+const monOf=t=>{const d=new Date(t),w=(d.getUTCDay()+6)%7;return t-w*864e5};
+function wkStart(){if(!st.week){const n=new Date();st.week=isoD(monOf(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate())))}return st.week}
+const DN=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const fmtD=t=>{const d=new Date(t);return d.getUTCDate()+' '+MN[d.getUTCMonth()]+' '+d.getUTCFullYear()};
+function wkLabel(w){const a=dUTC(w);return 'Week of '+fmtD(a).replace(/ \d{4}$/,'')+' to '+fmtD(a+6*864e5)}
+function rowsNoMonth(){const k=[st.from,st.to];st.from=0;st.to=999999;try{return filt()}finally{[st.from,st.to]=k}}
+function weekView(v){
+ const w=wkStart(),a=dUTC(w),b=a+7*864e5;
+ const R=rowsNoMonth(),inW=r=>{if(!r.d)return false;const t=dUTC(r.d);return t>=a&&t<b};
+ const W=R.filter(inW).sort((x,y)=>x.d.localeCompare(y.d)||y.a-x.a);
+ const noDate=R.filter(r=>!r.d).length;
+ const Q=QUEUE.filter(q=>st.proj.includes(q.project_name)&&q.expense_date&&dUTC(q.expense_date)>=a&&dUTC(q.expense_date)<b);
+ // last 12 weeks ending at the selected week
+ const weeks=[];for(let i=11;i>=0;i--)weeks.push(a-i*7*864e5);
+ const tot=weeks.map(t=>sum(R.filter(r=>r.d&&dUTC(r.d)>=t&&dUTC(r.d)<t+7*864e5)));
+ const prev=sum(R.filter(r=>r.d&&dUTC(r.d)>=a-7*864e5&&dUTC(r.d)<a));
+ const days={};W.forEach(r=>{(days[r.d]=days[r.d]||[]).push(r)});
+ const tw=sum(W),ch=prev?Math.round((tw-prev)/prev*100):null;
+ v.innerHTML=`<div class="card" style="margin-bottom:12px"><div class="srow" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+   <div class="srow" style="gap:6px"><button class="btn" id="wkP" aria-label="Previous week">‹ Previous</button><b style="font-family:var(--f1);font-size:15px;padding:0 6px">${wkLabel(w)}</b><button class="btn" id="wkN" aria-label="Next week">Next ›</button><button class="btn" id="wkT">This week</button></div>
+   <div class="srow" style="gap:6px"><label style="min-width:auto">Go to</label><input type="date" id="wkD" value="${w}" aria-label="Go to the week of a date"><button class="btn" id="wkCsv">Download this week (CSV)</button></div></div></div>
+  <div class="kpis"><div class="kpi"><small>Transactions</small><b>${W.length}</b><i>${Object.keys(days).length} day(s) with spending</i></div>
+   <div class="kpi"><small>Total spent</small><b>₦${N(tw)}</b><i>${ch===null?'nothing the week before':(ch>=0?'▲ ':'▼ ')+Math.abs(ch)+'% on the week before (₦'+N(prev)+')'}</i></div>
+   <div class="kpi"><small>Direct</small><b>₦${N(sum(W.filter(r=>r.t==='Direct')))}</b><i>against the budget lines</i></div>
+   <div class="kpi"><small>Outside budget</small><b>₦${N(sum(W.filter(r=>r.t==='Outside budget')))}</b><i>${(n=>n+(n===1?' entry':' entries'))(W.filter(r=>r.t==='Outside budget').length)}</i></div>
+   <div class="kpi"><small>FMS payments to confirm</small><b>${Q.length}</b><i>${Q.length?'₦'+N(Q.reduce((s,q)=>s+Number(q.amount||0),0))+' paid this week, not yet in the totals':'none waiting for this week'}</i></div></div>
+  <div class="grid"><div class="card s12"><h3>Last 12 weeks<span>click a bar to open that week</span></h3><div class="cv"><canvas id="cw"></canvas></div></div>
+  <div class="card s12"><h3>${W.length} transactions · ₦${N(tw)}<span>${esc(st.proj.join(', '))}${noDate?' · '+noDate+' entries have no date and are not shown':''}</span></h3>
+  ${W.length?`<div class="tw"><table><thead><tr><th>Date</th><th>Project</th><th>Line</th><th>Voucher / CN</th><th>Description</th><th>Staff / supplier</th><th class="n">Amount (₦)</th><th>Type</th><th>Source</th></tr></thead><tbody>
+   ${Object.keys(days).sort().map(d=>`<tr><td colspan="9" style="background:var(--g3);font-weight:700">${DN[(new Date(dUTC(d)).getUTCDay()+6)%7]} ${fmtD(dUTC(d))}<span class="sub" style="float:right">${days[d].length} · ₦${N(sum(days[d]))}</span></td></tr>`
+    +days[d].map(r=>`<tr class="${r.t==='Outside budget'?'out':''}"><td style="white-space:nowrap">${esc(r.d)}</td><td>${esc(r.p)}</td><td>${esc(r.l)}</td><td>${esc(r.v)}</td><td>${esc(r.n)}</td><td>${esc(r.s)}</td><td class="n">${N(r.a)}</td><td>${esc(r.t)}</td><td>${esc(r.o)}</td></tr>`).join('')).join('')}
+   </tbody></table></div>`:'<div class="empty">No transactions dated this week for the projects and filters chosen.</div>'}
+  ${Q.length?`<p class="note" style="margin-top:10px"><b>Waiting to be confirmed:</b> ${Q.map(q=>esc(q.payment_ref)+' (₦'+N(q.amount)+', '+esc(q.payee||'')+')').join(', ')}. ${CAN_WRITE?'<a href="#" id="wkQ">Open To confirm ›</a>':''}</p>`:''}</div></div>`;
+ const o=baseOpts();o.plugins.legend.display=false;o.onClick=(e,els)=>{if(els.length){st.week=isoD(weeks[els[0].index]);render()}};
+ mk('cw',{type:'bar',data:{labels:weeks.map(t=>fmtD(t).replace(/ \d{4}$/,'')),datasets:[{data:tot,backgroundColor:weeks.map(t=>t===a?css('--g'):css('--g2')),borderRadius:4}]},options:o});
+ const go=t=>{st.week=isoD(t);render()};
+ document.getElementById('wkP').onclick=()=>go(a-7*864e5);document.getElementById('wkN').onclick=()=>go(a+7*864e5);
+ document.getElementById('wkT').onclick=()=>{st.week=null;render()};
+ document.getElementById('wkD').onchange=e=>{if(e.target.value)go(monOf(dUTC(e.target.value)))};
+ const qa=document.getElementById('wkQ');if(qa)qa.onclick=e=>{e.preventDefault();st.view='confirm';render()};
+ document.getElementById('wkCsv').onclick=()=>{const cols=['d','p','l','v','n','s','a','t','o','k'];const csv=[['Date','Project','Line','Voucher','Description','Supplier','Amount','Type','Source','Comment'].join(',')].concat(W.map(r=>cols.map(c=>'"'+String(r[c]==null?'':r[c]).replace(/"/g,'""')+'"').join(','))).join('\n');
+  try{const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='rahama_expenses_week_'+w+'.csv';x.click();toast('CSV ready')}catch(e){toast('Download failed')}};
 }
 // ---------- FMS payments waiting for Finance to confirm
 function confirmView(v){
@@ -258,6 +305,7 @@ function confirmView(v){
    <select id="qt${i}" aria-label="Type">${TYPES.map(t=>`<option>${t}</option>`).join('')}</select><input id="ql${i}" list="qll${i}" placeholder="Budget line" aria-label="Budget line"><datalist id="qll${i}">${((SET[r.project_name]||{}).cats||[]).map(c=>`<option value="${esc(c[0])}">${esc(c[0]+' · '+(c[1]||''))}</option>`).join('')}</datalist>
    <input id="qk${i}" placeholder="Comment (reason needed to remove)" aria-label="Comment" style="grid-column:span 2">
    <button class="btn pri" data-qc="${i}">Confirm</button><button class="btn" data-qr="${i}">Remove</button></div></td>`:''}</tr>`).join('')}</tbody></table></div>`
+ :QERR?`<div class="empty" style="color:#B91C1C">The list could not be read: ${esc(QERR)}<br><span class="sub">${/fin_fms_queue|does not exist|schema cache/i.test(QERR)?'The FMS link is not installed: run expense_tracker_fms_link.sql in the FMS Supabase SQL editor.':'Send this message to whoever maintains the FMS.'}</span></div>`
  :'<div class="empty">Nothing waiting. New FMS payments appear here once they are marked paid.</div>'}</div>`;
  const busy=b=>{v.querySelectorAll('[data-qc],[data-qr]').forEach(x=>x.disabled=b)};
  v.querySelectorAll('[data-qc]').forEach(b=>b.onclick=async()=>{const i=+b.dataset.qc,r=L[i],line=document.getElementById('ql'+i).value.trim();busy(true);
@@ -403,9 +451,10 @@ function expenseForm(rec){const h=document.getElementById('modalHost'),x=rec||{}
 document.getElementById('addBtn').onclick=()=>expenseForm(null);
 document.getElementById('csvBtn').onclick=async()=>{const F=filt();const cols=['p','d','m','l','v','n','s','a','t','r','o','k'];const csv=[['Project','Date','Month','Line','Voucher','Description','Supplier','Amount','Type','Retirement','Source','Comment'].join(',')].concat(F.map(r=>cols.map(c=>'"'+String(r[c]==null?'':r[c]).replace(/"/g,'""')+'"').join(','))).join('\n');
  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='rahama_expenses.csv';a.click();toast('CSV ready')}catch(e){toast('Download failed')}};
-function render(light){document.getElementById('ttl').textContent={dash:'Expense dashboard',ledger:'Expense list',confirm:'FMS payments to confirm',history:'Change history',budget:'Budgets and cash',notes:'Data notes'}[st.view];
+function render(light){document.getElementById('ttl').textContent={dash:'Expense dashboard',ledger:'Expense list',week:'Weekly transactions',confirm:'FMS payments to confirm',history:'Change history',budget:'Budgets and cash',notes:'Data notes'}[st.view];
  document.getElementById('sub').textContent=st.proj.join(' · ')+' · '+ML(st.from)+' to '+ML(st.to);
  drawNav();if(!light||true){drawSlicers()}const qv=st.view==='confirm'||st.view==='history';document.getElementById('slicers').style.display=qv?'none':'';['csvBtn','resetBtn'].forEach(id=>document.getElementById(id).style.display=qv?'none':'');
+ if(st.view==='week'){['mf','mt'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.display='none';const n=e.nextElementSibling;if(n&&n.tagName==='SPAN')n.style.display='none'}});const mfr=document.getElementById('mf');const lb=mfr&&mfr.parentElement.querySelector('label');if(lb&&/month/i.test(lb.textContent))lb.style.display='none';document.getElementById('sub').textContent=st.proj.join(' · ')+' · '+wkLabel(wkStart())}
  if(qv)document.getElementById('sub').textContent=st.view==='history'?'Every edit and deletion of an expense, newest first':'Payments marked paid in the FMS, waiting for Finance';view();
  const q=document.getElementById('q');if(q&&light&&document.activeElement===document.body){}
 }
