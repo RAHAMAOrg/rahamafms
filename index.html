@@ -6535,7 +6535,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         const poSteps = [
                             { ctx: 'procurement_po',  label: 'Procurement raises PO' },
                             { ctx: 'staff_po',        label: 'Staff signs PO' },
-                            { ctx: 'budget_owner_po', label: cn.forwardedToED ? 'ED authorises PO' : 'Budget Owner authorises PO' },
+                            { ctx: 'budget_owner_po', label: 'Budget Owner / ED authorises PO' },
                             { ctx: 'finance_sign',    label: 'Finance confirms PO' },
                         ];
                         const grrSteps = [
@@ -7911,7 +7911,14 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 <div style="margin-bottom:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;">PO Signing Chain</div>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
                     ${sigBlock('1. Staff (Requester)', poStaffSig, cn.staffName, null)}
-                    ${poRounds.length ? sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, null, null) : sigBlock(cn.forwardedToED ? '2. Executive Director' : '2. Budget Owner', poBoSig, cn.budgetOwnerApprovedBy || cn.approvedBy, cn.budgetOwnerSignedAt)}
+                    ${(() => {
+                        // Label the box by who actually signed, not by whether the note went to the ED:
+                        // the PO authorisation if there is one, otherwise the concept note approval shown in its place
+                        const fbName = poRounds.length ? null : (cn.budgetOwnerApprovedBy || cn.approvedBy);
+                        const edSigned = poBoSig ? poBoSig.signerRole === 'ed'
+                            : fbName ? (!cn.budgetOwnerApprovedBy && !!cn.forwardedToED) || (this.data.roles || {})[fbName] === 'ed' : !!cn.forwardedToED;
+                        return sigBlock(edSigned ? '2. Executive Director' : '2. Budget Owner', poBoSig, fbName, poRounds.length ? null : cn.budgetOwnerSignedAt);
+                    })()}
                     ${sigBlock('3. Finance', poFinSig, null, null)}
                 </div>
                 <h2 style="font-size:14px;border-bottom:2px solid #285B3C;padding-bottom:6px;margin-top:8px;color:#285B3C;">GRR — Goods/Services Receiving Report</h2>
