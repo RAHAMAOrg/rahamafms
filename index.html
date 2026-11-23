@@ -2014,7 +2014,7 @@
             // Staff: latest concept notes, payments and retirements, each opening its note
             // ── My Concept Notes: every note the user raised, with where it is and what they can do ──
             _mcnWhere(c) {
-                const who = { budgetOwner: 'Budget Owner', ed: 'ED', procurement: 'Procurement', security: 'Security', finance: 'Finance' };
+                const who = { budgetOwner: 'Budget Owner', ed: 'ED', procurement: 'Procurement', security: 'Security', finance: 'Finance', committee: 'approvers before the PO (ED / procurement committee)' };
                 if (c.status === 'returned') return 'With you to correct';
                 if (c.status === 'pending') return 'With the ' + (who[c.currentApprover] || c.currentApprover || 'approver');
                 if (c.status === 'security_review') return 'Security clearance';
@@ -2500,7 +2500,7 @@
                             <div style="font-size:13px;white-space:pre-wrap;line-height:1.6;">${escHtml(cn.quoteExceptionReason)}</div>
                             <div style="font-size:11px;color:#6B7280;margin-top:8px;">Requested by ${cn.quoteExceptionRequestedBy||'—'}${cn.quoteExceptionApprovedBy?` · decided by ${cn.quoteExceptionApprovedBy}`:''}</div>
                             ${cn.quoteExceptionDeclineReason?`<div style="font-size:12px;color:#C62828;margin-top:8px;">Declined: ${escHtml(cn.quoteExceptionDeclineReason)}</div>`:''}
-                            ${(this.getUserRole()==='budgetOwner' && cn.quoteExceptionStatus==='pending') ? `<div style="display:flex;gap:10px;margin-top:14px;">
+                            ${(this.getUserRole()==='ed' && cn.quoteExceptionStatus==='pending' && cn.staffName !== this.currentUser) ? `<div style="display:flex;gap:10px;margin-top:14px;">
                                 <button type="button" class="btn btn-primary" onclick="app.resolveQuoteException('${cn.refNumber}', true)">✓ Approve Exception</button>
                                 <button type="button" class="btn btn-secondary" style="border-color:var(--danger);color:var(--danger);" onclick="app.resolveQuoteException('${cn.refNumber}', false)">✗ Decline</button>
                             </div>` : ''}
@@ -3014,7 +3014,7 @@
                 // request stands, not just a Create PO button that will refuse.
                 if (cn.quoteExceptionStatus === 'pending') {
                     return '<div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:10px 12px;max-width:210px;">'
-                         + '<div style="font-size:11px;font-weight:700;color:#E65100;">⏳ 3-Quote Exception — awaiting Budget Owner</div>'
+                         + '<div style="font-size:11px;font-weight:700;color:#E65100;">⏳ 3-Quote Exception — awaiting ED</div>'
                          + '<div style="font-size:11px;color:#BF360C;margin-top:4px;">' + (cn.quoteExceptionReason || '').slice(0,90) + '</div></div>'
                          + '<button class="action-btn" onclick="app.viewConceptNoteDetails(\'' + cn.refNumber + '\')" style="border-color:var(--primary);color:var(--primary);font-size:12px;margin-top:6px;">📄 View Request</button>';
                 }
@@ -4178,9 +4178,9 @@ if (role === 'procurement') {
         || !!cn.financeRejectionReason; // finance-rejected always shows
 });
                 const allCNs = this.data.conceptNotes;
-                // 3-quote exceptions awaiting the Budget Owner
-                const exceptionQueue = role === 'budgetOwner'
-                    ? this.data.conceptNotes.filter(cn => cn.quoteExceptionStatus === 'pending')
+                // 3-quote exceptions awaiting the ED (Procurement Policy 2026, 3.2 f)
+                const exceptionQueue = role === 'ed'
+                    ? this.data.conceptNotes.filter(cn => cn.quoteExceptionStatus === 'pending' && cn.staffName !== this.currentUser)
                     : [];
                 // POs awaiting Finance confirmation. Signature state is resolved
                 // asynchronously after render, so the list appears immediately.
@@ -4304,7 +4304,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const procReqHtml = role === 'procurement' ? (await procReqP) + this._grrSignBox() : '';
                 content.innerHTML = `
                     <div class="header"><h2>My Approvals</h2><p>Items requiring your review and approval</p></div>
-                    ${this._ppWaitingBox()}${this._fleetWaitingBox()}${this._storeWaitingBox()}
+                    ${this._committeeBox()}${this._ppWaitingBox()}${this._fleetWaitingBox()}${this._storeWaitingBox()}
                     ${procReqHtml}
                     ${pendingConceptNotes.length === 0 && pendingPayments.length === 0 && pendingRetirements.length === 0 ? `<div class="empty-state"><h3>No pending approvals</h3><p>You don't have any items waiting for your approval.</p></div>` : ''}
                     ${(() => {
@@ -4544,7 +4544,11 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const reject = '<button class="action-btn reject" onclick="app.rejectConceptNote(\'' + cn.refNumber + '\')">✗ Reject</button>'
                     + (cn.status === 'pending' ? '<button class="action-btn" onclick="app.approverReturnCN(\'' + cn.refNumber + '\')" style="border-color:#B45309;color:#B45309;">↩ Send back for correction</button>' : '');
                 const parts = [];
-                if (cn.status === 'variance_review' && this._varianceIsMine(cn) && cn.staffName !== me) {
+                if (this._committeeMine(cn)) {
+                    parts.push({ t: this._poTierLabel(cn.poCommitteeTier) + ': PO of ₦' + Number(cn.poCommitteeTotal || 0).toLocaleString(),
+                        b: '<button class="action-btn approve" onclick="app.committeeSign(\'' + cn.refNumber + '\')">✍️ Sign to approve</button>'
+                         + '<button class="action-btn reject" onclick="app.committeeReject(\'' + cn.refNumber + '\')">↩ Send back to Procurement</button>' });
+                } else if (cn.status === 'variance_review' && this._varianceIsMine(cn) && cn.staffName !== me) {
                     const _boPre = role === 'budgetOwner' && Number(cn.actualProcurementCost || 0) > this._boLimit(cn);
                     parts.push({ t: (cn.varianceBoSignedBy ? 'PO cost above the approved amount, pre-signed by ' + escHtml(cn.varianceBoSignedBy) + ': approve or reject' : 'PO cost above the approved amount: approve or reject') + (_boPre ? ' (above your limit: your approval is a pre-signature, the ED approves)' : ''),
                         b: '<button class="action-btn approve" onclick="app.resolveVarianceEscalation(\'' + cn.refNumber + '\', \'approve\')">✓ Approve variance</button>'
@@ -4559,7 +4563,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 } else if (role === 'procurement' && cn.currentApprover === 'procurement' && cn.status === 'pending') {
                     parts.push({ t: 'Procurement action', b: this._renderProcurementActions(cn) + this._procReturnButtons(cn) });
                 }
-                if (role === 'budgetOwner' && cn.quoteExceptionStatus === 'pending')
+                if (role === 'ed' && cn.quoteExceptionStatus === 'pending' && cn.staffName !== me)
                     parts.push({ t: '3-quote exception requested' + (cn.quoteExceptionReason ? ': "' + escHtml(String(cn.quoteExceptionReason).slice(0, 160)) + '"' : ''),
                         b: '<button class="action-btn approve" onclick="app.resolveQuoteException(\'' + cn.refNumber + '\', true)">✓ Approve exception</button>'
                          + '<button class="action-btn reject" onclick="app.resolveQuoteException(\'' + cn.refNumber + '\', false)">✗ Decline exception</button>' });
@@ -5010,11 +5014,11 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
 
                     ${cn.quoteExceptionStatus === 'approved' ? `
                     <div style="background:#F1F8F4;border:2px solid #A5D6A7;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
-                        <div style="font-weight:700;color:#1B5E20;font-size:13px;">✓ 3-Quote Exception Approved by ${cn.quoteExceptionApprovedBy||'Budget Owner'}</div>
+                        <div style="font-weight:700;color:#1B5E20;font-size:13px;">✓ 3-Quote Exception Approved by ${cn.quoteExceptionApprovedBy||'ED'}</div>
                         <div style="font-size:12px;color:#2E7D32;margin-top:4px;">${escHtml(cn.quoteExceptionReason||'')}</div>
                     </div>` : cn.quoteExceptionStatus === 'pending' ? `
                     <div style="background:#FFF8E1;border:2px solid #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
-                        <div style="font-weight:700;color:#E65100;font-size:13px;">⏳ 3-Quote Exception awaiting Budget Owner approval</div>
+                        <div style="font-weight:700;color:#E65100;font-size:13px;">⏳ 3-Quote Exception awaiting ED approval</div>
                         <div style="font-size:12px;color:#BF360C;margin-top:4px;">${escHtml(cn.quoteExceptionReason||'')}</div>
                     </div>` : `
                     <div style="background:#FFF8E1;border:1px dashed #FFD54F;border-radius:12px;padding:16px 20px;margin-bottom:20px;">
@@ -5022,13 +5026,13 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             <input type="checkbox" id="qaLimitedMarket" onchange="app._onLimitedMarketToggle(this.checked)" style="margin-top:3px;width:16px;height:16px;cursor:pointer;">
                             <span>
                                 <span style="font-weight:700;color:#E65100;font-size:13px;">Fewer than 3 providers exist for this service</span>
-                                <span style="display:block;font-size:12px;color:#BF360C;margin-top:3px;">Tick this if a limited market or sole source means 3 competing quotes can't be obtained. The Budget Owner must approve before a PO can be raised.</span>
+                                <span style="display:block;font-size:12px;color:#BF360C;margin-top:3px;">Tick this if a limited market or sole source means 3 competing quotes can't be obtained. The ED must approve before a PO can be raised.</span>
                             </span>
                         </label>
                         <div id="qaLimitedMarketBox" style="display:none;margin-top:12px;">
                             <label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">How many providers exist, and why aren't the others viable? <span style="color:var(--danger)">*</span></label>
                             <textarea id="qaLimitedMarketReason" rows="3" placeholder="e.g. Only two radio stations broadcast in Zango and Kankia; both have quoted. No other station reaches these communities." style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
-                            <button type="button" onclick="app.requestQuoteException('${refNumber}')" style="margin-top:10px;padding:10px 18px;background:#E65100;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Send to Budget Owner for Approval</button>
+                            <button type="button" onclick="app.requestQuoteException('${refNumber}')" style="margin-top:10px;padding:10px 18px;background:#E65100;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Send to ED for Approval</button>
                         </div>
                     </div>`}
 
@@ -5545,8 +5549,14 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             </div>
                         </div>
                         <p style="font-size:12px;color:#4338CA;margin-top:12px;font-style:italic;">
-                            ℹ️ The price you enter per vendor below is locked once the PO is generated. Purchases over ₦500,000 require at least 3 vendor quotes. If the total exceeds the estimated budget by more than 20%, this will be sent to the Budget Owner for approval before a PO can be generated.
+                            ℹ️ The price you enter per vendor below is locked once the PO is generated. Purchases over ₦500,000 require at least 3 vendor quotes. If the total exceeds the approved amount, it goes to the Budget Owner (and the ED above her limit) for approval before a PO can be generated. Above ₦1,000,000 the ED approves the quotation analysis, and above ₦5,000,000 the procurement committee signs, before the PO is created.
                         </p>
+                    </div>
+                    ${cn.poCommitteeStatus === 'rejected' && !cn.poNumber ? `<div style="background:#FEF2F2;border-left:4px solid #B91C1C;padding:10px 14px;border-radius:8px;margin:0 0 16px;font-size:13px;"><b>Sent back by the procurement committee (${escHtml(cn.poCommitteeRejectedBy || '')}):</b> ${escHtml(cn.poCommitteeRejectReason || '')}</div>` : ''}
+                    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:8px;padding:10px 14px;margin:0 0 16px;font-size:12px;color:#3730A3;">
+                        🏛️ When this PO takes the concept note above ₦1,000,000 (all its POs together), it is approved before it is created: the ED approves the quotation analysis above ₦1m; the procurement committee (Finance, Budget Owner, ED) signs above ₦5m; M&amp;E and HR also sign above ₦15m.
+                        <div style="margin-top:8px;"><b>Vendor sanctions screening record</b> (PDF or image, required above ₦1,000,000; Procurement Policy 5.3)${cn.sanctionsScreeningUrl ? ` · on file: <a href="${escHtml(cn.sanctionsScreeningUrl)}" target="_blank" rel="noopener">${escHtml(cn.sanctionsScreeningName || 'screening record')}</a> (choose a file to replace it)` : ''}
+                        <input type="file" id="sanctionsFile" accept=".pdf,image/*" style="display:block;margin-top:6px;font-size:12px;"></div>
                     </div>
 
                     <form class="form-grid" id="poCreationForm" onsubmit="app.submitPOCreation(event, '${refNumber}')">
@@ -5652,11 +5662,11 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         `${bigLines.map(v => `  • ${escHtml(v.name)} — ₦${(Number(v.amount||0)*(v.qty||1)).toLocaleString()}`).join('\n')}\n\n` +
                         `A single service of that value needs at least 3 competing quotes.\n\n` +
                         `If fewer than 3 providers exist, open Quotation Analysis and tick ` +
-                        `"Fewer than 3 providers exist for this service" to request Budget Owner approval.`);
+                        `"Fewer than 3 providers exist for this service" to request ED approval.`);
                     return;
                 }
                 if (bigLines.length > 0 && cn.quoteExceptionStatus === 'pending') {
-                    alert('The 3-quote exception is still awaiting Budget Owner approval. The PO can be raised once it is approved.');
+                    alert('The 3-quote exception is still awaiting ED approval. The PO can be raised once it is approved.');
                     return;
                 }
                 if (bigLines.length > 0 && cn.quoteExceptionStatus === 'declined') {
@@ -5709,6 +5719,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     );
                     if (justification === null) return;
                     if (!justification.trim()) { alert('A justification is required for any cost above the approved amount.'); return; }
+                    // Above ₦1m it will need approval before the PO, which needs the screening record
+                    if (!(await this._saveScreening(cn, (await this._poRoundsTotal(refNumber)) + total > this._COMMITTEE_LIMIT))) return;
 
                     try {
                         submitBtn.disabled = true; submitBtn.textContent = 'Escalating…';
@@ -5748,6 +5760,28 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                         submitBtn.disabled = false; submitBtn.textContent = 'Generate & Share PO(s) →';
                     }
                     return;
+                }
+
+                // Approval before the PO: above ₦1m (all POs on the note) the ED, above ₦5m the committee, above ₦15m with M&E and HR
+                {
+                    const earlier = await this._poRoundsTotal(refNumber);
+                    const cleared = cn.poCommitteeStatus === 'approved' && total <= Number(cn.poCommitteeTotal || 0) + 0.01;
+                    if (earlier + total > this._COMMITTEE_LIMIT && !cleared) {
+                        const tierLabel = this._poTierLabel(this._poTier(earlier + total));
+                        if (!confirm(`This PO (₦${total.toLocaleString()}${earlier ? ', with earlier POs on this note ₦' + (earlier + total).toLocaleString() : ''}) takes the concept note above ₦1,000,000.\n\n` +
+                            `It needs: ${tierLabel}, before the PO is created.\n\nSend it for approval now?`)) return;
+                        try {
+                            submitBtn.disabled = true; submitBtn.textContent = 'Sending for approval…';
+                            if (!(await this._saveScreening(cn, true))) return;
+                            if (app._multiServiceReason) await supabaseClient.from('concept_notes').update({ multiServiceJustification: app._multiServiceReason }).eq('refNumber', refNumber);
+                            app._multiServiceReason = null;
+                            await this._sendToCommittee(cn, JSON.stringify(vendors), notes);
+                            alert(`Sent for approval (${tierLabel}). The PO is created once all the signers have signed.`);
+                            this.showView('approvals');
+                        } catch (e) { alert('Not sent: ' + (e.message || e)); }
+                        finally { submitBtn.disabled = false; submitBtn.textContent = 'Generate & Share PO(s) →'; }
+                        return;
+                    }
                 }
 
                 try {
@@ -6523,7 +6557,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             if (s.docType === 'purchase_order') poSigs.push(s);
                             if (s.docType === 'grr') grrSigs.push(s);
                         });
-                        statusEl.innerHTML = `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => s.ctx === 'vendor_on_device' ? (() => {
+                        statusEl.innerHTML = this._committeeSummaryHtml(cn) + `<div style="background:#E8F5E9;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;"><div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#047857;margin-bottom:12px;">&#x1F4CB; Document Signing Progress</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;"><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purchase Order &mdash; ${cn.poNumber||'Pending'}</div>${poSteps.map(s => renderStep(s, poSigs)).join('')}</div><div><div style="font-size:11px;font-weight:700;color:#285B3C;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">GRR &mdash; ${cn.grrNumber||'Pending'}</div>${grrSteps.map(s => s.ctx === 'vendor_on_device' ? (() => {
                             const st = this._vendorGrrStatus(cn, allSigs);
                             return st.rows.map((r, i) => r.dup || (r.na && !r.sig) ? '' : r.online && !r.sig ? renderStep({ ctx: '__online', label: 'Vendor: ' + escHtml(r.name) + ' (online purchase, e-receipt)' }, [{ pageContext: '__online', signerName: 'Online', signedAt: new Date().toISOString() }])
                                 : renderStep({ ctx: '__v' + i, label: (st.multi ? 'Vendor signs own GRR: ' + escHtml(r.name) + (r.lines > 1 ? ' (' + r.lines + ' lines)' : '') : 'Vendor signs GRR') + (r.count > 1 ? ' (signed ' + r.count + ' times)' : '') }, r.sig ? [{ ...r.sig, pageContext: '__v' + i }] : [])
@@ -11354,12 +11388,12 @@ ${vendors.length > 1 ? `
             async requestQuoteException(refNumber) {
                 const why = (document.getElementById('qaLimitedMarketReason')?.value || '').trim();
                 if (why.length < 25) {
-                    alert('Please explain how many providers exist and why the others aren\'t viable.\n\nThis bypasses a procurement control, so the Budget Owner needs enough to decide on.');
+                    alert('Please explain how many providers exist and why the others aren\'t viable.\n\nThis bypasses a procurement control, so the ED needs enough to decide on.');
                     return;
                 }
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber);
                 if (!cn) { alert('Concept note not found.'); return; }
-                if (!confirm(`Send this to the Budget Owner for approval?\n\n"${why}"\n\nThe PO can't be raised until they approve it.`)) return;
+                if (!confirm(`Send this to the ED for approval?\n\n"${why}"\n\nThe PO can't be raised until they approve it.`)) return;
                 try {
                     const now = new Date().toISOString();
                     const { error } = await supabaseClient.from('concept_notes').update({
@@ -11371,7 +11405,7 @@ ${vendors.length > 1 ? `
                     if (error) throw error;
                     await this._logAudit('concept_notes', refNumber, 'quote_exception_requested',
                         `${this.currentUser} declared a limited market for ${escHtml(cn.activityTitle)}. Reason: ${why}`);
-                    const bos = Object.entries(this.data.roles).filter(([,r]) => r === 'budgetOwner').map(([n]) => n);
+                    const bos = Object.entries(this.data.roles).filter(([,r]) => r === 'ed').map(([n]) => n);
                     for (const bo of bos) {
                         await this.createNotification(bo,
                             `Procurement has requested a 3-quote exception on ${refNumber} (${escHtml(cn.activityTitle)}) — limited market. Approve or decline it from your Approvals screen.`,
@@ -11380,19 +11414,20 @@ ${vendors.length > 1 ? `
                     const li = this.data.conceptNotes.findIndex(x => x.refNumber === refNumber);
                     if (li !== -1) Object.assign(this.data.conceptNotes[li], { quoteExceptionStatus: 'pending', quoteExceptionReason: why, quoteExceptionRequestedBy: this.currentUser });
                     this.clearCache();
-                    alert('Sent to the Budget Owner.\n\nYou can still enter the quotes you do have — the PO can be raised once the exception is approved.');
+                    alert('Sent to the ED.\n\nYou can still enter the quotes you do have — the PO can be raised once the exception is approved.');
                     await this.loadData();
                     this.showView('approvals');
                 } catch(e) { alert('Error: ' + e.message); }
             },
 
-            // Budget Owner decides on a 3-quote exception. Procurement can't
-            // self-certify a control bypass.
+            // The ED decides on a 3-quote exception (Procurement Policy 2026, 3.2 f).
+            // Procurement can't self-certify a control bypass.
             async resolveQuoteException(refNumber, approve) {
-                if (this.getUserRole() !== 'budgetOwner') { alert('Only the Budget Owner can decide this.'); return; }
+                if (this.getUserRole() !== 'ed') { alert('Only the ED can decide this.'); return; }
                 const cn = this.data.conceptNotes.find(c => c.refNumber === refNumber)
                         || (await supabaseClient.from('concept_notes').select('*').eq('refNumber', refNumber).single()).data;
                 if (!cn) { alert('Concept note not found.'); return; }
+                if (cn.staffName === this.currentUser) { alert('You cannot decide an exception on a concept note you raised.'); return; }
                 const now = new Date().toISOString();
                 if (approve) {
                     const sig = await this._showSignaturePad('Approve 3-Quote Exception',
@@ -11405,7 +11440,7 @@ ${vendors.length > 1 ? `
                     }).eq('refNumber', refNumber);
                     await supabaseClient.from('document_signatures').insert([{
                         docRef: refNumber, docType: 'quote_exception', relatedRef: refNumber,
-                        signerName: this.currentUser, signerRole: 'budgetOwner',
+                        signerName: this.currentUser, signerRole: 'ed',
                         signatureData: sig, signedAt: now, pageContext: 'quote_exception'
                     }]);
                     await this._logAudit('concept_notes', refNumber, 'quote_exception_approved',
@@ -11627,6 +11662,167 @@ ${vendors.length > 1 ? `
             // AUDIT TRAIL VIEW
             // ══════════════════════════════════════════════════════════════
 
+            // ── Approval before a PO is created (fms_po_committee.sql): signers sign in any order ──
+            // Value bands (Procurement Policy 2026 as revised): above ₦1m the ED approves the quotation
+            // analysis; above ₦5m the procurement committee (Finance, BO, ED); above ₦15m also M&E and HR
+            _COMMITTEE_LIMIT: 1000000,
+            _poTier(cum) { return cum > 15000000 ? 3 : cum > 5000000 ? 2 : cum > 1000000 ? 1 : 0; },
+            _poTierLabel(t) { return { 1: 'ED approval of the quotation analysis (above ₦1m)', 2: 'Procurement committee (above ₦5m)', 3: 'Full procurement committee (above ₦15m)' }[t] || 'Approval before PO'; },
+            _committeeSeatName(seat) { return { Finance: 'Finance', Bo: 'Budget Owner', Ed: 'ED', Mne: 'M&E', Hr: 'HR' }[seat] || seat; },
+            // The seats that sign at a tier (the database decides; this mirrors it for the screen)
+            _committeeSeats(c) {
+                const t = Number(c.poCommitteeTier || 0), roles = this.data.roles || {};
+                if (t === 1) return roles[c.staffName] === 'ed' || roles[c.poCommitteeRequestedBy] === 'ed' ? ['Bo'] : ['Ed'];
+                return t >= 2 ? ['Finance', 'Bo', 'Ed'].concat(t === 3 ? ['Mne', 'Hr'] : []) : [];
+            },
+            _committeeSeat(c) {
+                const r = this.getUserRole(), extra = this._mySeatExtra ? this._mySeatExtra.charAt(0).toUpperCase() + this._mySeatExtra.slice(1) : null;
+                const seats = c ? this._committeeSeats(c) : null;
+                const cands = [extra, ['finance', 'finance_manager'].includes(r) ? 'Finance' : r === 'budgetOwner' ? 'Bo' : r === 'ed' ? 'Ed' : null].filter(Boolean);
+                if (!c) return cands[0] || null;
+                return cands.find(x => seats.includes(x) && !c['poCommittee' + x + 'By']) || null;
+            },
+            async _loadMySeat() {
+                if (this._mySeatLoaded) return;
+                try { const { data } = await supabaseClient.rpc('my_committee_seat'); this._mySeatExtra = data || null; } catch (e) {}
+                this._mySeatLoaded = true;
+            },
+            _committeeMine(c) {
+                const me = this.currentUser;
+                return c.currentApprover === 'committee' && c.poCommitteeStatus === 'pending' && c.staffName !== me && c.poCommitteeRequestedBy !== me
+                    && !!this._committeeSeat(c);
+            },
+            async _poRoundsTotal(ref) {
+                try { const { data, error } = await supabaseClient.from('cn_po_rounds').select('po_total').eq('concept_note_ref', ref); if (error) return 0;
+                      return (data || []).reduce((s, r) => s + Number(r.po_total || 0), 0); } catch (e) { return 0; }
+            },
+            async _committeeNotify(cn, msg, names) {
+                for (const n of (names || [])) if (n !== this.currentUser) await this.createNotification(n, msg, 'info', cn.refNumber);
+            },
+            // Send the PO to the committee instead of creating it (Procurement, or the BO/ED right after approving a cost increase)
+            // Upload the sanctions screening record chosen on the PO form (if any); returns false if one is needed and missing
+            async _saveScreening(cn, required) {
+                const f = document.getElementById('sanctionsFile')?.files?.[0];
+                if (!f) {
+                    if (required && !cn.sanctionsScreeningUrl) { alert('This PO takes the concept note above ₦1,000,000.\n\nAttach the vendor sanctions screening record (Procurement Policy 5.3) on this form first.'); return false; }
+                    return true;
+                }
+                const up = await this.uploadFile(f, 'procurement');
+                if (!up || !up.url) { alert('The sanctions screening record could not be uploaded. Try again.'); return false; }
+                const now = new Date().toISOString();
+                const { error } = await supabaseClient.from('concept_notes').update({ sanctionsScreeningUrl: up.url, sanctionsScreeningName: up.fileName || f.name, sanctionsScreenedBy: this.currentUser, sanctionsScreenedAt: now }).eq('refNumber', cn.refNumber);
+                if (error) { alert('The sanctions screening record was not saved: ' + error.message); return false; }
+                Object.assign(cn, { sanctionsScreeningUrl: up.url, sanctionsScreeningName: up.fileName || f.name, sanctionsScreenedBy: this.currentUser, sanctionsScreenedAt: now });
+                await this._logAudit('concept_notes', cn.refNumber, 'sanctions_screening_attached', `Vendor sanctions screening record attached by ${this.currentUser}.`);
+                return true;
+            },
+            async _sendToCommittee(cn, vendorsJson, notes) {
+                const total = (() => { try { return JSON.parse(vendorsJson).reduce((s, v) => s + Number(v.amount || 0) * (v.qty || 1), 0); } catch (e) { return 0; } })();
+                const { data, error } = await supabaseClient.rpc('po_committee_request', { p_ref: cn.refNumber, p_vendors: vendorsJson, p_notes: notes || null });
+                if (error) throw error;
+                const fresh = (await supabaseClient.from('concept_notes').select('*').eq('refNumber', cn.refNumber).single()).data;
+                const i = this.data.conceptNotes.findIndex(c => c.refNumber === cn.refNumber);
+                if (fresh) { if (i !== -1) this.data.conceptNotes[i] = fresh; else this.data.conceptNotes.push(fresh); }
+                this.clearCache();
+                const label = this._poTierLabel(data && data.tier);
+                await this._logAudit('concept_notes', cn.refNumber, 'po_committee_requested',
+                    `PO of ₦${total.toLocaleString()} sent for ${label} (all POs on the note ₦${Number(data && data.cumulative || total).toLocaleString()}).`);
+                await this._committeeNotify(fresh || cn, `PO for ${cn.refNumber} (${escHtml(cn.activityTitle || '')}), ₦${total.toLocaleString()}, needs your signature: ${label}. Open My Approvals.`, data && data.notify);
+                return data;
+            },
+            _committeeSummaryHtml(cn) {
+                if (!cn || !cn.poCommitteeStatus) return '';
+                const row = (seat, by, at) => `<div style="padding:4px 0;">${by ? '✅' : '◯'} ${this._committeeSeatName(seat)}${by ? ': <b>' + escHtml(by) + '</b> · ' + new Date(at).toLocaleString('en-GB') : ''}</div>`;
+                const st = { pending: 'Waiting for signatures', approved: 'Signed: PO created', rejected: 'Sent back to Procurement' }[cn.poCommitteeStatus] || cn.poCommitteeStatus;
+                return `<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:14px 18px;margin-bottom:12px;font-size:13px;">
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#3730A3;margin-bottom:6px;">${this._poTierLabel(cn.poCommitteeTier)}: ${st}</div>
+                    <div>PO of ₦${Number(cn.poCommitteeTotal || 0).toLocaleString()} sent by ${escHtml(cn.poCommitteeRequestedBy || '')}${cn.sanctionsScreeningUrl ? ` · <a href="${escHtml(cn.sanctionsScreeningUrl)}" target="_blank" rel="noopener">sanctions screening</a>` : ''}</div>
+                    ${this._committeeSeats(cn).map(x => row(x, cn['poCommittee' + x + 'By'], cn['poCommittee' + x + 'At'])).join('')}
+                    ${cn.poCommitteeStatus === 'rejected' ? `<div style="color:#B91C1C;">Sent back by ${escHtml(cn.poCommitteeRejectedBy || '')}: ${escHtml(cn.poCommitteeRejectReason || '')}</div>` : ''}</div>`;
+            },
+            _committeeBox() {
+                const role = this.getUserRole();
+                if (!['finance', 'finance_manager', 'budgetOwner', 'ed', 'procurement'].includes(role) && !this._mySeatExtra && this._mySeatLoaded) return '';
+                setTimeout(async () => {
+                    const el = document.getElementById('committeeBox'); if (!el) return;
+                    await this._loadMySeat();
+                    const signerRole = ['finance', 'finance_manager', 'budgetOwner', 'ed'].includes(role);
+                    if (!signerRole && role !== 'procurement' && !this._mySeatExtra) { el.innerHTML = ''; return; }
+                    let q = supabaseClient.from('concept_notes').select('*');
+                    q = role === 'procurement' ? q.in('poCommitteeStatus', ['pending', 'rejected']).eq('currentApprover', role === 'procurement' ? 'procurement' : 'committee')
+                                               : q.eq('currentApprover', 'committee').eq('poCommitteeStatus', 'pending');
+                    const { data, error } = await q;
+                    if (error) return;   // committee not set up yet
+                    let rows = data || [];
+                    if (role === 'procurement') {
+                        const { data: waiting } = await supabaseClient.from('concept_notes').select('*').eq('currentApprover', 'committee').eq('poCommitteeStatus', 'pending');
+                        rows = (waiting || []).concat(rows.filter(c => c.poCommitteeStatus === 'rejected' && !c.poNumber));
+                    }
+                    // M&E / HR representatives see only the POs they sign (above ₦15m)
+                    if (!signerRole && role !== 'procurement') { const x = this._mySeatExtra.charAt(0).toUpperCase() + this._mySeatExtra.slice(1); rows = rows.filter(c => this._committeeSeats(c).includes(x)); }
+                    rows.forEach(c => { const i = this.data.conceptNotes.findIndex(x => x.refNumber === c.refNumber); if (i !== -1) this.data.conceptNotes[i] = c; else this.data.conceptNotes.push(c); });
+                    if (!rows.length) { el.innerHTML = ''; return; }
+                    const sigs = c => this._committeeSeats(c).map(x => `<div style="white-space:nowrap;">${c['poCommittee' + x + 'By'] ? '<span style="color:#059669;">✓</span>' : '<span style="color:#9CA3AF;">◯</span>'} ${this._committeeSeatName(x)}${c['poCommittee' + x + 'By'] ? ': ' + escHtml(c['poCommittee' + x + 'By']) : ''}</div>`).join('');
+                    const vend = c => { let v = []; try { v = JSON.parse(c.poCommitteeVendorsJson || c.vendorsJson || '[]'); if (typeof v === 'string') v = JSON.parse(v); } catch (e) {}
+                        return (v || []).map(x => `${escHtml(x.name || '')}: ${escHtml(x.items || '')} · ₦${(Number(x.amount || 0) * (x.qty || 1)).toLocaleString()}`).join('<br>'); };
+                    el.innerHTML = `<div style="background:#EEF2FF;border:2px solid #6366F1;border-radius:12px;padding:20px;margin-bottom:28px;">
+                        <h3 style="font-family:'Plus Jakarta Sans', sans-serif;margin-bottom:6px;color:#3730A3;">🏛️ POs waiting for approval before they are created (${rows.length})</h3>
+                        <p style="font-size:13px;color:#4338CA;margin-bottom:14px;">Above ₦1m the ED approves the quotation analysis; above ₦5m Finance, the Budget Owner and the ED sign as the procurement committee; above ₦15m M&amp;E and HR also sign. In any order: the PO is created when the last one signs. Any signer can send it back to Procurement.</p>
+                        <div class="table-container"><table><thead><tr><th>Ref</th><th>Activity</th><th>Vendors</th><th>This PO</th><th>Approved</th><th>Signatures</th><th>Actions</th></tr></thead><tbody>
+                        ${rows.map(c => `<tr>
+                            <td><a href="#" onclick="event.preventDefault();app.viewConceptNote('${c.refNumber}')"><b>${escHtml(c.refNumber)}</b></a><div style="font-size:11px;color:#6B7280;">${escHtml(c.projectCode || '')}</div></td>
+                            <td>${escHtml(c.activityTitle || '')}<div style="font-size:11px;color:#6B7280;">Raised by ${escHtml(c.staffName || '')}${c.poCommitteeRequestedBy ? ' · sent by ' + escHtml(c.poCommitteeRequestedBy) : ''}</div></td>
+                            <td style="font-size:12px;">${vend(c)}${c.quotationAnalysisJson ? `<div><a href="#" onclick="event.preventDefault();app.showQuotationAnalysis('${c.refNumber}')">Quotation analysis</a></div>` : ''}${c.sanctionsScreeningUrl ? `<div><a href="${escHtml(c.sanctionsScreeningUrl)}" target="_blank" rel="noopener">Sanctions screening</a></div>` : ''}<div style="font-size:11px;color:#4338CA;margin-top:4px;">${this._poTierLabel(c.poCommitteeTier)}</div></td>
+                            <td style="font-weight:700;">₦${Number(c.poCommitteeTotal || 0).toLocaleString()}${Number(c.poCommitteeCumulative || 0) > Number(c.poCommitteeTotal || 0) + 0.01 ? `<div style="font-size:11px;color:#6B7280;font-weight:400;">All POs on the note: ₦${Number(c.poCommitteeCumulative).toLocaleString()}</div>` : ''}</td>
+                            <td>₦${Number(c.varianceApprovedAt ? c.actualProcurementCost : c.estimatedCost || 0).toLocaleString()}${c.varianceApprovedAt ? '<div style="font-size:11px;color:#B45309;">cost increase approved by ' + escHtml(c.varianceApprovedBy || '') + '</div>' : ''}</td>
+                            ${c.poCommitteeStatus === 'rejected'
+                                ? `<td style="color:#B91C1C;font-size:12px;">Sent back by ${escHtml(c.poCommitteeRejectedBy || '')}: ${escHtml(c.poCommitteeRejectReason || '')}</td>
+                                   <td><button class="action-btn approve" onclick="app.showPOCreationForm('${c.refNumber}')">✏️ Revise PO</button></td>`
+                                : `<td style="font-size:12px;">${sigs(c)}</td>
+                                   <td>${this._committeeMine(c) ? `<button class="action-btn approve" onclick="app.committeeSign('${c.refNumber}')">✍️ Sign</button><button class="action-btn reject" onclick="app.committeeReject('${c.refNumber}')">↩ Send back</button>` : '<span style="font-size:12px;color:#6B7280;">' + (role === 'procurement' ? 'Waiting for signatures' : Object.keys(c).some(k => /^poCommittee.+By$/.test(k) && c[k] === this.currentUser) ? 'You have signed' : 'Not for you to sign') + '</span>'}</td>`}
+                        </tr>`).join('')}</tbody></table></div></div>`;
+                }, 0);
+                return '<div id="committeeBox"></div>';
+            },
+            async committeeSign(ref) {
+                const cn = (await supabaseClient.from('concept_notes').select('*').eq('refNumber', ref).single()).data;
+                await this._loadMySeat();
+                if (!cn || !this._committeeMine(cn)) { alert('This PO is not waiting for your signature.'); return; }
+                const seat = this._committeeSeatName(this._committeeSeat(cn));
+                const sig = await this._showSignaturePad(this._poTierLabel(cn.poCommitteeTier),
+                    `I, ${this.currentUser}, sign as ${seat}${Number(cn.poCommitteeTier) >= 2 ? ' on the procurement committee' : ''} and approve the vendor selection and the PO of ₦${Number(cn.poCommitteeTotal).toLocaleString()} for ${ref} (${cn.activityTitle || ''}).`);
+                if (!sig) return;
+                try {
+                    const { data, error } = await supabaseClient.rpc('po_committee_sign', { p_ref: ref, p_signature: sig });
+                    if (error) throw error;
+                    await this._logAudit('concept_notes', ref, 'po_committee_signed', `${this.currentUser} signed as ${seat}: ${this._poTierLabel(cn.poCommitteeTier)} (₦${Number(cn.poCommitteeTotal).toLocaleString()}).`);
+                    if (data && data.complete) {
+                        await this._logAudit('concept_notes', ref, 'po_created', `PO ${data.po} created after ${this._poTierLabel(cn.poCommitteeTier)}. Total: ₦${Number(cn.poCommitteeTotal).toLocaleString()}.`);
+                        for (const [n, r] of Object.entries(this.data.roles || {}))
+                            if (r === 'procurement') await this.createNotification(n, `The PO for ${ref} has been approved (${this._poTierLabel(cn.poCommitteeTier)}). PO ${data.po} is created: sign it as Procurement, then share it with the vendor(s).`, 'success', ref);
+                        await this.createNotification(cn.staffName, `PO ${data.po} has been generated for ${ref} (${escHtml(cn.activityTitle || '')}) and is ready for your signature.`, 'info', ref);
+                        alert(`Signed. Yours was the last signature: PO ${data.po} is now created and Procurement has been told.`);
+                    } else alert('Signed. The PO is created once the other signers have signed.');
+                    this.clearCache(); this.showView('approvals');
+                } catch (e) { alert('Not signed: ' + (e.message || e)); }
+            },
+            async committeeReject(ref) {
+                await this._loadMySeat();
+                const cn = (await supabaseClient.from('concept_notes').select('*').eq('refNumber', ref).single()).data;
+                if (!cn || !this._committeeMine(cn)) { alert('This PO is not waiting for your decision.'); return; }
+                const reason = prompt(`Send the PO for ${ref} back to Procurement?\n\nSay what needs to change (Procurement sees this):`);
+                if (reason === null) return;
+                if (reason.trim().length < 5) { alert('Please say why it is being sent back.'); return; }
+                try {
+                    const { error } = await supabaseClient.rpc('po_committee_reject', { p_ref: ref, p_reason: reason.trim() });
+                    if (error) throw error;
+                    await this._logAudit('concept_notes', ref, 'po_committee_returned', `Sent back to Procurement by ${this.currentUser}: ${reason.trim()}`);
+                    for (const [n, r] of Object.entries(this.data.roles || {}))
+                        if (r === 'procurement') await this.createNotification(n, `${this.currentUser} sent the PO for ${ref} back: ${reason.trim()}`, 'warning', ref);
+                    this.clearCache(); alert('Sent back to Procurement.'); this.showView('approvals');
+                } catch (e) { alert('Not sent back: ' + (e.message || e)); }
+            },
+
             _boLimit(cn) { const p = (this.data.projects || []).find(x => x.code === cn.projectCode); return Number((p && p.budgetLimit_bo) || 1000000); },
             // Whose turn on a PO cost increase: the Budget Owner first; above her limit the ED after her pre-signature;
             // the ED also acts on notes the Budget Owner raised herself
@@ -11696,6 +11892,31 @@ ${vendors.length > 1 ? `
                         const serial    = Date.now().toString().slice(-5);
                         const poNumber  = cn.poNumber || `PO-${projCode}-${yearMonth}-${serial}`;
                         const now       = new Date().toISOString();
+
+                        // Above ₦1m (all POs on the note): the cost is approved here, then the
+                        // procurement committee signs before the PO is created
+                        const vTotal = (() => { try { let v = JSON.parse(cn.vendorsJson || '[]'); if (typeof v === 'string') v = JSON.parse(v); return v.reduce((s, x) => s + Number(x.amount || 0) * (x.qty || 1), 0); } catch (e) { return Number(cn.actualProcurementCost || 0); } })();
+                        if (!cn.poNumber && (await this._poRoundsTotal(refNumber)) + vTotal > this._COMMITTEE_LIMIT) {
+                            const { data: cRows, error: cErr } = await supabaseClient.from('concept_notes').update({
+                                status: 'pending', currentApprover: 'procurement',
+                                varianceApprovedBy: this.currentUser, varianceApprovedAt: now, varianceApprovalSignature: sigData
+                            }).eq('refNumber', refNumber).eq('status', 'variance_review').select('refNumber');
+                            if (cErr) throw cErr;
+                            if (!cRows || !cRows.length) { alert('The approval was NOT saved — you may not have permission, or it was already resolved. Nothing has been recorded.'); return; }
+                            await supabaseClient.from('document_signatures').insert([{ docRef: refNumber, docType: 'variance_approval', relatedRef: refNumber,
+                                signerName: this.currentUser, signerRole: this.getUserRole(), signatureData: sigData, signedAt: now, pageContext: 'variance_escalation_approval' }]);
+                            await this._logAudit('concept_notes', refNumber, 'variance_approved', `${over}% variance approved by ${this.currentUser}. Above ₦1,000,000: sent for approval before the PO.`);
+                            try {
+                                await this._sendToCommittee(Object.assign({}, cn, { status: 'pending', currentApprover: 'procurement', varianceApprovedBy: this.currentUser, varianceApprovedAt: now }), typeof cn.vendorsJson === 'string' ? cn.vendorsJson : JSON.stringify(cn.vendorsJson || []), null);
+                                alert('✅ Cost increase approved.\n\nThe PO is above ₦1,000,000, so it now needs approval before it is created (the ED above ₦1m; the procurement committee above ₦5m). The PO is created once all the signers have signed.');
+                            } catch (e) {
+                                alert('✅ Cost increase approved, but it could not be sent to the procurement committee (' + (e.message || e) + '). Procurement can send it from the PO screen.');
+                            }
+                            for (const [n, r] of Object.entries(this.data.roles || {}))
+                                if (r === 'procurement') await this.createNotification(n, `Cost increase approved for ${refNumber}. It is above ₦1,000,000, so it needs approval before the PO is created.`, 'info', refNumber);
+                            this.clearCache(); this.showView('approvals');
+                            return;
+                        }
 
                         const { data: updRows, error: updErr } = await supabaseClient.from('concept_notes').update({
                             status: 'pending',
