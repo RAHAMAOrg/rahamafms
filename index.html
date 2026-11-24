@@ -7791,7 +7791,9 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                 const vendorSigs   = _grrVendorSigs.length ? _grrVendorSigs : docSigs.filter(s => s.pageContext === 'vendor_po_online');
                 const vendorSig    = vendorSigs[0] || null; // kept for compat
                 const poStaffSig   = poSigs.find(s => s.pageContext === 'staff_po');
-                const poBoSig      = poSigs.find(s => s.pageContext === 'budget_owner_po' || s.signerRole === 'budgetOwner');
+                // Only a real PO authorisation fills this box (a Budget Owner who raised the note signs as staff,
+                // and that must not appear here as well). Old signatures saved without a step name still count.
+                const poBoSig      = poSigs.find(s => s.pageContext === 'budget_owner_po' || (!s.pageContext && ['budgetOwner', 'ed'].includes(s.signerRole)));
                 const poFinSig     = poSigs.find(s => s.pageContext === 'finance_sign' && s.docType === 'purchase_order');
                 const grrProcSig   = grrSigs.find(s => s.pageContext === 'procurement_received');
                 const grrStaffSig  = grrSigs.find(s => s.pageContext === 'staff_grr_verify');
@@ -8068,7 +8070,7 @@ ${cn.budgetDocUrl ? `<div style="margin-bottom:16px;"><span style="background:#E
   <div><div class="lbl">Sent to Procurement</div><div class="val">${fmtD(cn.sentToProcurement)}</div></div>
   <div><div class="lbl">Rejection Reason</div><div class="val" style="color:#B71C1C;">${escHtml(cn.rejectionReason||'—')}</div></div>
 </div>
-${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${cn.forwardedToED ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
+${cn.budgetOwnerSignatureData?`<div style="margin:8px 0 16px;"><div class="lbl">${(cn.forwardedToED || (this.data.roles || {})[cn.budgetOwnerApprovedBy || cn.approvedBy] === 'ed') ? 'Executive Director Signature' : 'Budget Owner Signature'}</div><img src="${cn.budgetOwnerSignatureData}" style="height:60px;border-bottom:1px solid #333;display:block;margin-top:4px;max-width:260px;"><div style="font-size:11px;color:#777;margin-top:3px;">${cn.budgetOwnerApprovedBy||cn.approvedBy||'Approver'} &mdash; ${fmtD(cn.budgetOwnerSignedAt)}</div></div>`:''}
 ${ppSection}
 ${reqSection}
 ${exceptionSection}
@@ -10945,7 +10947,7 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                     const poSigs      = allSigs.filter(s => s.docType === 'purchase_order');
                     const vendorSigs  = allSigs.filter(s => s.docRef === vendorPoNum || (vendors.length === 1 && s.docRef === basePoNum));
                     const staffSig    = poSigs.find(s => s.pageContext === 'staff_po');
-                    const boSig       = poSigs.find(s => s.pageContext === 'budget_owner_po' || s.signerRole === 'budgetOwner') || boSigFromCN;
+                    const boSig       = poSigs.find(s => s.pageContext === 'budget_owner_po' || (!s.pageContext && ['budgetOwner', 'ed'].includes(s.signerRole))) || boSigFromCN;
                     const finSig      = poSigs.find(s => s.pageContext === 'finance_sign');
                     const vendorSig   = vendorSigs.find(s =>
                         s.signerRole === 'vendor' &&
