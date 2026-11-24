@@ -4315,17 +4315,19 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             <p style="font-size:13px;color:#BF360C;margin-bottom:16px;">The PO for these activities costs more than was approved. No PO is generated until the extra cost is approved: by the Budget Owner, and above her limit pre-signed by her and approved by the ED.</p>
                             <div class="table-container"><table><thead><tr>
                                 <th>Ref</th><th>Staff</th><th>Activity</th><th>Project</th>
-                                <th>Estimated</th><th>Actual Cost</th><th>Variance</th>
+                                <th>Approved</th><th>Actual Cost</th><th>Variance</th>
                                 <th>Justification</th><th>Escalated</th><th>Actions</th>
                             </tr></thead><tbody>
                             ${varCNs.map(cn => {
-                                const over = cn.estimatedCost > 0 ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '—';
+                                // the amount the PO was approved against: the concept note, or what the staff member sent to Procurement
+                                const base = cn.procurementVariance != null && cn.procurementVariance !== '' ? Number(cn.actualProcurementCost) + Number(cn.procurementVariance) : Number(cn.estimatedCost);
+                                const over = base > 0 ? (((cn.actualProcurementCost - base) / base) * 100).toFixed(1) : '—';
                                 return '<tr style="background:#FFF8E1;">' +
                                     '<td style="font-weight:600;">' + cn.refNumber + '</td>' +
                                     '<td>' + cn.staffName + '</td>' +
                                     '<td>' + cn.activityTitle + '</td>' +
                                     '<td>' + cn.projectCode + '</td>' +
-                                    '<td>₦' + Number(cn.estimatedCost).toLocaleString() + '</td>' +
+                                    '<td>₦' + base.toLocaleString() + (Math.abs(base - Number(cn.estimatedCost)) > 0.01 ? '<div style="font-size:11px;color:#6B7280;">sent to Procurement (note total ₦' + Number(cn.estimatedCost).toLocaleString() + ')</div>' : '') + '</td>' +
                                     '<td style="font-weight:600;color:#C62626;">₦' + Number(cn.actualProcurementCost).toLocaleString() + '</td>' +
                                     '<td><span style="background:#FFEBEE;color:#B71C1C;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">+' + over + '%</span></td>' +
                                     '<td style="font-size:12px;max-width:200px;">' + (cn.varianceJustification || '—') + '</td>' +
@@ -5693,17 +5695,20 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     }
                 }
 
-                // Sent to Procurement by the staff member: the PO is capped at what was held
+                // Sent to Procurement by the staff member: the PO's approved amount is what was held.
+                // Above it, the PO goes to cost review like any PO above its approved amount.
+                let held = null;
                 try {
                     const { data: accReq } = await supabaseClient.from('procurement_requests').select('amount,items')
                         .eq('concept_note_ref', refNumber).eq('status', 'accepted').order('decided_at', { ascending: false }).limit(1);
-                    if (accReq && accReq.length && total > Number(accReq[0].amount) + 0.009) {
-                        alert(`This purchase was sent to Procurement by the staff member for ₦${Number(accReq[0].amount).toLocaleString()} (${accReq[0].items}).\n\nThe PO total (₦${total.toLocaleString()}) cannot be more than that. Reduce the PO, or ask the staff member to raise a new concept note for the extra.`);
-                        return;
-                    }
+                    if (accReq && accReq.length) held = { amount: Number(accReq[0].amount), items: accReq[0].items };
                 } catch (e) { /* table not set up yet: no cap */ }
-                const variance = cn.estimatedCost - total;
-                const overPct = cn.estimatedCost > 0 ? ((total - cn.estimatedCost) / cn.estimatedCost) : 0;
+                const approvedAmt = held && held.amount < Number(cn.estimatedCost) ? held.amount : Number(cn.estimatedCost);
+                const variance = approvedAmt - total;
+                const overPct = approvedAmt > 0 ? ((total - approvedAmt) / approvedAmt) : 0;
+                const heldNote = held && approvedAmt === held.amount
+                    ? `The staff member sent ₦${held.amount.toLocaleString()} of this concept note to Procurement (${held.items}). The concept note's total is ₦${Number(cn.estimatedCost).toLocaleString()}; the extra would come from its other lines.`
+                    : '';
 
                 // Any PO above the approved amount needs approval (Budget Owner; ED above her limit)
                 if (variance < -0.01) {
@@ -5711,7 +5716,8 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                     const pctLabel = (overPct * 100).toFixed(1);
                     const justification = prompt(
                         `🚨 PO COST IS ABOVE THE APPROVED AMOUNT — approval required\n\n` +
-                        `Estimated: ₦${cn.estimatedCost.toLocaleString()}\n` +
+                        (heldNote ? heldNote + '\n\n' : '') +
+                        `Approved: ₦${approvedAmt.toLocaleString()}\n` +
                         `Proposed PO Total: ₦${total.toLocaleString()}\n` +
                         `Over by:   ₦${overAmt} (${pctLabel}%)\n\n` +
                         `This will be sent to the Budget Owner for approval before a PO can be generated.\n\n` +
@@ -5731,7 +5737,7 @@ historyPayments = [...(processedPay || []), ...(reviewedPaid || []), ...(approve
                             actualProcurementCost: total,
                             procurementVariance: variance,
                             procurementNotes: notes,
-                            varianceJustification: justification.trim(),
+                            varianceJustification: (heldNote ? heldNote + ' ' : '') + justification.trim(),
                             varianceEscalatedAt: now,
                             varianceEscalatedBy: this.currentUser,
                             financeRejectionReason: null,
@@ -11880,8 +11886,9 @@ ${vendors.length > 1 ? `
                     return;
                 }
 
-                const over = cn.estimatedCost > 0
-                    ? (((cn.actualProcurementCost - cn.estimatedCost) / cn.estimatedCost) * 100).toFixed(1) : '?';
+                const vBase = cn.procurementVariance != null && cn.procurementVariance !== '' ? Number(cn.actualProcurementCost) + Number(cn.procurementVariance) : Number(cn.estimatedCost);
+                const over = vBase > 0
+                    ? (((cn.actualProcurementCost - vBase) / vBase) * 100).toFixed(1) : '?';
 
                 if (action === 'approve') {
                     // Require BO signature before approving excess
