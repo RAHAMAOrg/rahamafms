@@ -11923,8 +11923,29 @@ ${vendors.length > 1 ? `
                                 signerName: this.currentUser, signerRole: this.getUserRole(), signatureData: sigData, signedAt: now, pageContext: 'variance_escalation_approval' }]);
                             await this._logAudit('concept_notes', refNumber, 'variance_approved', `${over}% variance approved by ${this.currentUser}. Above ₦1,000,000: sent for approval before the PO.`);
                             try {
-                                await this._sendToCommittee(Object.assign({}, cn, { status: 'pending', currentApprover: 'procurement', varianceApprovedBy: this.currentUser, varianceApprovedAt: now }), typeof cn.vendorsJson === 'string' ? cn.vendorsJson : JSON.stringify(cn.vendorsJson || []), null);
-                                alert('✅ Cost increase approved.\n\nThe PO is above ₦1,000,000, so it now needs approval before it is created (the ED above ₦1m; the procurement committee above ₦5m). The PO is created once all the signers have signed.');
+                                const req = await this._sendToCommittee(Object.assign({}, cn, { status: 'pending', currentApprover: 'procurement', varianceApprovedBy: this.currentUser, varianceApprovedAt: now }), typeof cn.vendorsJson === 'string' ? cn.vendorsJson : JSON.stringify(cn.vendorsJson || []), null);
+                                // The approver has just seen the vendors, prices and justification and signed: if she is
+                                // also one of the signers before the PO, that same signature counts there (no second signing)
+                                const mySeat = { ed: 'ed', budgetOwner: 'bo' }[this.getUserRole()];
+                                let done = null;
+                                if (req && mySeat && (req.seats || []).includes(mySeat)) {
+                                    const { data: sg, error: sgErr } = await supabaseClient.rpc('po_committee_sign', { p_ref: refNumber, p_signature: sigData });
+                                    if (!sgErr) {
+                                        done = sg;
+                                        await this._logAudit('concept_notes', refNumber, 'po_committee_signed', `${this.currentUser}'s cost-review signature also recorded as her approval before the PO.`);
+                                    }
+                                }
+                                if (done && done.complete) {
+                                    await this._logAudit('concept_notes', refNumber, 'po_created', `PO ${done.po} created after the cost increase was approved.`);
+                                    for (const [n, r] of Object.entries(this.data.roles || {}))
+                                        if (r === 'procurement') await this.createNotification(n, `The PO for ${refNumber} has been approved. PO ${done.po} is created: sign it as Procurement, then share it with the vendor(s).`, 'success', refNumber);
+                                    await this.createNotification(cn.staffName, `PO ${done.po} has been generated for ${refNumber} (${escHtml(cn.activityTitle || '')}) and is ready for your signature.`, 'info', refNumber);
+                                    alert(`✅ Cost increase approved, and your signature also counts as the approval before the PO.\n\nPO ${done.po} is created and Procurement has been told.`);
+                                } else if (done) {
+                                    alert('✅ Cost increase approved, and your signature is recorded for the approval before the PO.\n\nThe PO is created once the other signers have signed.');
+                                } else {
+                                    alert('✅ Cost increase approved.\n\nThe PO is above ₦1,000,000, so it now needs approval before it is created (the ED above ₦1m; the procurement committee above ₦5m). The PO is created once all the signers have signed.');
+                                }
                             } catch (e) {
                                 alert('✅ Cost increase approved, but it could not be sent to the procurement committee (' + (e.message || e) + '). Procurement can send it from the PO screen.');
                             }
