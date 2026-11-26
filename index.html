@@ -525,6 +525,7 @@
                 <li class="nav-group">Operations</li>
                 <li><button id="fleetBtn" onclick="app.showView('fleet')" data-view="fleet">🚗 Fleet</button></li>
                 <li><button id="storeBtn" onclick="app.showView('store')" data-view="store">📦 Store</button></li>
+                <li><button id="payrollBtn" onclick="app.showView('payroll')" data-view="payroll" style="display:none;">💼 Payroll</button></li>
                 <li><button id="procPlansBtn" onclick="app.showView('procPlans')" data-view="procPlans" style="display:none;">📋 Procurement Plans</button></li>
                 <li class="nav-group">Reports &amp; oversight</li>
                 <li><button id="reportsBtn" onclick="app.showView('reports')" data-view="reports">Reports & Budget</button></li>
@@ -815,6 +816,7 @@
                     if (fleetBtn) fleetBtn.style.display = ['donor', 'reconciliation'].includes(role) ? 'none' : '';
                     const storeBtn = document.getElementById('storeBtn');
                     if (storeBtn) storeBtn.style.display = ['donor', 'reconciliation'].includes(role) ? 'none' : '';
+                    this._initPayrollNav().catch(() => {});
                     const auditBtn      = document.getElementById('auditTrailBtn');
                     const superBtn      = document.getElementById('superAdminBtn');
                     const quarterlyBtn  = document.getElementById('quarterlyReportBtn');
@@ -1632,6 +1634,7 @@
                         case 'budgetLog': this.renderBudgetLog(content).catch(e => console.error(e)); break;
                         case 'fleet': this.renderFleet(content).catch(e => console.error(e)); break;
                         case 'store': this.renderStore(content).catch(e => console.error(e)); break;
+                        case 'payroll': this.renderPayroll(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
                         case 'settings': this.renderSettings(content); break;
                     }
@@ -1667,6 +1670,7 @@
                 retirement: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h3"/>',
                 approvals: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
                 fleet: '<path d="M3 13l2-5a2 2 0 0 1 2-1h10a2 2 0 0 1 2 1l2 5v4h-2"/><path d="M3 13v4h2M7 17h10"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+                payroll: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
                 store: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
                 procPlans: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h3"/>',
                 reports: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -9945,6 +9949,375 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 this._store = { stock: st, reqs: rq, moves: mv, awaiting: aw };
                 return this._store;
             },
+            // ================= PAYROLL =================
+            // Monthly salaries without a concept note. Amounts and account numbers are
+            // only ever sent by the database to the payroll officers (you and the ED);
+            // Finance gets the total, the project charges and the names of those paid.
+            async _payrollUid() {
+                try { const { data: { session } } = await supabaseClient.auth.getSession(); return session?.user?.id || null; } catch (e) { return null; }
+            },
+            async _initPayrollNav() {
+                const btn = document.getElementById('payrollBtn'); if (!btn) return;
+                const role = this.getUserRole();
+                let adm = false;
+                try { const { data } = await supabaseClient.rpc('payroll_is_admin'); adm = data === true; } catch (e) {}
+                this._payrollAdmin = adm;
+                const show = adm || ['finance', 'finance_manager', 'GrantsCompliance'].includes(role);
+                btn.style.display = show ? '' : 'none';
+                this._decorateNav();
+                if (adm) this._payrollBadge();
+            },
+            async _payrollBadge() {
+                try {
+                    const { data } = await supabaseClient.rpc('payroll_list');
+                    const uid = await this._payrollUid();
+                    const n = (data || []).filter(r => this._payrollNeedsMe(r, uid)).length;
+                    const btn = document.getElementById('payrollBtn'); if (!btn) return;
+                    btn.querySelector('.prBadge')?.remove();
+                    if (n) { const b = document.createElement('span'); b.className = 'prBadge'; b.textContent = n; b.style.cssText = 'background:var(--danger);color:#fff;border-radius:12px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:6px;'; btn.appendChild(b); }
+                } catch (e) {}
+            },
+            _payrollNeedsMe(r, uid) {
+                if (!this._payrollAdmin) return false;
+                const mine = r.prepared_uid && r.prepared_uid === uid;
+                return (r.status === 'submitted' && !mine) || (r.status === 'returned' && mine) || r.status === 'approved';
+            },
+            _payrollChip(s) {
+                const m = { draft: ['Draft', '#6B7280', '#F3F4F6'], submitted: ['Waiting for approval', '#92400E', '#FEF3C7'], returned: ['Returned', '#991B1B', '#FEE2E2'],
+                            approved: ['Approved, not yet paid', '#1E40AF', '#DBEAFE'], paid: ['Paid', '#065F46', '#D1FAE5'], cancelled: ['Cancelled', '#6B7280', '#F3F4F6'] }[s] || [s, '#374151', '#F3F4F6'];
+                return `<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;color:${m[1]};background:${m[2]};">${escHtml(m[0])}</span>`;
+            },
+            _payrollMonth(d) { if (!d) return ''; const x = new Date(String(d).slice(0, 10) + 'T00:00:00'); return x.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }); },
+
+            async renderPayroll(content) {
+                content = content || document.getElementById('mainContent');
+                document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === 'payroll'));
+                const { data, error } = await supabaseClient.rpc('payroll_list');
+                if (error) { content.innerHTML = `<div class="empty-state"><h2>Payroll</h2><p>${escHtml(/restricted/i.test(error.message) ? 'Payroll is only open to the payroll officers and Finance.' : 'Could not load payroll: ' + error.message)}</p></div>`; return; }
+                if (this._payrollAdmin === undefined) { try { const r = await supabaseClient.rpc('payroll_is_admin'); this._payrollAdmin = r.data === true; } catch (e) { this._payrollAdmin = false; } }
+                const adm = this._payrollAdmin, uid = await this._payrollUid();
+                const runs = data || [];
+                const mine = runs.filter(r => this._payrollNeedsMe(r, uid));
+                const row = r => `<tr><td><a href="#" onclick="app.viewPayroll(${r.id});return false;"><b>${escHtml(r.ref)}</b></a></td>
+                    <td>${escHtml(this._payrollMonth(r.pay_month))}</td><td>${escHtml(r.title)}</td><td style="text-align:right;">${r.payee_count}</td>
+                    <td style="text-align:right;">${this._money(r.total)}</td><td>${escHtml(r.projects || '')}</td><td>${this._payrollChip(r.status)}</td>
+                    <td><button class="action-btn ${this._payrollNeedsMe(r, uid) ? 'approve' : 'view'}" onclick="app.viewPayroll(${r.id})">${this._payrollNeedsMe(r, uid) ? 'Act' : 'Open'}</button></td></tr>`;
+                const table = list => `<div class="table-container"><table><thead><tr><th>Payroll</th><th>Month</th><th>Title</th><th style="text-align:right;">Staff</th><th style="text-align:right;">Total</th><th>Projects</th><th>Status</th><th></th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>`;
+                content.innerHTML = `
+                    <div class="header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                        <div><h2>💼 Payroll</h2><p>${adm
+                            ? 'Upload the month\'s bank payment file, split the total across projects and budget lines, and send it for approval. No concept note is needed. Only you and the other payroll officer can see what each person is paid.'
+                            : 'Monthly staff payroll: the total, what each project and budget line was charged, and who was paid. Individual amounts are visible only to the payroll officers.'}</p></div>
+                        ${adm ? `<button class="btn btn-primary" onclick="app.openPayrollForm()">➕ New payroll</button>` : ''}</div>
+                    ${mine.length ? `<div style="background:#FFF8E1;border:2px solid #F59E0B;border-radius:12px;padding:16px 20px;margin-bottom:22px;"><div style="font-weight:700;color:#92400E;margin-bottom:10px;">Waiting for you (${mine.length})</div>${table(mine)}</div>` : ''}
+                    ${runs.length ? table(runs) : `<div class="empty-state"><h3>No payroll yet</h3>${adm ? '<p>Start with ➕ New payroll.</p>' : ''}</div>`}`;
+            },
+
+            // ---------- Prepare / edit
+            async openPayrollForm(id) {
+                const content = document.getElementById('mainContent');
+                content.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
+                const [pj, ls] = await Promise.all([supabaseClient.rpc('payroll_projects'), supabaseClient.rpc('payroll_list')]);
+                if (pj.error) { alert(pj.error.message); return this.renderPayroll(content); }
+                this._prProjects = pj.data || []; this._prLines = {};
+                let cur = null;
+                if (id) { const g = await supabaseClient.rpc('payroll_get', { p_id: id }); if (g.error) { alert(g.error.message); return; } cur = g.data; }
+                // last approved/paid payroll: for the comparison and "use last month's split"
+                let last = null;
+                const prevRun = (ls.data || []).filter(r => ['approved', 'paid'].includes(r.status) && r.id !== id)
+                    .sort((a, b) => String(b.pay_month).localeCompare(String(a.pay_month)) || b.id - a.id)[0];
+                if (prevRun) { const g = await supabaseClient.rpc('payroll_get', { p_id: prevRun.id }); if (!g.error) last = g.data; }
+                const nextMonth = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+                this._prForm = {
+                    id: cur ? cur.id : null,
+                    month: cur ? String(cur.pay_month).slice(0, 7) : nextMonth,
+                    title: cur ? cur.title : '',
+                    payees: cur ? (cur.payees || []).map(p => ({ ...p })) : [],
+                    charges: cur ? (cur.charges || []).map(c => ({ project_code: c.project_code, budget_line: c.budget_line || '', line_name: c.line_name || '', amount: Number(c.amount) })) : [],
+                    file: null, fileName: cur ? cur.voucher_name : null,
+                    last, returnedNote: cur && cur.status === 'returned' ? cur.decision_note : null
+                };
+                for (const c of this._prForm.charges) await this._prLoadLines(c.project_code);
+                this._prRender();
+            },
+            async _prLoadLines(code) {
+                if (!code || this._prLines[code]) return;
+                const { data } = await supabaseClient.rpc('payroll_lines', { p_code: code });
+                this._prLines[code] = data || [];
+            },
+            _prTotal() { return Math.round((this._prForm.payees || []).reduce((s, p) => s + Number(p.amount || 0), 0) * 100) / 100; },
+            _prCharged() { return Math.round((this._prForm.charges || []).reduce((s, c) => s + Number(c.amount || 0), 0) * 100) / 100; },
+            _prRender() {
+                const F = this._prForm, content = document.getElementById('mainContent');
+                const total = this._prTotal();
+                const inp = 'width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;';
+                const odd = F.payees.filter(p => p.account_no && !/^\d{10}$/.test(String(p.account_no)));
+                const noAcct = F.payees.filter(p => !p.account_no);
+                const cmp = this._prCompare(F.payees, F.last);
+                const projOpts = sel => `<option value="">Choose project…</option>` + this._prProjects.map(p => `<option value="${escHtml(p.code)}" ${p.code === sel ? 'selected' : ''}>${escHtml(p.code)} · ${escHtml(p.name)}</option>`).join('');
+                const lineOpts = (code, sel) => {
+                    const L = this._prLines[code] || [];
+                    if (!code) return '<option value="">—</option>';
+                    if (!L.length) return '<option value="">No budget lines in the Expense Tracker</option>';
+                    return '<option value="">Choose budget line…</option>' + L.map(l => `<option value="${escHtml(l.line_key)}" ${l.line_key === sel ? 'selected' : ''}>${escHtml(l.line_key)} · ${escHtml(l.line_name || '')} (left ${this._money(Number(l.budget) - Number(l.spent))})</option>`).join('');
+                };
+                const charged = this._prCharged(), diff = Math.round((total - charged) * 100) / 100;
+                content.innerHTML = `
+                    <div class="header"><h2>💼 ${F.id ? 'Edit payroll' : 'New payroll'}</h2><p>Only you and the other payroll officer can see the amounts on this page.</p></div>
+                    ${F.returnedNote ? `<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 16px;margin-bottom:16px;"><b>Returned:</b> ${escHtml(F.returnedNote)}</div>` : ''}
+                    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;">
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+                            <div><label style="font-size:12px;font-weight:600;">Month being paid *</label><input type="month" id="prMonth" value="${escHtml(F.month)}" style="${inp}" onchange="app._prForm.month=this.value"></div>
+                            <div><label style="font-size:12px;font-weight:600;">Title</label><input id="prTitle" value="${escHtml(F.title)}" placeholder="Staff salaries ${escHtml(this._payrollMonth(F.month + '-01'))}" style="${inp}" oninput="app._prForm.title=this.value"></div>
+                        </div>
+                        <div style="margin-top:14px;"><label style="font-size:12px;font-weight:600;">1. Payment voucher (the bank bulk-payment file) *</label>
+                            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+                                <label class="btn btn-secondary" style="cursor:pointer;font-size:13px;">📎 ${F.payees.length ? 'Replace voucher' : 'Upload voucher'}<input type="file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="app._prReadVoucher(this)"></label>
+                                <span style="font-size:12px;color:#6B7280;">${escHtml(F.fileName || 'Excel or CSV with name, account number, amount, bank code')}</span></div>
+                        </div>
+                        ${F.payees.length ? `
+                        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;font-size:14px;">
+                            <div><b>${F.payees.length}</b> people</div><div>Total <b>${this._money(total)}</b></div>
+                            ${F.last ? `<div style="color:#6B7280;">Last payroll (${escHtml(F.last.title)}): ${this._money(F.last.total)}</div>` : ''}</div>
+                        ${odd.length || noAcct.length ? `<div style="background:#FFF8E1;border:1px solid #F59E0B;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;">
+                            ${noAcct.length ? `⚠ No account number: ${noAcct.map(p => escHtml(p.name)).join(', ')}<br>` : ''}
+                            ${odd.length ? `⚠ Account number not 10 digits (Excel may have dropped a leading 0): ${odd.map(p => escHtml(p.name) + ' (' + escHtml(p.account_no) + ')').join(', ')}` : ''}</div>` : ''}
+                        ${this._prCompareHtml(cmp)}
+                        <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;font-weight:600;">See everyone on the voucher</summary>${this._prPayeeTable(F.payees, cmp, true)}</details>` : ''}
+                    </div>
+                    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                            <label style="font-size:12px;font-weight:600;">2. What each project pays *</label>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                ${F.last && (F.last.charges || []).length && total ? `<button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="app._prUseLastSplit()">↺ Use last payroll's split</button>` : ''}
+                                <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="app._prAddCharge()">➕ Add project</button></div></div>
+                        <div class="table-container" style="margin-top:10px;"><table><thead><tr><th style="min-width:180px;">Project</th><th style="min-width:220px;">Budget line</th><th style="text-align:right;min-width:140px;">Amount (₦)</th><th style="text-align:right;">Share</th><th></th></tr></thead><tbody>
+                        ${F.charges.map((c, i) => `<tr>
+                            <td><select style="${inp}" onchange="app._prSetCharge(${i},'project_code',this.value)">${projOpts(c.project_code)}</select></td>
+                            <td><select style="${inp}" onchange="app._prSetCharge(${i},'budget_line',this.value)">${lineOpts(c.project_code, c.budget_line)}</select></td>
+                            <td><input type="number" min="0" step="0.01" value="${c.amount || ''}" style="${inp}text-align:right;" onchange="app._prSetCharge(${i},'amount',this.value)"></td>
+                            <td style="text-align:right;font-size:12px;">${total ? (Number(c.amount || 0) / total * 100).toFixed(1) + '%' : ''}</td>
+                            <td style="white-space:nowrap;">${diff > 0 ? `<button class="action-btn view" title="Put the amount not yet charged on this row" onclick="app._prSetCharge(${i},'amount',${Number(c.amount || 0) + diff})">+ rest</button>` : ''}
+                                <button class="action-btn reject" onclick="app._prDelCharge(${i})">✕</button></td></tr>`).join('') || '<tr><td colspan="5">No project yet. Use ➕ Add project.</td></tr>'}
+                        </tbody></table></div>
+                        <div style="margin-top:10px;font-size:14px;">Charged <b>${this._money(charged)}</b> of <b>${this._money(total)}</b>
+                            ${!total ? '' : diff === 0 ? ' <span style="color:#065F46;font-weight:700;">✓ matches the voucher</span>' : ` <span style="color:#991B1B;font-weight:700;">${diff > 0 ? this._money(diff) + ' not yet charged' : this._money(-diff) + ' charged too much'}</span>`}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="app._prSave(true)">Send for approval</button>
+                        <button class="btn btn-secondary" onclick="app._prSave(false)">Save draft</button>
+                        <button class="btn btn-secondary" onclick="${F.id ? `app.viewPayroll(${F.id})` : 'app.renderPayroll()'}">Cancel</button></div>`;
+            },
+            async _prReadVoucher(input) {
+                const f = input.files && input.files[0]; if (!f) return;
+                try {
+                    const XLSX = await this._loadSheetJS();
+                    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+                    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+                    const hi = rows.findIndex(r => r.some(c => /name/i.test(String(c))) && r.some(c => /amount/i.test(String(c))));
+                    if (hi < 0) throw new Error('Could not find the heading row (it needs a Name column and an Amount column).');
+                    const H = rows[hi].map(c => String(c).trim());
+                    const col = re => H.findIndex(h => re.test(h));
+                    const cN = col(/name/i), cA = col(/account/i), cM = col(/amount/i), cB = col(/bank/i);
+                    const cR = col(/rece?i+e?ver'?s?\s*narration/i), cS = col(/sender\s*narration/i), cX = col(/narration/i);
+                    const acct = v => { if (v === '' || v == null) return ''; if (typeof v === 'number') return String(Math.round(v)); return String(v).replace(/\s+/g, ''); };
+                    const num = v => typeof v === 'number' ? v : Number(String(v).replace(/[₦,\s]/g, ''));
+                    const payees = [], bad = [];
+                    rows.slice(hi + 1).forEach((r, k) => {
+                        const name = String(r[cN] ?? '').trim(); if (!name) return;
+                        const amount = Math.round(num(r[cM]) * 100) / 100;
+                        if (!(amount > 0)) { bad.push(name); return; }
+                        payees.push({ name, account_no: cA >= 0 ? acct(r[cA]) : '', bank_code: cB >= 0 ? acct(r[cB]) : '', amount,
+                                      narration: String((cR >= 0 ? r[cR] : '') || (cS >= 0 ? r[cS] : '') || (cX >= 0 ? r[cX] : '') || '').trim() });
+                    });
+                    if (!payees.length) throw new Error('No one to pay was found under the heading row.');
+                    if (bad.length && !confirm(bad.length + ' line(s) have no amount and will be left out: ' + bad.join(', ') + '. Continue?')) return;
+                    const F = this._prForm; F.payees = payees; F.file = f; F.fileName = f.name;
+                    this._prRender();
+                } catch (e) { alert('Could not read the voucher: ' + (e.message || e)); }
+            },
+            _prCompare(payees, last) {
+                if (!last || !(last.payees || []).length) return null;
+                const key = n => String(n || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                const prev = {}; (last.payees || []).forEach(p => { prev[key(p.name)] = (prev[key(p.name)] || 0) + Number(p.amount); });
+                const now = {}; (payees || []).forEach(p => { now[key(p.name)] = (now[key(p.name)] || 0) + Number(p.amount); });
+                const added = [], changed = {}, gone = [];
+                (payees || []).forEach(p => { const k = key(p.name); if (!(k in prev)) added.push(k); else if (Math.abs(prev[k] - now[k]) > 0.005) changed[k] = now[k] - prev[k]; });
+                (last.payees || []).forEach(p => { const k = key(p.name); if (!(k in now) && !gone.find(g => g.k === k)) gone.push({ k, name: p.name, amount: prev[k] }); });
+                return { key, added, changed, gone, lastTitle: last.title || last.ref };
+            },
+            _prCompareHtml(cmp) {
+                if (!cmp) return '';
+                const nC = Object.keys(cmp.changed).length;
+                if (!cmp.added.length && !nC && !cmp.gone.length) return `<div style="margin-top:10px;font-size:12px;color:#065F46;">✓ Same people and amounts as ${escHtml(cmp.lastTitle)}.</div>`;
+                return `<div style="background:#EFF6FF;border:1px solid #93C5FD;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:12px;">
+                    <b>Compared with ${escHtml(cmp.lastTitle)}:</b> ${cmp.added.length} new, ${nC} amount${nC === 1 ? '' : 's'} changed, ${cmp.gone.length} no longer paid.
+                    ${cmp.gone.length ? `<br>No longer paid: ${cmp.gone.map(g => escHtml(g.name) + ' (' + this._money(g.amount) + ')').join(', ')}` : ''}</div>`;
+            },
+            _prPayeeTable(payees, cmp, withAcct) {
+                const tag = p => { if (!cmp) return ''; const k = cmp.key(p.name);
+                    if (cmp.added.includes(k)) return '<span style="font-size:10px;font-weight:700;color:#1E40AF;background:#DBEAFE;padding:1px 6px;border-radius:8px;">NEW</span>';
+                    if (k in cmp.changed) { const d = cmp.changed[k]; return `<span style="font-size:10px;font-weight:700;color:${d > 0 ? '#92400E' : '#065F46'};background:${d > 0 ? '#FEF3C7' : '#D1FAE5'};padding:1px 6px;border-radius:8px;">${d > 0 ? '+' : '−'}${this._money(Math.abs(d))}</span>`; }
+                    return ''; };
+                return `<div class="table-container" style="margin-top:8px;"><table><thead><tr><th>#</th><th>Name</th>${withAcct ? '<th>Account</th><th>Bank code</th>' : ''}<th style="text-align:right;">Amount</th><th></th></tr></thead><tbody>
+                    ${payees.map((p, i) => `<tr><td>${i + 1}</td><td>${escHtml(p.name)}</td>${withAcct ? `<td>${escHtml(p.account_no || '')}</td><td>${escHtml(p.bank_code || '')}</td>` : ''}<td style="text-align:right;">${this._money(p.amount)}</td><td>${tag(p)}</td></tr>`).join('')}
+                    </tbody></table></div>`;
+            },
+            _prAddCharge() {
+                const F = this._prForm, diff = Math.round((this._prTotal() - this._prCharged()) * 100) / 100;
+                F.charges.push({ project_code: '', budget_line: '', line_name: '', amount: diff > 0 ? diff : 0 }); this._prRender();
+            },
+            _prDelCharge(i) { this._prForm.charges.splice(i, 1); this._prRender(); },
+            async _prSetCharge(i, k, v) {
+                const c = this._prForm.charges[i]; if (!c) return;
+                if (k === 'amount') c.amount = Math.round(Number(v || 0) * 100) / 100;
+                else if (k === 'project_code') { c.project_code = v; c.budget_line = ''; c.line_name = ''; await this._prLoadLines(v); }
+                else if (k === 'budget_line') { c.budget_line = v; const l = (this._prLines[c.project_code] || []).find(x => x.line_key === v); c.line_name = l ? (l.line_name || '') : ''; }
+                this._prRender();
+            },
+            async _prUseLastSplit() {
+                const F = this._prForm, total = this._prTotal(), L = (F.last && F.last.charges) || [];
+                const lt = L.reduce((s, c) => s + Number(c.amount), 0); if (!lt || !total) return;
+                let used = 0;
+                F.charges = L.map((c, i) => {
+                    const amt = i === L.length - 1 ? Math.round((total - used) * 100) / 100 : Math.round(total * Number(c.amount) / lt * 100) / 100;
+                    used += amt; return { project_code: c.project_code, budget_line: c.budget_line || '', line_name: c.line_name || '', amount: amt };
+                });
+                for (const c of F.charges) await this._prLoadLines(c.project_code);
+                this._prRender();
+            },
+            async _prSave(submit) {
+                const F = this._prForm;
+                if (!F.month) { alert('Choose the month being paid.'); return; }
+                if (!F.payees.length) { alert('Upload the payment voucher first.'); return; }
+                if (submit) {
+                    if (!F.charges.length) { alert('Add at least one project.'); return; }
+                    if (F.charges.some(c => !c.project_code || !(c.amount > 0))) { alert('Every project row needs a project and an amount.'); return; }
+                    const noLine = F.charges.filter(c => !c.budget_line && (this._prLines[c.project_code] || []).length);
+                    if (noLine.length) { alert('Choose the budget line for: ' + noLine.map(c => c.project_code).join(', ')); return; }
+                    if (Math.abs(this._prTotal() - this._prCharged()) > 0.005) { alert('The project amounts must add up to the voucher total (' + this._money(this._prTotal()) + ').'); return; }
+                }
+                try {
+                    let path = null;
+                    if (F.file) {
+                        path = F.month.replace('-', '') + '/' + Date.now() + '_' + F.file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                        const { error: ue } = await supabaseClient.storage.from('fms-payroll').upload(path, F.file);
+                        if (ue) throw new Error('Could not store the voucher file: ' + ue.message);
+                    }
+                    const { data, error } = await supabaseClient.rpc('payroll_save', {
+                        p_id: F.id, p_month: F.month + '-01', p_title: F.title || '',
+                        p_payees: F.payees.map(p => ({ name: p.name, account_no: p.account_no || '', bank_code: p.bank_code || '', amount: Number(p.amount), narration: p.narration || '' })),
+                        p_charges: F.charges.filter(c => c.project_code && c.amount > 0).map(c => ({ project_code: c.project_code, budget_line: c.budget_line || '', line_name: c.line_name || '', amount: Number(c.amount) })),
+                        p_voucher_file: path ? 'private:fms-payroll/' + path : null, p_voucher_name: path ? F.file.name : null, p_submit: !!submit });
+                    if (error) throw error;
+                    this._payrollBadge();
+                    await this.viewPayroll(data);
+                } catch (e) { alert('Could not save: ' + (e.message || e)); }
+            },
+
+            // ---------- View / act
+            async viewPayroll(id) {
+                const content = document.getElementById('mainContent');
+                document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === 'payroll'));
+                const { data: r, error } = await supabaseClient.rpc('payroll_get', { p_id: id });
+                if (error) { alert(error.message); return this.renderPayroll(content); }
+                this._prView = r;
+                const adm = r.i_am_admin, fmtDT = d => d ? new Date(d).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                const cmp = adm ? this._prCompare(r.payees, r.previous ? { ...r.previous, payees: r.previous_payees } : null) : null;
+                const projName = code => { const p = (this.data.projects || []).find(x => x.code === code); return p ? p.name : ''; };
+                const charges = (r.charges || []);
+                let acts = '';
+                if (adm && r.status === 'submitted' && !r.i_prepared) acts = `
+                    <div style="background:#FFF8E1;border:2px solid #F59E0B;border-radius:12px;padding:16px;margin-bottom:16px;">
+                        <div style="font-weight:700;color:#92400E;margin-bottom:8px;">Waiting for your approval</div>
+                        <textarea id="prNote" rows="2" placeholder="Note (required if you return it)" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;"></textarea>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;"><button class="btn btn-primary" onclick="app._prDecide(true)">✓ Approve</button><button class="btn btn-secondary" onclick="app._prDecide(false)">↩ Return to preparer</button></div></div>`;
+                else if (adm && r.status === 'submitted') acts = `<div style="background:#F3F4F6;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;">Sent for approval ${escHtml(fmtDT(r.submitted_at))}. The other payroll officer approves it.</div>`;
+                else if (adm && r.status === 'approved') acts = `
+                    <div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:12px;padding:16px;margin-bottom:16px;">
+                        <div style="font-weight:700;color:#1E40AF;margin-bottom:8px;">Approved. Upload the bank file, then mark it paid.</div>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><label style="font-size:13px;">Date paid <input type="date" id="prPaidDate" value="${new Date().toISOString().slice(0, 10)}" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;"></label>
+                        <button class="btn btn-primary" onclick="app._prMarkPaid()">Mark as paid</button></div>
+                        <div style="font-size:12px;color:#6B7280;margin-top:6px;">Marking it paid posts each project's share to the Expense Tracker on its budget line, already retired.</div></div>`;
+                else if (adm && ['draft', 'returned'].includes(r.status) && r.i_prepared) acts = `
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"><button class="btn btn-primary" onclick="app.openPayrollForm(${r.id})">✎ Edit and send</button><button class="btn btn-secondary" onclick="app._prDelete()">🗑 Delete</button></div>`;
+                content.innerHTML = `
+                    <div class="header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                        <div><h2>💼 ${escHtml(r.title)}</h2><p>${escHtml(r.ref)} · ${escHtml(this._payrollMonth(r.pay_month))} · ${this._payrollChip(r.status)}</p></div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            ${adm ? `<button class="btn btn-secondary" style="font-size:12px;" onclick="app._prBankFile()">⬇ Bank file</button>${r.voucher_file ? `<button class="btn btn-secondary" style="font-size:12px;" onclick="app.downloadFile(app._prView.voucher_file, app._prView.voucher_name)">⬇ Uploaded voucher</button>` : ''}` : ''}
+                            <button class="btn btn-secondary" style="font-size:12px;" onclick="app._prPrint()">🖨 Print</button>
+                            <button class="btn btn-secondary" style="font-size:12px;" onclick="app.renderPayroll()">← Payroll</button></div></div>
+                    ${r.status === 'returned' && r.decision_note ? `<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 16px;margin-bottom:16px;"><b>Returned by ${escHtml(r.decided_by || '')}:</b> ${escHtml(r.decision_note)}</div>` : ''}
+                    ${r.post_note ? `<div style="background:#FEE2E2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 16px;margin-bottom:16px;">⚠ ${escHtml(r.post_note)}. See the charges below.</div>` : ''}
+                    ${acts}
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px;">
+                        ${[['Total', this._money(r.total)], ['People paid', r.payee_count], ['Prepared by', (r.prepared_by || '') + (r.prepared_at ? ' · ' + fmtDT(r.prepared_at) : '')],
+                           ['Approved by', r.status === 'returned' ? '' : (r.decided_by ? r.decided_by + ' · ' + fmtDT(r.decided_at) : '')], ['Paid', r.paid_date ? new Date(r.paid_date).toLocaleDateString('en-NG') + (r.paid_by ? ' · ' + r.paid_by : '') : '']]
+                           .map(([k, v]) => `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;"><div style="font-size:11px;color:#6B7280;">${k}</div><div style="font-weight:700;font-size:14px;">${escHtml(String(v || '—'))}</div></div>`).join('')}</div>
+                    <h3 style="margin:6px 0;">Charged to</h3>
+                    <div class="table-container"><table><thead><tr><th>Project</th><th>Budget line</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Share</th>${r.status === 'paid' ? '<th>Expense Tracker</th>' : ''}</tr></thead><tbody>
+                        ${charges.map(c => `<tr><td>${escHtml(c.project_code)} ${escHtml(projName(c.project_code))}</td><td>${escHtml(c.budget_line || '—')} ${escHtml(c.line_name || '')}</td><td style="text-align:right;">${this._money(c.amount)}</td>
+                            <td style="text-align:right;">${r.total ? (Number(c.amount) / Number(r.total) * 100).toFixed(1) + '%' : ''}</td>
+                            ${r.status === 'paid' ? `<td style="font-size:12px;">${c.posted ? '✓ Posted' : '<span style="color:#991B1B;">Not posted: ' + escHtml(c.post_error || '') + '</span>'}</td>` : ''}</tr>`).join('') || '<tr><td colspan="5">No project charges yet.</td></tr>'}
+                    </tbody></table></div>
+                    <h3 style="margin:18px 0 6px;">People paid (${(r.payees || []).length})</h3>
+                    ${adm ? `${this._prCompareHtml(cmp)}${this._prPayeeTable(r.payees || [], cmp, true)}`
+                          : `<p style="font-size:12px;color:#6B7280;">Individual amounts are visible only to the payroll officers.</p>
+                             <div class="table-container"><table><thead><tr><th>#</th><th>Name</th></tr></thead><tbody>${(r.payees || []).map((p, i) => `<tr><td>${i + 1}</td><td>${escHtml(p.name)}</td></tr>`).join('')}</tbody></table></div>`}`;
+            },
+            async _prDecide(approve) {
+                const note = (document.getElementById('prNote')?.value || '').trim();
+                if (!approve && !note) { alert('Say what needs changing.'); return; }
+                if (approve && !confirm('Approve ' + this._prView.title + ' for ' + this._money(this._prView.total) + '?')) return;
+                const { error } = await supabaseClient.rpc('payroll_decide', { p_id: this._prView.id, p_approve: approve, p_note: note || null });
+                if (error) { alert(error.message); return; }
+                this._payrollBadge(); await this.viewPayroll(this._prView.id);
+            },
+            async _prMarkPaid() {
+                const d = document.getElementById('prPaidDate')?.value;
+                if (!confirm('Mark ' + this._prView.title + ' as paid on ' + d + '? Each project\'s share will be posted to the Expense Tracker.')) return;
+                const { data, error } = await supabaseClient.rpc('payroll_mark_paid', { p_id: this._prView.id, p_date: d || null });
+                if (error) { alert(error.message); return; }
+                if (data && data.failed) alert(data.failed + ' charge(s) could not be posted to the Expense Tracker. The payroll is still marked paid; see the charges table.');
+                this._payrollBadge(); await this.viewPayroll(this._prView.id);
+            },
+            async _prDelete() {
+                if (!confirm('Delete this payroll? This cannot be undone.')) return;
+                const { error } = await supabaseClient.rpc('payroll_delete', { p_id: this._prView.id });
+                if (error) { alert(error.message); return; }
+                this._payrollBadge(); await this.renderPayroll();
+            },
+            // The bank bulk-payment file again, in the same columns as the template
+            async _prBankFile() {
+                const r = this._prView; if (!r || !r.payees) return;
+                try {
+                    const XLSX = await this._loadSheetJS();
+                    const aoa = [['Reciever Name', 'Reciever Account No', 'Amount', 'Sender Narration', "Receiever's Narration", 'BankCode']]
+                        .concat(r.payees.map(p => [p.name, p.account_no || '', Number(p.amount), p.narration || 'SALARY', p.narration || 'SALARY', p.bank_code ? (isNaN(Number(p.bank_code)) ? p.bank_code : Number(p.bank_code)) : '']));
+                    const ws = XLSX.utils.aoa_to_sheet(aoa); const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Bulk payment');
+                    XLSX.writeFile(wb, r.ref + '_bank_file.xlsx');
+                } catch (e) { alert('Could not make the file: ' + (e.message || e)); }
+            },
+            _prPrint() {
+                const r = this._prView; if (!r) return;
+                const adm = r.i_am_admin, m = v => this._money(v);
+                const w = window.open('', '_blank'); if (!w) { alert('Allow pop-ups to print.'); return; }
+                w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escHtml(r.ref)}</title><style>
+                    body{font-family:Arial,sans-serif;font-size:12px;color:#111;margin:24px;}h1{font-size:18px;color:#1B5E20;margin:0 0 4px;}table{border-collapse:collapse;width:100%;margin:8px 0 16px;}
+                    th,td{border:1px solid #bbb;padding:5px 7px;text-align:left;}th{background:#E8F5E9;}td.n{text-align:right;}.s{display:flex;gap:40px;margin-top:30px;}.s div{flex:1;border-top:1px solid #333;padding-top:4px;}</style></head><body>
+                    <h1>RAHAMA · Payroll voucher</h1><div>${escHtml(r.ref)} · ${escHtml(r.title)} · ${escHtml(this._payrollMonth(r.pay_month))}</div>
+                    <table><tr><th>Total</th><td>${m(r.total)}</td><th>People paid</th><td>${r.payee_count}</td></tr></table>
+                    <b>Charged to</b><table><tr><th>Project</th><th>Budget line</th><th>Amount</th></tr>${(r.charges || []).map(c => `<tr><td>${escHtml(c.project_code)}</td><td>${escHtml((c.budget_line || '') + ' ' + (c.line_name || ''))}</td><td class="n">${m(c.amount)}</td></tr>`).join('')}</table>
+                    <b>People paid</b><table><tr><th>#</th><th>Name</th>${adm ? '<th>Account</th><th>Amount</th>' : ''}</tr>${(r.payees || []).map((p, i) => `<tr><td>${i + 1}</td><td>${escHtml(p.name)}</td>${adm ? `<td>${escHtml(p.account_no || '')}</td><td class="n">${m(p.amount)}</td>` : ''}</tr>`).join('')}</table>
+                    <div class="s"><div>Prepared by: ${escHtml(r.prepared_by || '')}<br>${r.prepared_at ? new Date(r.prepared_at).toLocaleDateString('en-NG') : ''}</div>
+                    <div>Approved by: ${escHtml(r.status === 'returned' ? '' : (r.decided_by || ''))}<br>${r.decided_at && r.status !== 'returned' ? new Date(r.decided_at).toLocaleDateString('en-NG') : ''}</div>
+                    <div>Paid: ${r.paid_date ? new Date(r.paid_date).toLocaleDateString('en-NG') : ''}</div></div>
+                    <script>window.onload=()=>window.print();<\/script></body></html>`);
+                w.document.close();
+            },
+
             async renderStore(content, tab) {
                 tab = tab || this._storeTab || 'stock'; this._storeTab = tab;
                 content.innerHTML = '<div class="header"><h2>📦 Store</h2><p>Loading…</p></div>';
