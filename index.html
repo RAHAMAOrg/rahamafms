@@ -3520,7 +3520,18 @@
                     .reduce((s, r) => s + Number(r.amount || 0), 0);
             },
             _myProcReqsHtml() {
-                const list = (this._myProcReqs || []).filter(r => r.status === 'pending' || (Date.now() - new Date(r.decided_at || r.created_at)) < 30 * 86400000);
+                // Only what is still open for the staff member: a request waiting for Procurement; a purchase
+                // Procurement took on, until the concept note is closed or a vendor has been paid (14 days at most);
+                // a release or cancellation for 7 days so it is seen once.
+                const age = r => Date.now() - new Date(r.decided_at || r.created_at).getTime(), DAY = 86400000;
+                const done = r => { const cn = (this.data.conceptNotes || []).find(c => c.refNumber === r.concept_note_ref);
+                    if (!cn || ['closed', 'rejected', 'cancelled', 'withdrawn'].includes(cn.status)) return true;
+                    const since = new Date(r.decided_at || r.created_at).getTime();
+                    return (this.data.payments || []).some(p => p.conceptNoteRef === r.concept_note_ref && p.payMode === 'vendors' && p.status === 'paid'
+                        && new Date(p.paidDate || p.requestDate || 0).getTime() >= since); };
+                const list = (this._myProcReqs || []).filter(r => r.status === 'pending'
+                    || (r.status === 'accepted' && age(r) < 14 * DAY && !done(r))
+                    || (['released', 'cancelled'].includes(r.status) && age(r) < 7 * DAY));
                 if (!list.length) return '';
                 const badge = s => ({ pending: ['⏳ With Procurement', '#FFF8E1', '#B45309'], accepted: ['🛒 Procurement is buying', '#E8F5E9', '#1B5E20'],
                     released: ['↩ Released: request payment as normal', '#EEF2FF', '#1B4D8E'], cancelled: ['Cancelled', '#F3F4F6', '#6B7280'] }[s] || [s, '#F3F4F6', '#6B7280']);
