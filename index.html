@@ -514,6 +514,13 @@
         .dbox-in.flat .kpi { border: 0 !important; border-left: 1px solid #EDF2EF !important; border-radius: 0; box-shadow: none; background: #fff !important; padding: 18px 20px; }
         .dbox-in.flat .kpi:first-child { border-left: 0 !important; } .dbox-in.flat .kpi .ic { display: none; } .dbox-in.flat .kpi .k-l { font-size: 13px; }
         .dash-qa button { height: 104px !important; border-radius: 16px !important; font-size: 14px !important; }
+        .donut-wrap { display: flex; align-items: center; justify-content: center; gap: 28px; min-height: 240px; flex-wrap: wrap; }
+        .donut { position: relative; width: 210px; height: 210px; flex: none; } .donut svg { width: 100%; height: 100%; }
+        .donut-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; text-align: center; }
+        .donut-mid span { font-size: 12px; color: var(--text-muted); } .donut-mid b { font-size: 14px; font-weight: 800; }
+        .donut-leg { display: flex; flex-direction: column; gap: 12px; width: 160px; } .donut-leg div { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .donut-leg i { width: 10px; height: 10px; border-radius: 3px; flex: none; } .donut-leg span { flex: 1; font-weight: 600; } .donut-leg b { font-weight: 700; }
+        .dash-grid:not(.dash-top2) > .dbox { display: flex; flex-direction: column; } .dash-grid:not(.dash-top2) > .dbox > .dbox-in { flex: 1; display: flex; flex-direction: column; justify-content: center; }
         .dash-qa { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; margin-bottom: 0 !important; }
         #mainContent > .panel { margin-bottom: 16px; }
         .dash-sec { margin: 18px 0 12px; } .dash-sec h2 { margin: 0; font-size: 22px; font-weight: 800; } .dash-sec p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
@@ -521,6 +528,7 @@
         .w-row:first-child { border-top: 0; } .w-row:hover { background: #F6FAF7; }
         .w-row .ic { width: 38px; height: 38px; border-radius: 11px; background: #FFF1D6; color: #8A4B08; display: flex; align-items: center; justify-content: center; flex: none; } .w-row .ic svg { width: 19px; height: 19px; }
         .w-row .t { flex: 1; font-size: 14px; font-weight: 600; } .w-row .n { min-width: 28px; height: 28px; padding: 0 8px; border-radius: 14px; background: #FDE8E1; color: #9A3412; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; } .w-row .go { color: #5B6B62; font-size: 18px; }
+        .w-empty small { display: block; font-size: 12.5px; margin-top: 2px; }
         .w-empty { display: flex; align-items: center; gap: 10px; padding: 18px 4px; color: var(--text-muted); font-size: 14px; } .w-empty svg { width: 22px; height: 22px; color: #1F6F4A; }
         .panel.attn .pills { flex-direction: column; gap: 0; margin: 0; } .panel.attn .pill { width: 100%; justify-content: flex-start; border-radius: 0; background: none !important; border: 0; border-top: 1px solid #EDF2EF; padding: 12px 4px; font-size: 14px; text-align: left; }
         .panel.attn .pill:first-child { border-top: 0; } .panel.attn .pill.red { color: #9A3412; } .panel.attn .pill.amber { color: #8A4B08; } .panel.attn .pill:hover { background: #F6FAF7 !important; }
@@ -2327,6 +2335,7 @@
                 if (['finance', 'finance_manager', 'GrantsCompliance'].includes(role))
                     rows.push(['Payments with Finance (review, approve, authorise)', (this.data.payments || []).filter(p => ['pending', 'reviewed', 'finance_approved'].includes(p.status)).length, "app._nextMode=null;app.showView('approvals')"]);
                 if (['finance', 'finance_manager', 'GrantsCompliance'].includes(role)) rows.push(['Retirements to review', (this.data.retirements || []).filter(r => r.status === 'pending').length, "app._nextMode=null;app.showView('approvals')"]);
+                rows.push(...this._dashMyRows());
                 setTimeout(() => this._dashQueueAsync(rows), 0);
                 return this._dashQueueRows(rows);
             },
@@ -2337,11 +2346,11 @@
                 const ac = document.getElementById('acPending'); if (ac) ac.textContent = total ? `${total} waiting for you` : 'Nothing waiting for you';
                 const SUB = { 'Concept notes to approve': 'Waiting for your approval', 'PO costs above the approved amount': 'Needs your decision', 'Retirements to review': 'Submitted, not yet reviewed',
                     'Payments with Finance (review, approve, authorise)': 'Review, approve or authorise', 'Vehicle requests and trips': 'Requests and trip records', 'Store requests': 'Items requested from the store',
-                    'Concept notes returned to you': 'Correct and resubmit', 'Retirements overdue': 'More than 5 days since payment', 'Advances to retire': 'Submit your receipts', 'Procurement plans to sign': 'Waiting for your signature', 'Procurement plans sent back to you': 'Correct and resend' };
-                const ICN = l => /retire/i.test(l) ? 'retirement' : /payment/i.test(l) ? 'payment' : /vehicle/i.test(l) ? 'fleet' : /store/i.test(l) ? 'store' : /plan/i.test(l) ? 'procPlans' : /PO/.test(l) ? 'exceptions' : 'conceptNote';
+                    'Concept notes returned to you': 'Correct and resubmit', 'Retirements overdue': 'More than 5 days since payment', 'Advances to retire': 'Submit your receipts', 'Procurement plans to sign': 'Waiting for your signature', 'Procurement plans sent back to you': 'Correct and resend', 'Retirements sent back to you': 'Correct and resubmit', 'Notifications': 'Tap to see them' };
+                const ICN = l => /notif/i.test(l) ? 'inbox' : /retire/i.test(l) ? 'retirement' : /payment/i.test(l) ? 'payment' : /vehicle/i.test(l) ? 'fleet' : /store/i.test(l) ? 'store' : /plan/i.test(l) ? 'procPlans' : /PO/.test(l) ? 'exceptions' : 'conceptNote';
                 const live = rows.filter(r => Number(r[1]) > 0);
                 const setQc = () => { const qc = document.getElementById('dashQueueCount'); if (qc) qc.textContent = total ? total + (total > 1 ? ' items' : ' item') : ''; }; setQc(); setTimeout(setQc, 0);
-                if (!live.length) return '<div class="w-empty">' + this._icon('approvals') + '<span>Nothing is waiting for you.</span></div>';
+                if (!live.length) return '<div class="w-empty">' + this._icon('approvals') + '<span>You are all caught up.<small>Approvals, anything returned to you, retirements due and notifications show here.</small></span></div>';
                 return '<div class="w-list">' + live.map(([l, n, go, ic]) => `<button type="button" class="w-row" onclick="${go}"><span class="ic">${this._icon(ic || ICN(l))}</span><span class="t">${l}${SUB[l] ? `<small>${SUB[l]}</small>` : ''}</span><span class="n">${n}</span><span class="go" aria-hidden="true">›</span></button>`).join('') + '</div>';
             },
             async _dashQueueAsync(rows) {
@@ -2390,8 +2399,6 @@
                 if (od.length) { const st = this._dashRetireStats(); out.push(row('red', 'alert', `${od.length} advance${od.length > 1 ? 's' : ''} overdue for retirement`, this._nairaFull(od.reduce((s, p) => s + Number(p.amount || 0), 0)) + (st.pct != null ? ` · ${st.pct}% retired on time` : ''), 'app._dashOverdueList(true)')); }
                 if (this._dashSeesBudget()) (this.data.projects || []).map(pr => this._dashProjectFigures(pr)).filter(b => b.budget > 0 && b.committed / b.budget >= 0.9)
                     .forEach(b => out.push(row('amber', 'reports', `${escHtml(b.code)} ${escHtml(b.name || '')} at ${Math.round(b.committed / b.budget * 100)}% of budget`, `${this._nairaFull(b.left)} left of ${this._nairaFull(b.budget)}`, "app.showView('reports')")));
-                const n = (this.data.notifications || []).length;
-                if (n) out.push(row('grey', 'inbox', `${n} notification${n > 1 ? 's' : ''}`, 'Tap one to open or dismiss it', "document.getElementById('dashNotes')?.scrollIntoView({behavior:'smooth'})"));
                 setTimeout(async () => {
                     try { const [x, y] = await Promise.all([this._rpcCached('vendor_payments_awaiting_grr'), this._rpcCached('grr_signatures_outstanding')]);
                         const k = (Array.isArray(x && x.data) ? x.data.length : 0) + (Array.isArray(y && y.data) ? y.data.length : 0);
@@ -2400,6 +2407,48 @@
                         el.insertAdjacentHTML('beforeend', row('amber', 'alert', `${k} missing vendor signature${k > 1 ? 's' : ''}`, 'On issued purchase orders and goods received notes', "const d=document.getElementById('dashAlertDetails');if(d){d.open=true;d.scrollIntoView({behavior:'smooth'});}"));
                     } catch (e) {} }, 0);
                 return out.length ? out.join('') : '<div class="w-empty">' + this._icon('approvals') + '<span>Nothing needs attention.</span></div>';
+            },
+            // Your own items (returned, retirements due) and unread notifications: shown to everyone
+            // Spending by cost type (paid this year), by the cost type of each payment's concept note.
+            // Colours follow the Expense Tracker: green, gold, red; grey for not classified.
+            _DONUT: [['programme_activity', 'Programme', '#2d7a52', 'Programme activity'], ['programme_support', 'Support', '#D9A21B', 'Programme support'], ['administration', 'Admin', '#C4432A', 'Administration and overhead'], ['', 'Unclassified', '#C9D3CD', 'Not classified']],
+            _dashDonutHtml() {
+                const y0 = new Date(new Date().getFullYear(), 0, 1);
+                const pays = (this.data.payments || []).filter(p => p.status === 'paid' && p.paidDate && new Date(p.paidDate) >= y0);
+                this._cnClass = this._cnClass || {};
+                (this.data.conceptNotes || []).forEach(c => { if (c.costClassification) this._cnClass[c.refNumber] = c.costClassification; });
+                const missing = [...new Set(pays.map(p => p.conceptNoteRef).filter(r => r && !(r in this._cnClass)))];
+                if (missing.length && !this._cnClassLoading) {
+                    this._cnClassLoading = true;
+                    (async () => { try { for (let i = 0; i < missing.length; i += 150) {
+                            const { data } = await supabaseClient.from('concept_notes').select('refNumber,costClassification').in('refNumber', missing.slice(i, i + 150));
+                            (data || []).forEach(c => { this._cnClass[c.refNumber] = c.costClassification || ''; });
+                        }
+                        missing.forEach(r => { if (!(r in this._cnClass)) this._cnClass[r] = ''; });
+                        const el = document.getElementById('dashDonut'); if (el) el.innerHTML = this._dashDonutHtml();
+                    } catch (e) {} this._cnClassLoading = false; })();
+                }
+                const tot = {}; let all = 0;
+                pays.forEach(p => { const k = this._cnClass[p.conceptNoteRef] || ''; const key = this._DONUT.some(d => d[0] === k) ? k : ''; tot[key] = (tot[key] || 0) + Number(p.amount || 0); all += Number(p.amount || 0); });
+                if (!all) return '<div class="w-empty">' + this._icon('pie') + '<span>No payments yet this year.</span></div>';
+                const R = 70, C = 2 * Math.PI * R; let off = 0;
+                const segs = this._DONUT.map(([k, short, col, long]) => ({ short, col, long, v: tot[k] || 0 })).filter(d => d.v > 0);
+                const arcs = segs.map(d => { const ln = C * d.v / all; const a = `<circle cx="100" cy="100" r="${R}" fill="none" stroke="${d.col}" stroke-width="28" stroke-dasharray="${ln.toFixed(1)} ${(C - ln).toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 100 100)"><title>${d.long}: ${this._nairaFull(d.v)} (${Math.round(d.v / all * 100)}%)</title></circle>`; off += ln; return a; }).join('');
+                const label = segs.map(d => `${d.long} ${Math.round(d.v / all * 100)}%`).join(', ');
+                return `<div class="donut"><svg viewBox="0 0 200 200" role="img" aria-label="Spending by cost type: ${label}">${arcs}</svg><div class="donut-mid"><span>Total paid</span><b>${this._nairaFull(all)}</b></div></div>
+                    <div class="donut-leg">${segs.map(d => `<div title="${d.long}: ${this._nairaFull(d.v)}"><i style="background:${d.col}"></i><span>${d.short}</span><b>${Math.round(d.v / all * 100)}%</b></div>`).join('')}</div>`;
+            },
+            _dashMyRows() {
+                const cns = this.getMyConceptNotes(), pays = this.getMyPayments(), rets = this.getMyRetirements();
+                const un = pays.filter(p => p.status === 'paid' && (p.retirementresponsibility === 'staff' || !p.retirementresponsibility) && !rets.find(r => r.paymentRef === p.refNumber));
+                const od = un.filter(p => p.paidDate && Math.floor((Date.now() - new Date(p.paidDate)) / 86400000) > 5);
+                const retBack = rets.filter(r => r.status === 'rejected' && !rets.find(x => x !== r && x.paymentRef === r.paymentRef && x.status !== 'rejected')).length;
+                const n = (this.data.notifications || []).length;
+                return [['Concept notes returned to you', cns.filter(c => c.status === 'returned').length, "app.showView('myConceptNotes')", 'conceptNote'],
+                    ['Retirements sent back to you', retBack, "app.showView('retirement')", 'retirement'],
+                    ['Retirements overdue', od.length, "app.showView('retirement')", 'retirement'],
+                    ['Advances to retire', Math.max(0, un.length - od.length), "app.showView('retirement')", 'payment'],
+                    ['Notifications', n, "document.getElementById('dashNotes')?.scrollIntoView({behavior:'smooth'})", 'inbox']];
             },
             _dashMyWaiting(cns, unretired, overdue) {
                 const ret = cns.filter(c => c.status === 'returned').length;
@@ -2465,7 +2514,7 @@
                     ${isLocked ? `<div class="alert-badge danger">⚠️ Your account is locked: ${unretiredPayments.length >= 2 ? `${unretiredPayments.length} unretired advances` : `Retirement overdue by ${Math.floor((Date.now() - new Date(overdueRetirements[0].paidDate)) / (1000 * 60 * 60 * 24))} days`}</div>` : ''}
                     ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `<div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;"><h2 style="font-size: 28px; margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Welcome to RAHAMA FMS! 🎉</h2><p style="font-size: 16px; opacity: 0.95; max-width: 600px; margin: 0 auto 24px;">You're all set to start managing your financial workflows. Create your first concept note to get started.</p><button onclick="app.showView('conceptNote')" class="btn" style="background: white; color: var(--primary); padding: 16px 32px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">Create Your First Concept Note →</button></div>` : ''}
                     <div class="dash-grid dash-top2">
-                        <section class="dbox"><h3>Waiting for you <span id="dashQueueCount" class="h-note"></span></h3><div class="dbox-in" id="dashQueue">${approver || seesBudget ? this._dashQueueHtml() : this._dashQueueRows(this._dashMyWaiting(myConceptNotes, unretiredPayments, overdueRetirements))}</div></section>
+                        <section class="dbox"><h3>Waiting for you <span id="dashQueueCount" class="h-note"></span></h3><div class="dbox-in" id="dashQueue">${approver || seesBudget ? this._dashQueueHtml() : this._dashQueueRows(this._dashMyRows())}</div></section>
                         <section class="dbox"><h3>Quick actions</h3>${this._dashQuickActions()}</section>
                     </div>
                     ${seesBudget || ['finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? `
@@ -2474,7 +2523,7 @@
                     <section class="dbox"><h3>This quarter</h3><div class="dbox-in flat">${this._dashKpis(myConceptNotes, myPayments, unretiredPayments, overdueRetirements)}</div></section>
                     <div class="dash-grid">
                         <section class="dbox"><h3>${seesBudget ? 'Spending, all projects' : 'Payments, all projects'} <span class="h-note">last 6 months</span></h3><div class="dbox-in pad">${this._dashTrend(this.data.payments)}</div></section>
-                        ${seesBudget ? `<section class="dbox"><h3>Project budgets <span class="h-note">used = paid + approved and held</span></h3><div class="dbox-in pad">${this._dashBudget()}<a href="#" class="dbox-link" onclick="app.showView('reports');return false;">All projects ›</a></div></section>`
+                        ${seesBudget ? `<section class="dbox"><h3>Spending by cost type <span class="h-note">paid, this year</span></h3><div class="dbox-in pad"><div id="dashDonut" class="donut-wrap">${this._dashDonutHtml()}</div></div></section>`
                                      : `<section class="dbox"><h3>Recent payments</h3><div class="dbox-in pad">${this._dashRecent(true)}</div></section>`}
                     </div>` : `
                     <div class="dash-sec"><h2>My figures</h2></div>
