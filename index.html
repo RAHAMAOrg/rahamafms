@@ -525,6 +525,7 @@
                 <li class="nav-group">Operations</li>
                 <li><button id="fleetBtn" onclick="app.showView('fleet')" data-view="fleet">🚗 Fleet</button></li>
                 <li><button id="storeBtn" onclick="app.showView('store')" data-view="store">📦 Store</button></li>
+                <li><button id="staffAdminBtn" onclick="app.showView('staffadmin')" data-view="staffadmin" style="display:none;">👥 Staff</button></li>
                 <li><button id="payrollBtn" onclick="app.showView('payroll')" data-view="payroll" style="display:none;">💼 Payroll</button></li>
                 <li><button id="procPlansBtn" onclick="app.showView('procPlans')" data-view="procPlans" style="display:none;">📋 Procurement Plans</button></li>
                 <li class="nav-group">Reports &amp; oversight</li>
@@ -817,6 +818,7 @@
                     const storeBtn = document.getElementById('storeBtn');
                     if (storeBtn) storeBtn.style.display = ['donor', 'reconciliation'].includes(role) ? 'none' : '';
                     this._initPayrollNav().catch(() => {});
+                    { const sb = document.getElementById('staffAdminBtn'); if (sb) sb.style.display = ['budgetOwner', 'ed', 'finance', 'finance_manager'].includes(role) ? '' : 'none'; }
                     const auditBtn      = document.getElementById('auditTrailBtn');
                     const superBtn      = document.getElementById('superAdminBtn');
                     const quarterlyBtn  = document.getElementById('quarterlyReportBtn');
@@ -1635,6 +1637,7 @@
                         case 'fleet': this.renderFleet(content).catch(e => console.error(e)); break;
                         case 'store': this.renderStore(content).catch(e => console.error(e)); break;
                         case 'payroll': this.renderPayroll(content).catch(e => console.error(e)); break;
+                        case 'staffadmin': this.renderStaffAdmin(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
                         case 'settings': this.renderSettings(content); break;
                     }
@@ -1670,6 +1673,7 @@
                 retirement: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h3"/>',
                 approvals: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
                 fleet: '<path d="M3 13l2-5a2 2 0 0 1 2-1h10a2 2 0 0 1 2 1l2 5v4h-2"/><path d="M3 13v4h2M7 17h10"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>',
+                staffadmin: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
                 payroll: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
                 store: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
                 procPlans: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h3"/>',
@@ -9960,6 +9964,86 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 this._store = { stock: st, reqs: rq, moves: mv, awaiting: aw };
                 return this._store;
             },
+            // ================= STAFF (add, exit clearance, archive) =================
+            async renderStaffAdmin(content, showArch) {
+                content = content || document.getElementById('mainContent');
+                document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === 'staffadmin'));
+                const { data, error } = await supabaseClient.rpc('fms_staff_list');
+                if (error) { content.innerHTML = `<div class="empty-state"><h2>Staff</h2><p>${escHtml(/function|schema cache/i.test(error.message) ? 'Run fms_staff_access.sql first.' : error.message)}</p></div>`; return; }
+                const all = data || [], boed = all.length && all[0].i_boed;
+                this._staffList = all; this._staffArch = !!showArch;
+                const list = all.filter(p => showArch ? p.is_active === false : p.is_active !== false);
+                const leaving = all.filter(p => p.is_active !== false && p.exit_cleared_at);
+                content.innerHTML = `
+                    <div class="header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                        <div><h2>👥 Staff</h2><p>FMS sign-ins. When someone leaves, check what they still have open, have Finance confirm it is clear, then archive them so they can no longer sign in.</p></div>
+                        ${boed ? `<button class="btn btn-primary" onclick="app.openAddStaff()">➕ Add staff</button>` : ''}</div>
+                    <div style="display:flex;gap:6px;margin-bottom:14px;">
+                        <button class="btn ${!showArch ? 'btn-primary' : 'btn-secondary'}" style="font-size:13px;" onclick="app.renderStaffAdmin(null,false)">Current (${all.filter(p => p.is_active !== false).length})</button>
+                        <button class="btn ${showArch ? 'btn-primary' : 'btn-secondary'}" style="font-size:13px;" onclick="app.renderStaffAdmin(null,true)">Archived (${all.filter(p => p.is_active === false).length})</button></div>
+                    <div class="table-container"><table><thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Still open in the FMS</th><th>${showArch ? 'Archived' : 'Finance clearance'}</th><th></th></tr></thead><tbody>
+                    ${list.map((p, i) => `<tr><td><b>${escHtml(p.name)}</b></td><td>${escHtml(p.role || '')}</td><td style="font-size:12px;">${escHtml(p.email || '')}</td>
+                        <td>${(p.open || []).length ? `<span style="color:#991B1B;font-weight:700;">${p.open.length} item${p.open.length > 1 ? 's' : ''}</span>` : '<span style="color:#065F46;">Nothing open</span>'}</td>
+                        <td style="font-size:12px;">${showArch ? escHtml((p.archived_by || '') + (p.archive_note ? ': ' + p.archive_note : '')) : p.exit_cleared_at ? '✓ ' + escHtml(p.exit_cleared_by || '') : ''}</td>
+                        <td><button class="action-btn view" onclick="app.openStaffExit(${all.indexOf(p)})">${showArch ? 'Open' : 'Exit check'}</button></td></tr>`).join('') || '<tr><td colspan="6">No one here.</td></tr>'}
+                    </tbody></table></div>`;
+            },
+            openStaffExit(i) {
+                const p = this._staffList[i]; if (!p) return;
+                const content = document.getElementById('mainContent'), open = p.open || [], inp = 'width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;';
+                const actions = [];
+                if (p.is_active !== false) {
+                    if (p.i_finance) actions.push(open.length ? `<p style="font-size:13px;color:#6B7280;">Finance can confirm only when nothing is open.</p>`
+                        : `<button class="btn btn-primary" onclick="app._staffDo('clear',${i})">✓ Confirm the FMS is clear</button>`);
+                    if (p.i_boed && !p.is_me) actions.push(`<div style="margin-top:10px;">${open.length || !p.exit_cleared_at ? `<label style="font-size:12px;font-weight:600;">Reason (required: ${open.length ? open.length + ' item(s) still open' : 'Finance has not confirmed'})</label>
+                        <input id="stNote" style="${inp}" placeholder="e.g. Left without offboarding; open items owed">` : ''}
+                        <button class="btn btn-secondary" style="margin-top:8px;color:#991B1B;" onclick="app._staffDo('archive',${i})">🗄 Archive (stop FMS sign-in)</button></div>`);
+                } else if (p.i_boed) actions.push(`<button class="btn btn-secondary" onclick="app._staffDo('restore',${i})">↩ Restore</button>`);
+                content.innerHTML = `
+                    <div class="header"><button class="btn btn-secondary" style="font-size:12px;margin-bottom:8px;" onclick="app.renderStaffAdmin(null,${this._staffArch})">← Staff</button>
+                        <h2>${escHtml(p.name)}</h2><p>${escHtml(p.role || '')} · ${escHtml(p.email || '')}${p.is_active === false ? ' · Archived' : ''}</p></div>
+                    ${p.archive_note ? `<div style="background:#F3F4F6;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;">${escHtml(p.archive_note)}</div>` : ''}
+                    <h3 style="margin:6px 0;">Still open in the FMS (${open.length})</h3>
+                    <div class="table-container"><table><thead><tr><th>What</th><th>Reference</th><th style="text-align:right;">Amount</th><th>Status / note</th></tr></thead><tbody>
+                    ${open.map(x => `<tr><td>${escHtml(x.kind)}</td><td>${escHtml(x.ref || '')}</td><td style="text-align:right;">${x.amount != null ? this._money(x.amount) : ''}</td><td>${escHtml(x.detail || '')}</td></tr>`).join('') || '<tr><td colspan="4" style="color:#065F46;">Nothing open.</td></tr>'}
+                    </tbody></table></div>
+                    <div style="margin-top:12px;font-size:13px;">Finance clearance: ${p.exit_cleared_at ? '✓ ' + escHtml(p.exit_cleared_by) + ' · ' + new Date(p.exit_cleared_at).toLocaleDateString('en-NG') : 'not yet'}</div>
+                    <div style="margin-top:14px;">${actions.join('')}</div>`;
+            },
+            async _staffDo(what, i) {
+                const p = this._staffList[i]; if (!p) return;
+                let r;
+                if (what === 'clear') r = await supabaseClient.rpc('fms_exit_confirm_clear', { p_name: p.name });
+                else {
+                    const note = (document.getElementById('stNote')?.value || '').trim();
+                    if (what === 'archive' && !confirm('Archive ' + p.name + '? They will no longer be able to sign in to the FMS.')) return;
+                    r = await supabaseClient.rpc('fms_staff_archive', { p_name: p.name, p_archive: what === 'archive', p_note: note || null });
+                }
+                if (r.error) { alert(r.error.message); return; }
+                alert(r.data); await this.renderStaffAdmin(null, what === 'restore' ? false : this._staffArch);
+            },
+            openAddStaff() {
+                const content = document.getElementById('mainContent'), inp = 'width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;box-sizing:border-box;';
+                content.innerHTML = `<div class="header"><button class="btn btn-secondary" style="font-size:12px;margin-bottom:8px;" onclick="app.renderStaffAdmin()">← Staff</button>
+                    <h2>Add staff to the FMS</h2><p>Creates their FMS sign-in with a staff role. Finance, Procurement, BO and other roles are still given by the administrator.</p></div>
+                    <div id="addStaffBox" style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;max-width:560px;">
+                        <label style="font-size:12px;font-weight:600;">Full name * (as it should appear on concept notes)</label><input id="asName" style="${inp}">
+                        <label style="font-size:12px;font-weight:600;display:block;margin-top:10px;">Email they will sign in with *</label><input id="asEmail" type="email" style="${inp}" placeholder="name@rgcweinigeria.org">
+                        <button class="btn btn-primary" style="margin-top:14px;" onclick="app._addStaff()">Add and create sign-in</button></div>`;
+            },
+            async _addStaff() {
+                const name = (document.getElementById('asName').value || '').trim(), email = (document.getElementById('asEmail').value || '').trim();
+                if (!name || !email) { alert('Enter the full name and email.'); return; }
+                const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', a = new Uint32Array(10); crypto.getRandomValues(a);
+                const pw = 'Rh-' + Array.from(a, n => c[n % c.length]).join('');
+                const { data, error } = await supabaseClient.rpc('fms_staff_create', { p_name: name, p_email: email, p_password: pw });
+                if (error) { alert(error.message); return; }
+                document.getElementById('addStaffBox').innerHTML = `<p style="font-weight:700;color:#065F46;">✓ ${escHtml(data)}</p>
+                    <div style="background:#F3F4F6;border-radius:8px;padding:12px;font-size:14px;margin:10px 0;">Email: <b>${escHtml(email.toLowerCase())}</b><br>Temporary password: <b style="font-family:monospace;">${escHtml(pw)}</b></div>
+                    <p style="font-size:12px;color:#6B7280;">Shown only now. Give it to them privately and ask them to change it after they sign in.</p>
+                    <button class="btn btn-primary" onclick="app.renderStaffAdmin()">Done</button>`;
+            },
+
             // ================= PAYROLL =================
             // Monthly salaries without a concept note. Amounts and account numbers are
             // only ever sent by the database to the payroll officers (you and the ED);
