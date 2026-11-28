@@ -420,7 +420,8 @@
         .dash-tabs button { border: none; background: none; padding: 5px 10px; border-radius: 6px; font-size: 12.5px; font-weight: 700; color: #4B5563; cursor: pointer; font-family: inherit; }
         .dash-tabs button.on { background: #fff; color: #14432B; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
         .pill.red { background: #FDECEA; color: #A8321C; } .pill.amber { background: #FFF4E5; color: #92400E; } .pill.blue { background: #E3F2FD; color: #1B4D8E; } .pill.grey { background: #EEF2EF; color: #374151; }
-        .dash-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; margin-bottom: 22px; }
+        .dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-bottom: 22px; }
+        .kpis + .pills { margin-top: -8px; }
         @media (max-width: 900px) { .dash-grid { grid-template-columns: 1fr; } .dash-search { min-width: 0; flex: 1; } }
         .panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0; }
         .panel h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 15px; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -496,6 +497,38 @@
         .r-item .r-main { flex: 1; min-width: 0; } .r-item b { display: block; font-size: 13px; } .r-item small { font-size: 11.5px; color: var(--text-muted); }
         .panel h3 a { margin-left: auto; }
         .dash-foot { margin-top: 18px; padding: 14px 0 4px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-muted); }
+        .pg-hide { display: none !important; }
+        .pg-more { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 4px 4px; font-size: 13px; color: var(--text-muted); }
+        .pg-more button { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; font-family: inherit; font-size: 13px; font-weight: 700; color: #1F6F4A; cursor: pointer; }
+        .pg-more button:hover { background: #F6FAF7; }
+        .so-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 6px; }
+        .so-tabs button { border: 0; background: none; padding: 10px 16px; border-radius: 10px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+        .so-tabs button.on { background: var(--nav-bg); color: #fff; }
+        .sec-crumb { background: none; border: 0; padding: 0; margin: 0 0 10px; font-family: inherit; font-size: 14px; font-weight: 700; color: #1F6F4A; cursor: pointer; }
+        .dash-qa-h { margin: 4px 0 10px; font-size: 16px; font-weight: 700; }
+        .dash-qa { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+        .dash-qa button { background: #fff; border: 1px solid var(--border); border-radius: 14px; height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; padding: 0 6px; text-align: center; }
+        .dash-qa button:hover { background: #F6FAF7; } .dash-qa button svg { width: 22px; height: 22px; color: #1F6F4A; }
+        @media (max-width: 960px) { .dash-qa { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        .nav-legacy { display: none !important; }
+        .sidebar { display: flex; flex-direction: column; }
+        .sidebar .nav-main { flex: 1; display: flex; flex-direction: column; }
+        .sidebar .nav-main .nav-spacer { flex: 1; min-height: 16px; }
+        .sidebar .nav-main > li > button { padding: 12px 20px !important; font-size: 14.5px !important; }
+        .sidebar .nav-main .sec-badge { margin-left: auto; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 11px; background: #E8B93A; color: #1B1A10; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+        .sec-head { margin-bottom: 22px; } .sec-head h2 { margin: 0; font-size: 28px; font-weight: 800; } .sec-head p { margin: 6px 0 0; color: var(--text-muted); font-size: 14px; }
+        .sec-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+        .sec-col { display: flex; flex-direction: column; gap: 22px; }
+        .sec-box h3 { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
+        .sec-list { background: #fff; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+        .sec-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 18px; border: 0; border-top: 1px solid #EDF2EF; background: #fff; text-align: left; cursor: pointer; font-family: inherit; color: var(--text); }
+        .sec-row:first-child { border-top: 0; } .sec-row:hover { background: #F6FAF7; }
+        .sec-row .ic { width: 40px; height: 40px; border-radius: 12px; background: #DCEFE3; color: #1F6F4A; display: flex; align-items: center; justify-content: center; flex: none; }
+        .sec-row .ic svg { width: 20px; height: 20px; }
+        .sec-row .t { flex: 1; min-width: 0; } .sec-row .t b { display: block; font-size: 14.5px; font-weight: 600; } .sec-row .t small { font-size: 12.5px; color: var(--text-muted); }
+        .sec-row .n { min-width: 28px; height: 28px; padding: 0 8px; box-sizing: border-box; border-radius: 14px; background: #FDE8E1; color: #9A3412; font-weight: 800; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+        .sec-row .go { color: #5B6B62; font-size: 18px; }
+        @media (max-width: 860px) { .sec-grid { grid-template-columns: minmax(0, 1fr); } }
         </style>
 </head>
 <body>
@@ -514,8 +547,18 @@
                 <label>Signed in as</label>
                 <div id="loggedInUser" style="font-weight:600;"></div>
             </div>
-            <ul class="nav">
-                <li><button onclick="app.showView('dashboard')" class="active" data-view="dashboard">Dashboard</button></li>
+            <ul class="nav nav-main" id="mainNav">
+                <li><button onclick="app.showView('dashboard')" class="active" data-view="dashboard" data-icon="dashboard">Home</button></li>
+                <li><button onclick="app.showView('secMywork')" data-view="secMywork" data-sec="mywork" data-icon="conceptNote">My work</button></li>
+                <li><button onclick="app._nextMode=null;app.showView('approvals')" data-view="approvals" data-sec="approvals" data-icon="approvals">Approvals</button></li>
+                <li><button onclick="app.showView('secOps')" data-view="secOps" data-sec="ops" data-icon="store">Operations</button></li>
+                <li><button onclick="app.showView('secReports')" data-view="secReports" data-sec="reports" data-icon="reports">Reports</button></li>
+                <li class="nav-spacer"></li>
+                <li><button onclick="app.showView('settings')" data-view="settings" data-icon="settings">Settings</button></li>
+                <li><button data-icon="key" onclick="app.changeFmsPassword()">Change password</button></li>
+            </ul>
+            <ul class="nav nav-legacy" aria-hidden="true">
+                <li><button onclick="app.showView('dashboard')" data-view="dashboard">Dashboard</button></li>
                 <li class="nav-group">My work</li>
                 <li><button onclick="app.showView('conceptNote')" data-view="conceptNote">Create Concept Note</button></li>
                 <li><button onclick="app.showView('myConceptNotes')" data-view="myConceptNotes">My Concept Notes</button></li>
@@ -845,8 +888,12 @@
                         if (btn) btn.style.display = 'none';
                     }
                 }
+                this._refreshSectionNav();
+                this._initSectionCrumb();
+                this._initPager();
                 this.showView('dashboard');
                 this.loadData().then(() => {
+                    this._refreshSectionNav();
                     this._consumePendingBeneficiaryLink().catch(() => {});
                     if (this.getUserRole() === 'staff') this._sendOverdueRetirementReminders();
                 }).catch(error => console.error('Background data load error:', error));
@@ -1612,6 +1659,8 @@
                 document.querySelectorAll('.nav button').forEach(btn => btn.classList.remove('active'));
                 const targetBtn = document.querySelector(`.nav button[data-view="${viewName}"]`);
                 if (targetBtn) targetBtn.classList.add('active');
+                this._markSection(viewName);
+                this._curView = viewName;
                 const content = document.getElementById('mainContent');
                 if (!this.currentUser) {
                     content.innerHTML = `<div class="empty-state"><h2>User session not found</h2><p>Please login from the Staff Portal.</p></div>`;
@@ -1640,8 +1689,116 @@
                         case 'staffadmin': this.renderStaffAdmin(content).catch(e => console.error(e)); break;
                         case 'reports': this.renderReports(content); break;
                         case 'settings': this.renderSettings(content); break;
+                        case 'secMywork': this.renderSection(content, 'mywork'); break;
+                        case 'secOps': this.renderSection(content, 'ops'); break;
+                        case 'secReports': this.renderSection(content, 'reports'); break;
                     }
                 }, 100);
+            },
+
+            // ---- Grouped menu: five sections, each a page of grouped boxes (like the Staff Portal).
+            // A row shows only when its original menu button is visible for this role.
+            _SECTIONS: {
+                mywork: { title: 'My work', sub: 'Your own concept notes, payments, retirements and requests', groups: [
+                    ['Concept notes', [['conceptNote', 'New concept note', 'Plan an activity and its budget'], ['myConceptNotes', 'My concept notes', 'Track, edit and close your concept notes']]],
+                    ['Money', [['payment', 'Request payment', 'Against an approved concept note'], ['retirement', 'Submit retirement', 'Receipts for money you were advanced']]],
+                    ['Requests', [['fleet', 'Vehicle requests', 'Request a vehicle; trips need Security clearance'], ['store', 'Store requests', 'Request items from bulk stock']]] ] },
+                ops: { title: 'Operations', sub: 'Vehicles, store, procurement, staff and payroll', groups: [
+                    ['Logistics', [['fleet', 'Fleet', 'Vehicle requests, trips and Security clearance'], ['store', 'Store', 'Bulk stock and item requests']]],
+                    ['Procurement', [['procPlans', 'Procurement plans', 'Plans to prepare, review and sign']]],
+                    ['People and pay', [['staffadmin', 'Staff', 'Add staff, exit checks and archiving'], ['payroll', 'Payroll', 'Monthly salaries by project']]] ] },
+                reports: { title: 'Reports', sub: 'Budgets, reports and oversight', groups: [
+                    ['Reports', [['reports', 'Reports and budget', 'Project budgets, spending and downloads'], ['quarterlyReport', 'Quarterly report', 'Quarter summary by project'], ['donorPortal', 'Donor portal', 'What donors can see']]],
+                    ['Oversight', [['superAdmin', 'System overview', 'Every record in the FMS, by type'], ['auditTrail', 'Audit trail', 'Who did what, and when'], ['exceptions', 'Exceptions', 'Records that broke a rule'], ['budgetLog', 'Budget changes', 'Every change to a budget line'], ['reconciliation', 'Reconciliation', 'Bank and cash reconciliation']]],
+                    ['Other tools', [['@tracker', 'Project tracker', 'Grants and project milestones'], ['@expense', 'Expense tracker', 'Every expense by project and budget line']]] ] }
+            },
+            _VIEW_SEC: { conceptNote: 'mywork', myConceptNotes: 'mywork', payment: 'mywork', retirement: 'mywork', secMywork: 'mywork', approvals: 'approvals',
+                fleet: 'ops', store: 'ops', staffadmin: 'ops', payroll: 'ops', procPlans: 'ops', secOps: 'ops',
+                reports: 'reports', quarterlyReport: 'reports', donorPortal: 'reports', superAdmin: 'reports', auditTrail: 'reports', exceptions: 'reports', budgetLog: 'reports', reconciliation: 'reports', secReports: 'reports' },
+            _markSection(viewName) {
+                const sec = this._VIEW_SEC[viewName];
+                document.querySelectorAll('#mainNav button').forEach(b => b.classList.toggle('active', (sec && b.dataset.sec === sec) || (!sec && b.dataset.view === viewName)));
+                try { this._refreshSectionNav(); } catch (e) {}
+            },
+            _secItemVisible(key) {
+                if (key === '@tracker') return true;
+                if (key === '@expense') { const b = document.getElementById('expenseTrackerBtn'); return !!b && b.style.display !== 'none'; }
+                const b = document.querySelector(`.nav-legacy button[data-view="${key}"]`);
+                return !!b && b.style.display !== 'none';
+            },
+            _secVisibleGroups(sec) {
+                const d = this._SECTIONS[sec]; if (!d) return [];
+                return d.groups.map(([g, rows]) => [g, rows.filter(r => this._secItemVisible(r[0]))]).filter(([, rows]) => rows.length);
+            },
+            _refreshSectionNav() {
+                Object.keys(this._SECTIONS).forEach(sec => { const b = document.querySelector(`#mainNav button[data-sec="${sec}"]`); if (b) b.parentElement.style.display = this._secVisibleGroups(sec).length ? '' : 'none'; });
+                const ab = document.querySelector('#mainNav button[data-sec="approvals"]');
+                if (ab) { let n = 0; try { n = this._itemsWaitingForMe().length; } catch (e) {}
+                    let bd = ab.querySelector('.sec-badge'); if (n > 0) { if (!bd) { bd = document.createElement('span'); bd.className = 'sec-badge'; ab.appendChild(bd); } bd.textContent = n; } else if (bd) bd.remove(); }
+            },
+            _secOpen(key) {
+                if (key === '@tracker') { window.location.href = 'grants-tracker.html'; return; }
+                if (key === '@expense') { window.location.href = 'expense-tracker.html'; return; }
+                this.showView(key);
+                const t = document.getElementById('topbarTitle'); if (t) { const r = Object.values(this._SECTIONS).flatMap(s => s.groups.flatMap(g => g[1])).find(x => x[0] === key); if (r) t.textContent = r[1]; }
+            },
+            // "‹ Operations" link above a page opened from a section, so you can step back
+            // Long filterable lists show 25 rows, then "Show more". Rows hidden by a filter
+            // don't count. Applies to any list of 30+ rows that carry data-search.
+            _initPager() {
+                const main = document.getElementById('mainContent'); if (!main || this._pgObs) return;
+                let t = null; const later = fn => { clearTimeout(t); t = setTimeout(fn, 60); };
+                this._pgObs = new MutationObserver(() => later(() => this._pgScan(main)));
+                this._pgObs.observe(main, { childList: true, subtree: true });
+                main.addEventListener('input', () => later(() => main.querySelectorAll('[data-pg]').forEach(el => { el._pgLimit = 25; this._pgApply(el); })));
+                main.addEventListener('change', () => later(() => main.querySelectorAll('[data-pg]').forEach(el => { el._pgLimit = 25; this._pgApply(el); })));
+            },
+            _pgRows(el) { const ds = [...el.children].filter(c => c.hasAttribute('data-search')); return ds.length ? ds : (el.tagName === 'TBODY' ? [...el.children].filter(c => c.tagName === 'TR') : []); },
+            _pgScan(main) {
+                const seen = new Set();
+                const cand = [...main.querySelectorAll('[data-search]')].map(r => r.parentElement);
+                // plain long tables too (40+ rows), except on the forms you fill in
+                if (!['conceptNote', 'payment', 'retirement', 'settings'].includes(this._curView)) main.querySelectorAll('.table-container tbody').forEach(tb => { if (tb.children.length >= 40) cand.push(tb); });
+                cand.forEach(p => { if (!p || seen.has(p)) return; seen.add(p);
+                    if (p.dataset.pg) { if (!p._pgBusy) this._pgApply(p); return; }
+                    if (this._pgRows(p).length < 30) return;
+                    p.dataset.pg = '1'; p._pgLimit = 25; this._pgApply(p); });
+            },
+            _pgApply(el) {
+                el._pgBusy = true;
+                const rows = this._pgRows(el);
+                let shown = 0, total = 0;
+                rows.forEach(r => { if (r.style.display === 'none') { r.classList.remove('pg-hide'); return; } total++; shown++; r.classList.toggle('pg-hide', shown > el._pgLimit); });
+                const anchor = el.closest('table')?.closest('.table-container') || el.closest('table') || el;
+                let btn = anchor.nextElementSibling && anchor.nextElementSibling.classList.contains('pg-more') ? anchor.nextElementSibling : null;
+                const left = total - Math.min(total, el._pgLimit);
+                if (left > 0) { if (!btn) { btn = document.createElement('div'); btn.className = 'pg-more'; anchor.after(btn); }
+                    btn.innerHTML = `<span>Showing ${el._pgLimit} of ${total}</span><button type="button">Show ${Math.min(25, left)} more</button><button type="button" data-all="1">Show all</button>`;
+                    btn.querySelectorAll('button').forEach(b => b.onclick = () => { el._pgLimit = b.dataset.all ? total : el._pgLimit + 25; this._pgApply(el); });
+                } else if (btn) btn.remove();
+                setTimeout(() => { el._pgBusy = false; }, 120);
+            },
+            _initSectionCrumb() {
+                const main = document.getElementById('mainContent'); if (!main || this._crumbObs) return;
+                const SEC_VIEW = { mywork: 'secMywork', ops: 'secOps', reports: 'secReports' };
+                this._crumbObs = new MutationObserver(() => {
+                    const v = this._curView, sec = this._VIEW_SEC[v];
+                    if (!sec || !SEC_VIEW[sec] || v === SEC_VIEW[sec] || main.querySelector(':scope > .sec-crumb') || (main.children.length === 1 && main.firstElementChild.classList.contains('loading-spinner'))) return;
+                    const b = document.createElement('button'); b.type = 'button'; b.className = 'sec-crumb';
+                    b.textContent = '‹ ' + this._SECTIONS[sec].title; b.onclick = () => this.showView(SEC_VIEW[sec]);
+                    main.prepend(b);
+                });
+                this._crumbObs.observe(main, { childList: true });
+            },
+            renderSection(content, sec) {
+                const d = this._SECTIONS[sec]; const groups = this._secVisibleGroups(sec);
+                const ICON = { '@tracker': 'tracker', '@expense': 'money' };
+                const box = ([g, rows]) => `<section class="sec-box"><h3>${escHtml(g)}</h3><div class="sec-list">${rows.map(([k, t, sub]) =>
+                    `<button type="button" class="sec-row" onclick="app._secOpen('${k}')"><span class="ic">${this._icon(ICON[k] || k)}</span><span class="t"><b>${escHtml(t)}</b><small>${escHtml(sub)}</small></span><span class="go" aria-hidden="true">›</span></button>`).join('')}</div></section>`;
+                const left = [], right = []; let hl = 0, hr = 0;
+                groups.forEach(gr => { const h = gr[1].length + 1; if (hl <= hr) { left.push(gr); hl += h; } else { right.push(gr); hr += h; } });
+                content.innerHTML = `<div class="sec-head"><h2>${escHtml(d.title)}</h2><p>${escHtml(d.sub)}</p></div>` +
+                    (groups.length ? `<div class="sec-grid"><div class="sec-col">${left.map(box).join('')}</div><div class="sec-col">${right.map(box).join('')}</div></div>` : '<div class="empty-state"><p>Nothing here for your role.</p></div>');
             },
 
             renderNotificationBadge() {
@@ -1698,7 +1855,7 @@
             _decorateNav() {
                 document.querySelectorAll('.sidebar .nav button').forEach(b => {
                     if (b.dataset.decorated) return;
-                    const key = b.dataset.view || b.dataset.icon; if (!key || !this._ICONS[key]) return;
+                    const key = b.dataset.icon || b.dataset.view; if (!key || !this._ICONS[key]) return;
                     const label = b.textContent.replace(/^[^A-Za-z]+/, '').trim();
                     b.innerHTML = this._icon(key) + '<span>' + escHtml(label) + '</span>';
                     b.dataset.decorated = '1';
@@ -2171,6 +2328,12 @@
                     : '<p style="font-size:13px;">Nothing found. Try a reference number (CN…, PAY…, PO-…, GRR-…) or part of a vendor or activity name.</p>';
                 this._fleetModal('dsOverlay', `🔎 Results for “${escHtml(q)}” (${hits.length})`, `<div style="max-height:60vh;overflow:auto;">${inner}</div>`, "document.getElementById('dsOverlay').remove()", 'Close');
             },
+            _dashQuickActions() {
+                const qa = [['conceptNote', 'New concept note', "app.showView('conceptNote')"], ['payment', 'Request payment', "app.showView('payment')"], ['retirement', 'Submit retirement', "app.showView('retirement')"],
+                    ['myConceptNotes', 'My concept notes', "app.showView('myConceptNotes')"], ['fleet', 'Request a vehicle', "app.showView('fleet');setTimeout(()=>app.openVehicleRequestForm(),400)"], ['store', 'Request from store', "app._storeTab='stock';app.showView('store')"]]
+                    .filter(([k]) => this._secItemVisible(k));
+                return qa.length ? `<h3 class="dash-qa-h">Quick actions</h3><div class="dash-qa">${qa.map(([k, t, go]) => `<button type="button" onclick="${go}">${this._icon(k)}<span>${t}</span></button>`).join('')}</div>` : '';
+            },
             renderDashboard(content) {
                 this._rpcMemo = {};   // fresh vendor-signature counts on every dashboard visit
                 const role = this.getUserRole();
@@ -2220,18 +2383,19 @@
                             <div class="who"><span class="av">${escHtml(this.currentUser.split(' ').map(w => w[0]).slice(0, 2).join(''))}</span><div><b>${escHtml(this.currentUser)}</b><small>${escHtml(roleName)}</small></div></div>
                         </div>
                     </div>
-                    ${this._dashPills(overdueRetirements, unretiredPayments)}
                     ${this._returnedCNBanner()}
                     <div id="pendingSigningAlert"></div>
                     ${isLocked ? `<div class="alert-badge danger">⚠️ Your account is locked: ${unretiredPayments.length >= 2 ? `${unretiredPayments.length} unretired advances` : `Retirement overdue by ${Math.floor((Date.now() - new Date(overdueRetirements[0].paidDate)) / (1000 * 60 * 60 * 24))} days`}</div>` : ''}
                     ${myConceptNotes.length === 0 && myPayments.length === 0 && myRetirements.length === 0 ? `<div style="background: linear-gradient(135deg, var(--primary-light), var(--primary)); padding: 48px; border-radius: 16px; text-align: center; color: white; margin-bottom: 32px;"><h2 style="font-size: 28px; margin-bottom: 16px; font-family: 'Plus Jakarta Sans', sans-serif;">Welcome to RAHAMA FMS! 🎉</h2><p style="font-size: 16px; opacity: 0.95; max-width: 600px; margin: 0 auto 24px;">You're all set to start managing your financial workflows. Create your first concept note to get started.</p><button onclick="app.showView('conceptNote')" class="btn" style="background: white; color: var(--primary); padding: 16px 32px; font-size: 16px; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">Create Your First Concept Note →</button></div>` : ''}
                     ${this._dashKpis(myConceptNotes, myPayments, unretiredPayments, overdueRetirements)}
+                    ${this._dashPills(overdueRetirements, unretiredPayments)}
                     <div class="dash-grid">
-                        <div class="panel"><h3>${seesBudget ? 'Spending, all projects' : ['finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? 'Payments, all projects' : 'Paid to you'} <span class="h-note">last 6 months</span></h3>${this._dashTrend(['budgetOwner', 'ed', 'finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? this.data.payments : myPayments)}</div>
                         ${seesBudget ? `<div class="panel"><h3><span class="dash-tabs"><button type="button" class="on" onclick="app._dashTab(this,'q')">Waiting for you</button><button type="button" onclick="app._dashTab(this,'p')">Recent payments</button></span> <a href="#" onclick="app._nextMode=null;app.showView('approvals');return false;">View all ›</a></h3><div data-tab="q"><div id="dashQueue">${this._dashQueueHtml()}</div></div><div data-tab="p" style="display:none;">${this._dashRecent(true)}</div></div>`
                         : approver ? `<div class="panel"><h3>Waiting for you <a href="#" onclick="app._nextMode=null;app.showView('approvals');return false;">View all ›</a></h3><div id="dashQueue">${this._dashQueueHtml()}</div></div>`
                                    : `<div class="panel"><h3>My recent activity <span><a href="#" onclick="app.showView('myConceptNotes');return false;">All my concept notes ›</a> &nbsp; <a href="#" onclick="app.showView('conceptNote');return false;">New ›</a></span></h3>${this._dashRecentList()}</div>`}
+                        <div class="panel"><h3>${seesBudget ? 'Spending, all projects' : ['finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? 'Payments, all projects' : 'Paid to you'} <span class="h-note">last 6 months</span></h3>${this._dashTrend(['budgetOwner', 'ed', 'finance', 'finance_manager', 'GrantsCompliance'].includes(role) ? this.data.payments : myPayments)}</div>
                     </div>
+                    ${this._dashQuickActions()}
                     ${seesBudget ? `<div class="panel" style="margin-bottom:16px;"><h3>Project budgets <span class="h-note">used = paid + approved and held</span></h3>${this._dashBudget()}</div>` : ''}
                     ${['procurement', 'finance', 'finance_manager', 'GrantsCompliance', 'budgetOwner', 'ed'].includes(role) ? `<details class="panel" id="dashAlertDetails" style="margin-bottom:16px;"><summary style="cursor:pointer;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;">Vendor signatures and procurement retirements</summary><div style="margin-top:12px;">${this._grrSignBox()}${this._procRetDueBox()}</div></details>` : ''}
                     <div id="dashNotes">
@@ -9970,14 +10134,14 @@ ${retSigBlocks ? `<div style="margin-top:6px;font-size:11px;font-weight:700;text
                 document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.view === 'staffadmin'));
                 const { data, error } = await supabaseClient.rpc('fms_staff_list');
                 if (error) { content.innerHTML = `<div class="empty-state"><h2>Staff</h2><p>${escHtml(/function|schema cache/i.test(error.message) ? 'Run fms_staff_access.sql first.' : error.message)}</p></div>`; return; }
-                const all = data || [], boed = all.length && all[0].i_boed;
+                const all = data || [], boed = all.length && all[0].i_boed, canAdd = all.length && all[0].i_add;
                 this._staffList = all; this._staffArch = !!showArch;
                 const list = all.filter(p => showArch ? p.is_active === false : p.is_active !== false);
                 const leaving = all.filter(p => p.is_active !== false && p.exit_cleared_at);
                 content.innerHTML = `
                     <div class="header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
                         <div><h2>👥 Staff</h2><p>FMS sign-ins. When someone leaves, check what they still have open, have Finance confirm it is clear, then archive them so they can no longer sign in.</p></div>
-                        ${boed ? `<button class="btn btn-primary" onclick="app.openAddStaff()">➕ Add staff</button>` : ''}</div>
+                        ${canAdd ? `<button class="btn btn-primary" onclick="app.openAddStaff()">➕ Add staff</button>` : ''}</div>
                     <div style="display:flex;gap:6px;margin-bottom:14px;">
                         <button class="btn ${!showArch ? 'btn-primary' : 'btn-secondary'}" style="font-size:13px;" onclick="app.renderStaffAdmin(null,false)">Current (${all.filter(p => p.is_active !== false).length})</button>
                         <button class="btn ${showArch ? 'btn-primary' : 'btn-secondary'}" style="font-size:13px;" onclick="app.renderStaffAdmin(null,true)">Archived (${all.filter(p => p.is_active === false).length})</button></div>
@@ -12680,6 +12844,20 @@ ${vendors.length > 1 ? `
                 '</tbody></table></div>' +
                 '<div id="projectFormContainer"></div>' +
                 '</div>';
+                this._soTabs(content);
+            },
+
+            // System Overview: one section at a time (tabs) instead of every table stacked
+            _soTabs(content) {
+                const ids = ['soConceptNotes', 'soPayments', 'soRetirements', 'soStaffActivity', 'soProjects'];
+                const bar = content.querySelector('a[href="#soStaffActivity"]')?.parentElement; if (!bar) return;
+                const label = { soConceptNotes: 'Concept notes', soPayments: 'Payments', soRetirements: 'Retirements', soStaffActivity: 'Staff activity', soProjects: 'Projects' };
+                bar.className = 'so-tabs'; bar.removeAttribute('style');
+                bar.innerHTML = ids.map(id => `<button type="button" data-so="${id}">${label[id]}</button>`).join('');
+                const show = id => { ids.forEach(x => { const el = document.getElementById(x); if (el) { el.style.display = x === id ? '' : 'none'; el.style.marginTop = '0'; } });
+                    bar.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.so === id)); this._soTab = id; };
+                bar.querySelectorAll('button').forEach(b => b.onclick = () => show(b.dataset.so));
+                show(this._soTab && ids.includes(this._soTab) ? this._soTab : 'soConceptNotes');
             },
 
             _showAddProjectForm(existing) {
